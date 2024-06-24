@@ -1,0 +1,3 @@
+[ X ] properly decode each of the thumb instructions
+[ X ] properly decode each of the arm instructions
+[   ] create a simple memory thingy
