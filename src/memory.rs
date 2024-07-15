@@ -1,42 +1,58 @@
+use crate::{little_endian_u8_u16, little_endian_u8_u32};
+
 const BIOS: &[u8; 0x4000] = include_bytes!("../bios/gba_bios.bin");
 
-/// the first integer becomes the lower 8-bits
-/// output =>
-/// 0bBBBBBBBBAAAAAAAA
-fn little_endian_u8_u16(a: u8, b: u8) -> u16 {
-    return (b as u16) << 8 + a as u16
-}
-/// the first integer becomes the lower 16-bit
-/// output => 
-/// 0bDDDDDDDDCCCCCCCCBBBBBBBBAAAAAAAA
-fn little_endian_u8_u32(a: u8, b: u8, c: u8, d: u8) -> u32 {
-    let (a, b, c, d) = (a as u32, b as u32, c as u32, d as u32);
-    return (d<<24) | (c<<16) | (b<<8) | (a);
+/// the different memory locations can and will return differently
+/// sized values, so its best to just store them in an enum probably
+pub enum MemoryRead {
+    Byte(u8),
+    Halfword(u16),
+    Word(u32),
 }
 
+/// I guess that it is possible to store all of the stores as 
+/// their respective bus lengths, but it may mess with the little-endianness of the
+/// machine. May perform tests if it works
 pub struct GeneralMemory {
-    ewram: [u8; 0x40000],
-    iwram: [u8; 0x8000], // 32Kbyte
-    io_reg: [u8; 0x400],
-    bg_pallete_ram: [u8; 0x400],
-    vram: [u8; 0x18000],
-    oam: [u8; 0x400],
+    ewram: [u8; 0x40000], // 256KB - 16 bit bus
+    iwram: [u8; 0x8000],  // 32KB - 32 bit bus
+    vram: [u8; 0x18000], // 96 KB - 16 bit bus
+    io_registers: [u8; 0x3FF],
+    gamepak_rom: Vec<u8>, // variable size - 16 bit bus
+    gamepak_ram: Vec<u8>, // variable size - 8 bit bus 
 }
 impl GeneralMemory {
-    pub fn read(&self, address: u32) -> u32 {
-        // the upper 4 bits of the index are ignored
+    pub fn read(&self, address: u32) -> MemoryRead {
+        // only the bottom 28 bits are kept
         let address = (address & 0x0FFFFFFF) as usize;
-        
+        use MemoryRead::*;
+
+        // bits 24 - 28
         match address >> 24 {
-            0x00 => return little_endian_u8_u32(BIOS[address], BIOS[address+1], BIOS[address+2], BIOS[address+3]),
-            0x02 => {}
+            0x00 => { // bios has a 32-bit bus
+                let data = little_endian_u8_u32(BIOS[address], BIOS[address+1], BIOS[address+2], BIOS[address+3]);
+                Word(data)
+            },
+            0x02 => { // on board WRAM has a 32-bit bus
+                let address = address - 0x2000000;
+                let data = little_endian_u8_u16(self.ewram[address], self.ewram[address+1]);
+                Halfword(data)
+            },
+            0x03 => { // on chip WRAM has a 32-bit bus
+                let address = address - 0x3000000;
+                let data = little_endian_u8_u32(self.iwram[address], self.iwram[address+1], self.iwram[address+2], self.iwram[address+3]);
+                Word(data)
+            }
+            0x04 => {
+                let address = address - 0x4000000;
+                todo!();
+            }
             _ => panic!("i'm not sure how to handle a bad memory read yet"),
-        }
-        panic!("the memory address provided was bad")
+        } 
     }
 }
 struct GamePak;
 
 pub fn create_memory(file: &str) -> GeneralMemory {
-    todo!();
+    todo!();   
 }
