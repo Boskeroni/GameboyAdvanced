@@ -84,7 +84,7 @@ impl CpuRegisters {
 }
 
 pub mod status_registers {
-    use crate::ProcessorMode;
+    use crate::cpu::registers::ProcessorMode;
 
     pub struct StatusRegisters {
         pub cpsr: Cpsr,
@@ -106,7 +106,7 @@ pub mod status_registers {
                 Abort => &self.spsr[2],
                 Interrupt => &self.spsr[3],
                 Undefined => &self.spsr[4],
-                _ => &self.cpsr,
+                _ => panic!("user mode doesnt have an SPSR"),
             }   
         }
         pub fn set_spsr(&mut self, new_spsr: Cpsr) {
@@ -218,7 +218,7 @@ pub mod status_registers {
                 0b10111 => ProcessorMode::Abort,
                 0b11011 => ProcessorMode::Undefined,
                 0b11111 => ProcessorMode::System,
-                _ => unreachable!(),
+                _ => panic!("invalid Mode Bits in the u32 CPSR"),
             } 
         }
     }

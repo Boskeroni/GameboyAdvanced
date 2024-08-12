@@ -1,12 +1,10 @@
-use cpu::{status_registers::{Cpsr, StatusRegisters}, ProcessorMode};
-use decode::decode_arm;
-use execute::execute_arm;
-use memory::MemoryRead;
-
 mod cpu;
 mod memory;
-mod decode;
-mod execute;
+
+use cpu::registers::{CpuRegisters, status_registers::StatusRegisters};
+use cpu::decode::decode_arm;
+use cpu::execute_arm::execute_arm;
+use memory::MemoryRead;
 
 /// the first integer becomes the lower 8-bits
 /// output =>
@@ -23,7 +21,7 @@ pub fn little_endian_u8_u32(a: u8, b: u8, c: u8, d: u8) -> u32 {
 }
 
 fn main() {
-    let mut cpu_regs = cpu::CpuRegisters {
+    let mut cpu_regs = CpuRegisters {
         pc: 0,
         unbanked_registers: [0, 0, 0, 0, 0, 0, 0 ,0],
         double_banked_registers: [0, 0,  0, 0,  0, 0,  0, 0,  0, 0],
@@ -53,7 +51,7 @@ fn main() {
         }
 
         // decode
-        // we are decoding an Thumb isntruction
+        // we are decoding an arm isntruction
 
         let decoded_arm = decode_arm(opcode);
 
