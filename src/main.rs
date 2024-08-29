@@ -1,63 +1,69 @@
 mod cpu;
 mod memory;
 
-use cpu::registers::{CpuRegisters, status_registers::StatusRegisters};
-use cpu::decode::decode_arm;
+use cpu::registers::{Cpu, status_registers::Status};
+use cpu::decode::{decode_arm, decode_thumb};
 use cpu::execute_arm::execute_arm;
-use memory::MemoryRead;
-
-/// the first integer becomes the lower 8-bits
-/// output =>
-/// 0bBBBBBBBBAAAAAAAA
-pub fn little_endian_u8_u16(a: u8, b: u8) -> u16 {
-    return (b as u16) << 8 + a as u16
-}
-/// the first integer becomes the lower 16-bit
-/// output => 
-/// 0bDDDDDDDDCCCCCCCCBBBBBBBBAAAAAAAA
-pub fn little_endian_u8_u32(a: u8, b: u8, c: u8, d: u8) -> u32 {
-    let (a, b, c, d) = (a as u32, b as u32, c as u32, d as u32);
-    return (d<<24) | (c<<16) | (b<<8) | (a);
-}
+use cpu::execute_thumb::execute_thumb;
+use cpu::decode::DecodedInstruction;
 
 fn main() {
-    let mut cpu_regs = CpuRegisters {
-        pc: 0,
+    let mut cpu_regs = Cpu {
+        pc: 0x8000000,
         unbanked_registers: [0, 0, 0, 0, 0, 0, 0 ,0],
-        double_banked_registers: [0, 0,  0, 0,  0, 0,  0, 0,  0, 0],
-        many_banked_registers: [0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0],
+        double_banked_registers: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
+        many_banked_registers: [[0x03007F00, 0, 0x03007FE0, 0, 0x03007FA0, 0], [0, 0, 0, 0, 0, 0]],
     };
-    let mut status_registers = StatusRegisters::new();
-    let memory = memory::create_memory("golden_sun.gba");
-    let mut opcode = 0;
-    // each loop represents one CPU cycle.
+    let mut status_registers = Status::new();
+    let mut memory = memory::create_memory("test/arm.gba");
+
+    let mut fetched: Option<u32> = None;
+
+    let mut decoded: Option<DecodedInstruction> = None;
+    let mut decoded_opcode: u32 = 0;
+
+    // each loop represents FDE step
+    // since all the steps of the FDE cycle take place in one turn, 
+    // it technically doesnt matter the order and so I will do EDF for convenience
+    use DecodedInstruction::*;
     loop {
-        // fetch
-        let read = memory.read(cpu_regs.get_pc());
+        // Execute
+        if let Some(instruction) = decoded {
+            let old_pc = cpu_regs.get_register(15, status_registers.cpsr.mode);
 
-        if status_registers.cpsr.t {
-            let instruction = match read {
-                // we have to do 2 memory reads
-                MemoryRead::Byte(r2) => {
-                    if let MemoryRead::Byte(r1) = memory.read(cpu_regs.get_pc())  {
-                        ((r1 as u16) << 8) + r2 as u16
-                    } else {
-                        panic!("shit memory reading");
-                    }  
-                },
-                MemoryRead::Halfword(r) => r,
-                MemoryRead::Word(r) => r as u16
+            print!("{:#X}, ", decoded_opcode);
+            print!("{:#X}, ", cpu_regs.get_register(15, status_registers.cpsr.mode));
+            print!("{:?}, ", instruction);
+            println!("");
+
+            match instruction {
+                Thumb(instr) => execute_thumb(decoded_opcode as u16, instr, &mut cpu_regs, &mut status_registers, &mut memory),
+                Arm(instr) => execute_arm(decoded_opcode, instr, &mut cpu_regs, &mut status_registers, &mut memory),
             };
+
+            
+
+            if old_pc != cpu_regs.get_register(15, status_registers.cpsr.mode) {
+                fetched = None;
+                decoded = None;
+                continue;
+            }
         }
 
-        // decode
-        // we are decoding an arm isntruction
+        // Decode
+        if let Some(opcode) = fetched {
+            decoded = Some(match status_registers.cpsr.t {
+                true => DecodedInstruction::Thumb(decode_thumb(opcode as u16)),
+                false => DecodedInstruction::Arm(decode_arm(opcode)),
+            });
 
-        let decoded_arm = decode_arm(opcode);
-
-        // execute
-        if status_registers.cpsr.t {
-            execute_arm(opcode, decoded_arm, &mut cpu_regs, &mut status_registers)
+            decoded_opcode = opcode;
         }
+
+        // Fetch
+        fetched = Some(match status_registers.cpsr.t {
+            true => memory.read_u16(cpu_regs.get_pc()) as u32,
+            false => memory.read_u32(cpu_regs.get_pc()),
+        });
     }
 }

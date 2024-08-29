@@ -11,66 +11,70 @@ pub enum ProcessorMode {
 }
 
 #[derive(Debug, Clone)]
-pub struct CpuRegisters {
+pub struct Cpu {
     pub unbanked_registers: [u32; 8],
-    // 1D array representing [[r8, r8_fiq], [r9, r9_fiq], ...]
-    pub double_banked_registers: [u32; 10], 
-    // same logic as the previous one, just with more
-    pub many_banked_registers: [u32; 12], 
+    // 1D array representing [[r8, r8_fiq], [r9, r9_fiq], ..., [r12, r12_fiq]]
+    pub double_banked_registers: [[u32; 2]; 6],
+    // same logic as the previous one, just with more [[r13, f13_fiq, r13_svc, r13_abt, r13_irq, r13_und], ...]
+    pub many_banked_registers: [[u32; 6]; 2], 
     pub pc: u32,
 }
-impl CpuRegisters {
+impl Cpu {
     /// the mode is technically not always needed but will always be needed to be passed
     /// in, this helps in generalising the function when opcodes run this.
     pub fn get_register(&self, register: u8, mode: ProcessorMode) -> u32 {
+        let register = register as usize;
         match register {
-            0..=7 => self.unbanked_registers[register as usize],
+            0..=7 => self.unbanked_registers[register],
             8..=12 => {
-                let index = (register - 8) as usize * 2;
+                let index = register - 8;
                 if let ProcessorMode::FastInterrupt = mode {
-                    return self.double_banked_registers[index + 1]
+                    return self.double_banked_registers[index][1];
                 }
-                self.double_banked_registers[index]
+                return self.double_banked_registers[index][0];
             }
             13..=14 => {
-                let index = (register - 13) as usize * 6;
                 use ProcessorMode::*;
+                
+                let index = register - 13;
                 let offset = match mode {
-                    FastInterrupt => 5,
+                    User|System => 0,
+                    FastInterrupt => 1,
+                    Supervisor => 2,
+                    Abort => 3,
                     Interrupt => 4,
-                    Undefined => 3,
-                    Abort => 2,
-                    Supervisor => 1,
-                    User|System => 0
+                    Undefined => 5,
+                    
                 };
-                self.many_banked_registers[index + offset]
+                self.many_banked_registers[index][offset]
             }
             15 => self.pc,
             _ => unreachable!()
         }
     }
     pub fn get_register_mut(&mut self, register: u8, mode: ProcessorMode) -> &mut u32 {
+        let register = register as usize;
         match register {
-            0..=7 => &mut self.unbanked_registers[register as usize],
+            0..=7 => &mut self.unbanked_registers[register],
             8..=12 => {
-                let index = (register - 8) as usize * 2;
+                let index = register - 8;
                 if let ProcessorMode::FastInterrupt = mode {
-                    return &mut self.double_banked_registers[index + 1];
+                    return &mut self.double_banked_registers[index][1]
                 }
-                return &mut self.double_banked_registers[index]
+                return &mut self.double_banked_registers[index][0]
             }
             13..=14 => {
-                let index = (register - 13) as usize * 6;
+                let index = register - 13;
                 use ProcessorMode::*;
                 let offset = match mode {
-                    FastInterrupt => 5,
-                    Interrupt => 4,
-                    Undefined => 3,
-                    Abort => 2,
-                    Supervisor => 1,
                     User|System => 0,
+                    FastInterrupt => 1,
+                    Supervisor => 2,
+                    Abort => 3,
+                    Interrupt => 4,
+                    Undefined => 5,
                 };
-                return &mut self.many_banked_registers[index + offset]
+                return &mut self.many_banked_registers[index][offset]
             }
             15 => &mut self.pc,
             _ => unreachable!()
@@ -78,19 +82,20 @@ impl CpuRegisters {
     }
 
     pub fn get_pc(&mut self) -> u32 {
-        self.pc += 1;
-        self.pc - 1
+        self.pc += 4;
+        self.pc - 4
     }
 }
 
 pub mod status_registers {
     use crate::cpu::registers::ProcessorMode;
 
-    pub struct StatusRegisters {
+    #[derive(Debug)]
+    pub struct Status {
         pub cpsr: Cpsr,
         spsr: [Cpsr; 5] // [spsr_fiq, spsr_svc, spsr_abt, spsr_irq, spsr_und]
     }
-    impl StatusRegisters {
+    impl Status {
         pub fn new() -> Self {
             Self {
                 cpsr: Cpsr::default(),
@@ -106,7 +111,7 @@ pub mod status_registers {
                 Abort => &self.spsr[2],
                 Interrupt => &self.spsr[3],
                 Undefined => &self.spsr[4],
-                _ => panic!("user mode doesnt have an SPSR"),
+                _ => &self.cpsr,
             }   
         }
         pub fn set_spsr(&mut self, new_spsr: Cpsr) {
