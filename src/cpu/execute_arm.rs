@@ -65,7 +65,7 @@ fn branch_exchange(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
     let pc = cpu_regs.get_register_mut(15, status.cpsr.mode);
     status.cpsr.t = (rn & 1) == 1;
 
-    *pc = rn;
+    *pc = rn & 0xFFFFFFFE;
 }
 
 fn data_processing(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
@@ -204,8 +204,13 @@ fn psr_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
                     imm.rotate_right(shift_amount * 2)
                 }
             };
+            
+            let new_psr;
+            match status.cpsr.mode {
+                ProcessorMode::User => new_psr = convert_u32_cpsr_limited(operand),
+                _ => new_psr = convert_u32_cpsr(operand),
+            }
 
-            let new_psr = convert_u32_cpsr(operand);
             match (opcode >> 25) & 1 != 0 {
                 true => status.set_flags_spsr(new_psr),
                 false => status.set_flags_cpsr(new_psr),
@@ -527,7 +532,10 @@ fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status, memory: 
                     }
                 }
 
-                let rnext = cpu_regs.get_register(next as u8, status.cpsr.mode);
+                let mut rnext = cpu_regs.get_register(next as u8, status.cpsr.mode);
+                if next == 15 {
+                    rnext += 4;
+                }
                 memory.write_u32(curr_address, rnext);
 
                 if !pre_offset {
@@ -536,7 +544,6 @@ fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status, memory: 
                         false => curr_address -= 4,
                     }
                 }
-
                 reg_list &= !(1 << next);
             }
         }

@@ -65,7 +65,7 @@ impl Memory {
 
     pub fn read_u16(&self, address: u32) -> u16 {
         let (upp_add, low_add) = split_memory_address(address);
-        assert!(low_add & 1 == 1, "A[0] must be equal to 0 when reading half-words");
+        assert!(low_add & 1 != 1, "A[0] must be equal to 0 when reading half-words");
 
         match upp_add {
             0x0 => lil_end_combine_u16(BIOS[low_add], BIOS[low_add+1]),

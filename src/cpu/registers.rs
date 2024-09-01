@@ -54,6 +54,7 @@ impl Cpu {
     }
     pub fn get_register_mut(&mut self, register: u8, mode: ProcessorMode) -> &mut u32 {
         let register = register as usize;
+
         match register {
             0..=7 => &mut self.unbanked_registers[register],
             8..=12 => {
@@ -81,9 +82,13 @@ impl Cpu {
         }
     }
 
-    pub fn get_pc(&mut self) -> u32 {
+    pub fn get_pc_arm(&mut self) -> u32 {
         self.pc += 4;
         self.pc - 4
+    }
+    pub fn get_pc_thumb(&mut self) -> u32 {
+        self.pc += 2;
+        self.pc - 2
     }
 }
 
@@ -113,17 +118,6 @@ pub mod status_registers {
                 Undefined => &self.spsr[4],
                 _ => &self.cpsr,
             }   
-        }
-        pub fn set_spsr(&mut self, new_spsr: Cpsr) {
-            use ProcessorMode::*;
-            match self.cpsr.mode {
-                FastInterrupt => self.spsr[0] = new_spsr,
-                Supervisor => self.spsr[1] = new_spsr,
-                Abort => self.spsr[2] = new_spsr,
-                Interrupt => self.spsr[3] = new_spsr,
-                Undefined => self.spsr[4] = new_spsr,
-                _ => self.cpsr = new_spsr
-            };
         }
         pub fn set_flags_spsr(&mut self, new_spsr: Cpsr) {
             use ProcessorMode::*;
@@ -225,6 +219,19 @@ pub mod status_registers {
                 0b11111 => ProcessorMode::System,
                 _ => panic!("invalid Mode Bits in the u32 CPSR"),
             } 
+        }
+    }
+    pub fn convert_u32_cpsr_limited(cpsr: u32) -> Cpsr {
+        Cpsr {
+            n: (cpsr >> 31) & 1 != 0,
+            z: (cpsr >> 30) & 1 != 0,
+            c: (cpsr >> 29) & 1 != 0,
+            v: (cpsr >> 28) & 1 != 0,
+            q: (cpsr >> 27) & 1 != 0,
+            i: (cpsr >> 7 ) & 1 != 0,
+            f: (cpsr >> 6 ) & 1 != 0,
+            t: false,
+            mode: ProcessorMode::User,
         }
     }
 }

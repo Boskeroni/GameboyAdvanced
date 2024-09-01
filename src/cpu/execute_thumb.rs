@@ -266,8 +266,9 @@ fn pc_relative_load(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status, memory
     let rd_index = (opcode >> 8) as u8 & 0b111;
     let imm = (opcode & 0xFF) << 2;
 
-    let pc = cpu_regs.get_register(15, status.cpsr.mode);
+    let pc = cpu_regs.get_register(15, status.cpsr.mode) & 0xFFFFFFFD;
     let address = pc + imm as u32;
+    println!("address = {address:b}, {address:X} imm = {imm:X}");
     let read = memory.read_u32(address);
 
     let rd = cpu_regs.get_register_mut(rd_index, status.cpsr.mode);
@@ -281,6 +282,8 @@ fn load_register_offset(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status, me
 
     let ro = cpu_regs.get_register(ro_index, status.cpsr.mode);
     let rb = cpu_regs.get_register(rb_index, status.cpsr.mode);
+
+    println!("{ro} + {ro_index}");
 
     let address = ro + rb;
 
@@ -462,7 +465,7 @@ fn push_pop(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status, memory: &mut M
     match l_bit {
         true => { // POP
             if r_bit {
-                
+
             }
         }
         false => { // PUSH
