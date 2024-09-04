@@ -167,11 +167,11 @@ pub mod status_registers {
         pub t: bool, // the state of the instruction set (0 = arm, 1 = thumb)
         pub mode: ProcessorMode, // processor mode (represented by the 5-bits shown in enum)
     }
-    pub fn check_arm_condition(condition: u8, cpsr: &Cpsr) -> bool {
+    pub fn check_condition(condition: u8, cpsr: &Cpsr) -> bool {
         match condition {
             0b0000 => cpsr.z,
             0b0001 => !cpsr.z,
-            0b0010 => cpsr.z,
+            0b0010 => cpsr.c,
             0b0011 => !cpsr.c,
             0b0100 => cpsr.n,
             0b0101 => !cpsr.n,
@@ -181,8 +181,8 @@ pub mod status_registers {
             0b1001 => !cpsr.c || cpsr.z,
             0b1010 => cpsr.n == cpsr.v,
             0b1011 => cpsr.n != cpsr.v,
-            0b1100 => !cpsr.z && cpsr.n == cpsr.v,
-            0b1101 => cpsr.z || cpsr.n != cpsr.v,
+            0b1100 => !cpsr.z && (cpsr.n == cpsr.v),
+            0b1101 => cpsr.z || (cpsr.n != cpsr.v),
             0b1110 => true,
             0b1111 => false,
             _ => unreachable!("condition is only 4 bits long")

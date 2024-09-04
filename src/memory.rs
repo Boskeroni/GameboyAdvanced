@@ -143,8 +143,6 @@ impl Memory {
         let low_add = (address & 0xFFFFC) as usize;
         let split = little_split_u32(data);
 
-        println!("{address:X}");
-
         match upp_add {
             0x0 => panic!("cannot make a write to the BIOS"),
             0x2 => {self.ewram[low_add] = split.0; self.ewram[low_add+1] = split.1; self.ewram[low_add+2] = split.2; self.ewram[low_add+3] = split.3},

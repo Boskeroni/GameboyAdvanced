@@ -13,7 +13,7 @@ pub fn execute_arm(
 ) {
     // first check if we even have to do it
     let condition = opcode >> 28;
-    if !check_arm_condition(condition as u8, &status.cpsr) {
+    if !check_condition(condition as u8, &status.cpsr) {
         return;
     }
 
@@ -39,9 +39,9 @@ pub fn execute_arm(
 
 fn branch_link(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
     // the bottom 24-bits
-    let mut offset = (opcode & 0xFFFFFF) as u32; 
+    let mut offset = (opcode & 0xFFFFFF) as u32;
     offset <<= 2;
-    if (offset >> 25) & 1 == 1 {
+    if (opcode >> 23) & 1 == 1 {
         offset |= 0b1111_1100_0000_0000_0000_0000_0000_0000;
     }
 
@@ -142,7 +142,10 @@ fn data_processing(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
             undo = true; 
             op1.overflowing_add(op2)
         }, // cmn
-        0b1100 => (op1 | op2, false), // orr
+        0b1100 => {
+            println!("ORR => {}", op1 | op2);
+            (op1 | op2, false)
+        }, // orr
         0b1101 => (op2, false), // mov
         0b1110 => (op1 & !op2, false), // bic
         0b1111 => (!op2, false), // mvn
@@ -487,7 +490,6 @@ fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status, memory: 
             _ => write_back_veto = false,
         }
     }
-
 
     let rn_index = (opcode >> 16) as u8 & 0xF;
     assert!(rn_index != 15, "R15 cannot be the base register");

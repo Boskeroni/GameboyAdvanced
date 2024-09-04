@@ -1,15 +1,15 @@
 use crate::{memory::Memory, SCREEN_HEIGHT, SCREEN_WIDTH};
 
 enum PpuRegisters {
-    LcdControl = 0x4000000,
+    Dispcnt = 0x4000000,
     GreenSwap = 0x4000002,
     LcdStatus = 0x4000004,
     VCount = 0x4000006,
 }
 
 pub fn update_ppu(memory: &mut Memory) -> Vec<u32> {
-    // let lcd_control = memory.read_u16(PpuRegisters::LcdControl as u32);
-    // let ppu_mode = lcd_control & 0b111;
+    let dispcnt = memory.read_u16(PpuRegisters::Dispcnt as u32);
+    let ppu_mode = dispcnt & 0b111;
 
     let buffer = ppu_mode_4(memory);
     return buffer;
@@ -42,7 +42,7 @@ fn ppu_mode_4(memory: &mut Memory) -> Vec<u32> {
         let palette_index = memory.read_u8(entry_address as u32) as u32;
         let color = memory.read_u16((palette_index * 2) + palette_base_address);
 
-        buffer[i as usize] = color as u32 & 0x7FFF;
+        buffer[i as usize] = color as u32;
     }
     return buffer;
     // now what the fuck do I do with the buffer

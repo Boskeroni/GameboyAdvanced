@@ -2,6 +2,8 @@ mod cpu;
 mod memory;
 mod ppu;
 
+use std::io::{stdin, stdout, Write};
+
 use cpu::registers::{Cpu, status_registers::Status};
 use cpu::decode::{decode_arm, decode_thumb};
 use cpu::execute_arm::execute_arm;
@@ -29,10 +31,10 @@ fn main() {
         pc: 0x8000000,
         unbanked_registers: [0, 0, 0, 0, 0, 0, 0 ,0],
         double_banked_registers: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
-        many_banked_registers: [[0x03007F00, 0, 0x03007FE0, 0, 0x03007FA0, 0], [0, 0, 0, 0, 0, 0]],
+        many_banked_registers: [[0x03007F00, 0x03007F00, 0x03007F00, 0x03007F00, 0x03007F00, 0x03007F00], [0, 0, 0, 0, 0, 0]],
     };
     let mut status = Status::new();
-    let mut memory = memory::create_memory("test/arm.gba");
+    let mut memory = memory::create_memory("test/armwrestler.gba");
 
     let mut fetched: Option<u32> = None;
 
@@ -43,23 +45,17 @@ fn main() {
     // since all the steps of the FDE cycle take place in one turn, 
     // it technically doesnt matter the order and so I will do EDF for convenience
     use DecodedInstruction::*;
-    let mut cpu_cycles = 0;
     loop {
-        cpu_cycles += 1;
-
         // Execute
         if let Some(instruction) = decoded {
             let old_pc = cpu_regs.get_register(15, status.cpsr.mode);
-
-            print!("{:#X}, ", decoded_opcode);
-            print!("{:#X}, ", cpu_regs.get_register(15, status.cpsr.mode));
-            print!("{:?}, ", instruction);
-            println!("");
 
             match instruction {
                 Thumb(instr) => execute_thumb(decoded_opcode as u16, instr, &mut cpu_regs, &mut status, &mut memory),
                 Arm(instr) => execute_arm(decoded_opcode, instr, &mut cpu_regs, &mut status, &mut memory),
             };
+
+            debug_screen(&cpu_regs, instruction, decoded_opcode);
 
             let new_pc = cpu_regs.get_register(15, status.cpsr.mode);
             if old_pc != new_pc {
@@ -88,4 +84,18 @@ fn main() {
         let window_buffer = update_ppu(&mut memory);
         window.update_with_buffer(&window_buffer, SCREEN_WIDTH, SCREEN_HEIGHT).unwrap();
     }
+}
+
+fn debug_screen(cpu: &Cpu, instr: DecodedInstruction, opcode: u32) {
+    println!("============= DEBUG SCREEN =============");
+    println!("r0, r1, r2, r3, r4, r5, r6, r7: {:X?}", cpu.unbanked_registers);
+    println!("r8, r9, r10, r11, r12: {:X?}", cpu.double_banked_registers);
+    println!("r13, r14: {:X?}", cpu.many_banked_registers);
+    println!("pc: {:X}", cpu.pc);
+    println!("========= Opcode completed: {instr:?}, {opcode:X} ============");
+    
+    stdout().flush().unwrap();
+    let mut temp = String::new();
+    //stdin().read_line(&mut temp).unwrap();
+    println!("");
 }
