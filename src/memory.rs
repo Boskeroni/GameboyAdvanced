@@ -46,6 +46,8 @@ pub struct Memory {
     obj_pall: [u8; 0x400],
     oam: [u8; 0x400],
     gp_rom: Vec<u8>,
+
+    timer_resets: [u32; 4],
 }
 impl Memory {
     pub fn read_u8(&self, address: u32) -> u8 {
@@ -80,7 +82,24 @@ impl Memory {
     }
 
     pub fn write_u8(&mut self, address: u32, data: u8) {
+        if address >= 0x4000100 && address <= 0x400010E && address % 4 < 2 {
+            // writing to a timer register
+            // this rounds down anyways which is good
+            let timer_specified = (address - 0x4000100) / 4;
+            let write_upper_byte = address & 1 == 1;
+            let data = data as u32;
+
+            let timer_reset = &mut self.timer_resets[timer_specified as usize];
+            match write_upper_byte {
+                true => {*timer_reset &= 0x00FF; *timer_reset |= data << 8},
+                false => {*timer_reset &= 0xFF00; *timer_reset |= data},
+            }
+            return;
+        }
+        
         let (upp_add, low_add) = split_memory_address(address);
+
+
 
         match upp_add {
             0x0 => panic!("cannot make a write to the BIOS"),
@@ -118,7 +137,7 @@ pub fn create_memory(file_name: &str) -> Memory {
         Ok(f) => f,
     };
 
-    let memory = Memory {
+    Memory {
         ewram: [0; 0x40000],
         iwram: [0; 0x8000],
         vram: [0; 0x18000],
@@ -126,7 +145,6 @@ pub fn create_memory(file_name: &str) -> Memory {
         obj_pall: [0; 0x400],
         oam: [0; 0x400],
         gp_rom: file,
-    };
-    
-    memory
+        timer_resets: [0; 4],
+    }
 }
