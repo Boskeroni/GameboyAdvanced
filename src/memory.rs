@@ -64,45 +64,19 @@ impl Memory {
     }
 
     pub fn read_u16(&self, address: u32) -> u16 {
-        let (upp_add, low_add) = split_memory_address(address);
-        assert!(low_add & 1 != 1, "A[0] must be equal to 0 when reading half-words");
-
-        match upp_add {
-            0x0 => lil_end_combine_u16(BIOS[low_add], BIOS[low_add+1]),
-            0x2 => lil_end_combine_u16(self.ewram[low_add], self.ewram[low_add+1]),
-            0x3 => lil_end_combine_u16(self.iwram[low_add], self.iwram[low_add+1]),
-            0x4 => lil_end_combine_u16(self.io_reg[low_add], self.io_reg[low_add+1]),
-            0x5 => lil_end_combine_u16(self.obj_pall[low_add], self.obj_pall[low_add+1]),
-            0x6 => lil_end_combine_u16(self.vram[low_add], self.vram[low_add+1]),
-            0x7 => lil_end_combine_u16(self.oam[low_add], self.oam[low_add+1]),
-            _ => {
-                let gp_address = address as usize - 0x8000000; 
-                lil_end_combine_u16(self.gp_rom[gp_address], self.gp_rom[gp_address + 1])      
-            }
-        }
+        lil_end_combine_u16(
+            self.read_u8(address), 
+            self.read_u8(address+1)
+        )
     }
 
     pub fn read_u32(&self, address: u32) -> u32 {
-        // the real low_add doesnt include the bottom 2 bits
-        let (upp_add, raw_low_add) = split_memory_address(address);
-        let low_add = raw_low_add & 0xFFFFC;
-
-        let raw_reading = match upp_add {
-            0x0 => lil_end_combine_u32(BIOS[low_add], BIOS[low_add+1], BIOS[low_add+2], BIOS[low_add+3]),
-            0x2 => lil_end_combine_u32(self.ewram[low_add], self.ewram[low_add+1], self.ewram[low_add+2], self.ewram[low_add+3]),
-            0x3 => lil_end_combine_u32(self.iwram[low_add], self.iwram[low_add+1], self.iwram[low_add+2], self.iwram[low_add+3]),
-            0x4 => lil_end_combine_u32(self.io_reg[low_add], self.io_reg[low_add+1], self.io_reg[low_add+2], self.io_reg[low_add+3]),
-            0x5 => lil_end_combine_u32(self.obj_pall[low_add], self.obj_pall[low_add+1], self.obj_pall[low_add+2], self.obj_pall[low_add+3]),
-            0x6 => lil_end_combine_u32(self.vram[low_add], self.vram[low_add+1], self.vram[low_add+2], self.vram[low_add+3]),
-            0x7 => lil_end_combine_u32(self.oam[low_add], self.oam[low_add+1], self.oam[low_add+2], self.oam[low_add+3]),
-            _ => {
-                let gp_address = address as usize - 0x8000000; 
-                lil_end_combine_u32(self.gp_rom[gp_address], self.gp_rom[gp_address + 1], self.gp_rom[gp_address + 2], self.gp_rom[gp_address+3])      
-            },
-        };
-
-        // i am not going to do any rotating until I know it is necessary
-        return raw_reading;
+        lil_end_combine_u32(
+            self.read_u8(address), 
+            self.read_u8(address + 1), 
+            self.read_u8(address + 2), 
+            self.read_u8(address + 3),
+        )
     }
 
     pub fn write_u8(&mut self, address: u32, data: u8) {
@@ -121,38 +95,20 @@ impl Memory {
     }
 
     pub fn write_u16(&mut self, address: u32, data: u16) {
-        let upp_add = (address >> 24) & 0xF;
-        let low_add = (address & 0xFFFFC) as usize;
-
         let split = lil_end_split_u16(data);
-        match upp_add {
-            0x0 => panic!("cannot make a write to the BIOS"),
-            0x2 => {self.ewram[low_add] = split.0; self.ewram[low_add+1] = split.1},
-            0x3 => {self.iwram[low_add] = split.0; self.iwram[low_add+1] = split.1},
-            0x4 => {self.io_reg[low_add] = split.0; self.io_reg[low_add+1] = split.1}
-            0x5 => {self.obj_pall[low_add] = split.0; self.obj_pall[low_add+1] = split.1},
-            0x6 => {self.vram[low_add] = split.0; self.vram[low_add+1] = split.1},
-            0x7 => {self.oam[low_add] = split.0; self.oam[low_add+1] = split.1},
-            _ => todo!("I havent implemented external memory yet")
-        }
+
+        self.write_u8(address + 0, split.0);
+        self.write_u8(address + 1, split.1);
     }
 
     pub fn write_u32(&mut self, address: u32, data: u32) {
-        let upp_add = (address >> 24) & 0xF;
-        // bottom 2 bits are ignored when writing words
-        let low_add = (address & 0xFFFFC) as usize;
         let split = little_split_u32(data);
+        let address = address & 0xFFFFFFFC;
 
-        match upp_add {
-            0x0 => panic!("cannot make a write to the BIOS"),
-            0x2 => {self.ewram[low_add] = split.0; self.ewram[low_add+1] = split.1; self.ewram[low_add+2] = split.2; self.ewram[low_add+3] = split.3},
-            0x3 => {self.iwram[low_add] = split.0; self.iwram[low_add+1] = split.1; self.iwram[low_add+2] = split.2; self.iwram[low_add+3] = split.3},
-            0x4 => {self.io_reg[low_add] = split.0; self.io_reg[low_add+1] = split.1; self.io_reg[low_add+2] = split.2; self.io_reg[low_add+3] = split.3},
-            0x5 => {self.obj_pall[low_add] = split.0; self.obj_pall[low_add+1] = split.1; self.obj_pall[low_add+2] = split.2; self.obj_pall[low_add+3] = split.3},
-            0x6 => {self.vram[low_add] = split.0; self.vram[low_add+1] = split.1; self.vram[low_add+2] = split.2; self.vram[low_add+3] = split.3},
-            0x7 => {self.oam[low_add] = split.0; self.oam[low_add+1] = split.1; self.oam[low_add+2] = split.2; self.oam[low_add+3] = split.3},
-            _ => todo!("I haven't implemented external memory yet"),
-        }
+        self.write_u8(address + 0, split.0);
+        self.write_u8(address + 1, split.1);
+        self.write_u8(address + 2, split.2);
+        self.write_u8(address + 3, split.3);
     }
 }
 

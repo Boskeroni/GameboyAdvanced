@@ -483,7 +483,7 @@ fn push_pop(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status, memory: &mut M
 }
 
 fn multiple_load(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status, memory: &mut Memory) {
-    let reg_list = opcode & 0xFF;
+    let mut reg_list = opcode & 0xFF;
     assert!(reg_list != 0, "Register list provided cannot be 0");
 
     let rb_index = (opcode >> 8) as u8 & 0b111;
@@ -491,15 +491,30 @@ fn multiple_load(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status, memory: &
 
     let load_bit = (opcode >> 11) & 1 == 1;    
     match load_bit {
-        true => {
+        true => { // load
             // U-bit set, P-bit not set
             // Add offset to base
             // Add offset after
+            while reg_list != 0 {
+                let next = reg_list.trailing_zeros();
+                let data = memory.read_u32(address);
 
+                let reg = cpu_regs.get_register_mut(next as u8, status.cpsr.mode);
+                *reg = data;
+                
+                address += 4;
+                reg_list &= !(1 << next);
+            }
         },
-        false => {
+        false => { // store
             // U-bit set, P-bit not set 
             // Add offset after
+            let next = reg_list.trailing_zeros();
+            let reg = cpu_regs.get_register(next as u8, status.cpsr.mode);
+
+            memory.write_u32(address, reg);
+            address += 4;
+            reg_list &= !(1 << next);
         },
     }
 }

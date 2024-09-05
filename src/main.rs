@@ -1,6 +1,7 @@
 mod cpu;
 mod memory;
 mod ppu;
+mod timer;
 
 use std::io::{stdin, stdout, Write};
 
@@ -81,6 +82,11 @@ fn main() {
             false => memory.read_u32(cpu_regs.get_pc_arm()),
         });
 
+        // update timer
+
+        // handle exceptions
+
+
         let window_buffer = update_ppu(&mut memory);
         window.update_with_buffer(&window_buffer, SCREEN_WIDTH, SCREEN_HEIGHT).unwrap();
     }
@@ -96,6 +102,6 @@ fn debug_screen(cpu: &Cpu, instr: DecodedInstruction, opcode: u32) {
     
     stdout().flush().unwrap();
     let mut temp = String::new();
-    //stdin().read_line(&mut temp).unwrap();
+    stdin().read_line(&mut temp).unwrap();
     println!("");
 }
