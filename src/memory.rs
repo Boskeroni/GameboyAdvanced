@@ -47,7 +47,7 @@ pub struct Memory {
     oam: [u8; 0x400],
     gp_rom: Vec<u8>,
 
-    timer_resets: [u32; 4],
+    timer_resets: [u16; 4],
 }
 impl Memory {
     pub fn read_u8(&self, address: u32) -> u8 {
@@ -82,12 +82,12 @@ impl Memory {
     }
 
     pub fn write_u8(&mut self, address: u32, data: u8) {
+        // writing to a timer register
         if address >= 0x4000100 && address <= 0x400010E && address % 4 < 2 {
-            // writing to a timer register
             // this rounds down anyways which is good
             let timer_specified = (address - 0x4000100) / 4;
             let write_upper_byte = address & 1 == 1;
-            let data = data as u32;
+            let data = data as u16;
 
             let timer_reset = &mut self.timer_resets[timer_specified as usize];
             match write_upper_byte {
@@ -98,8 +98,6 @@ impl Memory {
         }
         
         let (upp_add, low_add) = split_memory_address(address);
-
-
 
         match upp_add {
             0x0 => panic!("cannot make a write to the BIOS"),
@@ -129,6 +127,67 @@ impl Memory {
         self.write_u8(address + 2, split.2);
         self.write_u8(address + 3, split.3);
     }
+
+    fn write_io(&mut self, address: u32, data: u16) {
+        let address = address as usize - 0x4000000;
+        let split = lil_end_split_u16(data);
+
+        self.io_reg[address] = split.0;
+        self.io_reg[address + 1] = split.1;
+    }
+}
+
+
+const BASE_TIMER_ADDRESS: u32 = 0x4000100;
+pub fn update_timer(memory: &mut Memory, old_cycles: &mut u16, new_cycles: u16) {
+    let total_cycles = *old_cycles + new_cycles;
+    let mut prev_cascade = false;
+
+    for timer in 0..=3 {
+        let timer_address = BASE_TIMER_ADDRESS + (timer * 4);
+        let control = memory.read_u16(timer_address + 2);
+
+        let timer_enable = (control >> 7) & 1 == 1;
+        if !timer_enable {
+            prev_cascade = false;
+            continue;
+        }
+
+        let frequency;
+        let frequency_bits = control & 0b11;
+        match frequency_bits {
+            0b00 => frequency = 1,
+            0b01 => frequency = 64,
+            0b10 => frequency = 256,
+            0b11 => frequency = 1024,
+            _ => unreachable!()
+        }
+
+        let timer_cycles = memory.read_u16(timer_address);
+
+        let cascade_timer = (control >> 2) & 1 == 1;
+        let (new_timer_cycles, overflow) = match cascade_timer {
+            true => old_cycles.overflowing_add(prev_cascade as u16),
+            false => {
+                let cycles_to_add = (timer_cycles / frequency) - (total_cycles / frequency);
+                old_cycles.overflowing_add(cycles_to_add)
+            }
+        };
+        prev_cascade = overflow;
+
+        let interrupt_flag = (control >> 6) & 1 == 1;
+        if overflow && interrupt_flag {
+            // call the interrupt somehow (learn how to do this)
+            todo!()
+        }
+
+        match overflow {
+            true => memory.write_io(timer_address, memory.timer_resets[timer as usize]),
+            false => memory.write_io(timer_address, new_timer_cycles),
+        }
+    }
+
+    *old_cycles = total_cycles;
 }
 
 pub fn create_memory(file_name: &str) -> Memory {

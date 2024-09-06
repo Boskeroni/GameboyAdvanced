@@ -1,7 +1,6 @@
 mod cpu;
 mod memory;
 mod ppu;
-mod timer;
 
 use std::io::{stdin, stdout, Write};
 
@@ -10,6 +9,7 @@ use cpu::decode::{decode_arm, decode_thumb};
 use cpu::execute_arm::execute_arm;
 use cpu::execute_thumb::execute_thumb;
 use cpu::decode::DecodedInstruction;
+use memory::update_timer;
 use minifb::{Window, WindowOptions};
 use ppu::update_ppu;
 
@@ -46,7 +46,11 @@ fn main() {
     // since all the steps of the FDE cycle take place in one turn, 
     // it technically doesnt matter the order and so I will do EDF for convenience
     use DecodedInstruction::*;
+    let mut total_cycles = 0;
     loop {
+        // add 1 for now, make it more accurate later
+        update_timer(&mut memory, &mut total_cycles, 1);
+
         // Execute
         if let Some(instruction) = decoded {
             let old_pc = cpu_regs.get_register(15, status.cpsr.mode);
@@ -102,6 +106,6 @@ fn debug_screen(cpu: &Cpu, instr: DecodedInstruction, opcode: u32) {
     
     stdout().flush().unwrap();
     let mut temp = String::new();
-    stdin().read_line(&mut temp).unwrap();
+    //stdin().read_line(&mut temp).unwrap();
     println!("");
 }
