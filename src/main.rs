@@ -51,7 +51,7 @@ fn main() {
     loop {
         // update the timer
         // add 1 for now, make it more accurate later
-        update_timer(&mut memory, &mut total_cycles, 1);
+        update_timer(&mut memory, &mut total_cycles, 300);
 
         // check for any interrupts
         handle_interrupts(&mut memory, &mut status, &mut cpu_regs);
