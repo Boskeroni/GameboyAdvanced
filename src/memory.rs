@@ -176,9 +176,13 @@ pub fn update_timer(memory: &mut Memory, old_cycles: &mut u16, new_cycles: u16) 
         prev_cascade = overflow;
 
         let interrupt_flag = (control >> 6) & 1 == 1;
+        
+        // we need to call the interrupt
         if overflow && interrupt_flag {
-            // call the interrupt somehow (learn how to do this)
-            todo!()
+            let mut interrupt_flag = memory.read_u16(0x4000202);
+            interrupt_flag |= 1 << (timer + 3);
+
+            memory.write_io(0x4000202, interrupt_flag);
         }
 
         match overflow {

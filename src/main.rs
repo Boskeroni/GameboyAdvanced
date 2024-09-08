@@ -4,6 +4,7 @@ mod ppu;
 
 use std::io::{stdin, stdout, Write};
 
+use cpu::handle_interrupts;
 use cpu::registers::{Cpu, status_registers::Status};
 use cpu::decode::{decode_arm, decode_thumb};
 use cpu::execute_arm::execute_arm;
@@ -48,8 +49,12 @@ fn main() {
     use DecodedInstruction::*;
     let mut total_cycles = 0;
     loop {
+        // update the timer
         // add 1 for now, make it more accurate later
         update_timer(&mut memory, &mut total_cycles, 1);
+
+        // check for any interrupts
+        handle_interrupts(&mut memory, &mut status, &mut cpu_regs);
 
         // Execute
         if let Some(instruction) = decoded {
@@ -85,11 +90,6 @@ fn main() {
             true => memory.read_u16(cpu_regs.get_pc_thumb()) as u32,
             false => memory.read_u32(cpu_regs.get_pc_arm()),
         });
-
-        // update timer
-
-        // handle exceptions
-
 
         let window_buffer = update_ppu(&mut memory);
         window.update_with_buffer(&window_buffer, SCREEN_WIDTH, SCREEN_HEIGHT).unwrap();

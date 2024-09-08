@@ -68,7 +68,8 @@ fn branch_exchange(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
     *pc = rn & 0xFFFFFFFE;
 }
 
-fn data_processing(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
+fn data_processing(conditioned_opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
+    let opcode = conditioned_opcode & 0x0FFFFFFF;
     let change_cpsr = (opcode >> 20) & 1 == 1;
     let operation = (opcode >> 21) & 0b1111;
 
@@ -84,17 +85,18 @@ fn data_processing(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
     let op2_carry;
 
     // means that the Operand2 is a Register with a shift applied
-    if (opcode >> 25) & 1 == 0 {
-        (op2, op2_carry) = get_shifted_value(cpu_regs, opcode & 0xFFF, status);
-    } // means that its an Immediate value with a rotation applied to it 
-    else {
-        let imm = opcode & 0xFF;
-        let shift_amount = (opcode >> 8) & 0xF;
-        op2 = imm.rotate_right(shift_amount * 2);
-
-        // i am just assuming that the carry bit functions in the same way
-        // that the ROR carry bit works
-        op2_carry = (op2 >> 31) & 1 != 0;
+    let operand_bit = (opcode >> 25) & 1 == 1;
+    match operand_bit {
+        true => {
+            let imm = opcode & 0xFF;
+            let shift_amount = (opcode >> 8) & 0xF;
+            op2 = imm.rotate_right(shift_amount * 2);
+    
+            // i am just assuming that the carry bit functions in the same way
+            // that the ROR carry bit works
+            op2_carry = (op2 >> 31) & 1 != 0;
+        }
+        false => (op2, op2_carry) = get_shifted_value(cpu_regs, opcode & 0xFFF, status),
     }
 
     let op1_reg = (opcode >> 16) as u8 & 0xF;
@@ -152,6 +154,13 @@ fn data_processing(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
         _ => unreachable!()
     };
     *src = result;
+
+    // checking if we are returning from a SWI
+    if let ProcessorMode::Supervisor = status.cpsr.mode {
+        if operation == 0b1101 && operand_bit && opcode & 0xF == 14 {
+            status.cpsr.mode = ProcessorMode::User;
+        }
+    }
 
     // both operations respect the S bit and R15 rule
     if !change_cpsr || op1_reg == 15 {

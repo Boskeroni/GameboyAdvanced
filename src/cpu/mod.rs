@@ -1,4 +1,6 @@
-use registers::{status_registers::Status, Cpu};
+use registers::{status_registers::Status, Cpu, ProcessorMode};
+
+use crate::memory::Memory;
 
 pub mod execute_arm;
 pub mod execute_thumb;
@@ -68,4 +70,26 @@ pub fn get_shifted_value(cpu_regs: &Cpu, opcode: u32, status: &Status) -> (u32, 
         },
         _ => unreachable!(),
     };
+}
+
+pub fn handle_interrupts(memory: &mut Memory, status: &mut Status, cpu_regs: &mut Cpu) {
+    let interrupt_allowed = memory.read_u16(0x4000208) & 1 == 1;
+    if !interrupt_allowed {
+        return;
+    }
+    let interrupts_enabled = memory.read_u16(0x4000200);
+    let interrupts_called = memory.read_u16(0x4000202);
+
+    let called_interrupts = interrupts_enabled & interrupts_called;
+    if called_interrupts == 0 {
+        return;
+    }
+
+    status.set_specific_spsr(status.cpsr, ProcessorMode::User);
+
+    status.cpsr.mode = ProcessorMode::Interrupt;
+    status.cpsr.t = false;
+
+    let pc = cpu_regs.get_register_mut(15, status.cpsr.mode);
+    *pc = 0x18;
 }
