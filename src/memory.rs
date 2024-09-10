@@ -191,7 +191,7 @@ pub fn update_timer(memory: &mut Memory, old_cycles: &mut u16, new_cycles: u16) 
         }
     }
 
-    *old_cycles = total_cycles;
+    *old_cycles = total_cycles % 1024;
 }
 
 pub fn create_memory(file_name: &str) -> Memory {

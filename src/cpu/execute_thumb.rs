@@ -490,32 +490,39 @@ fn multiple_load(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status, memory: &
     let mut address = cpu_regs.get_register(rb_index, status.cpsr.mode);
 
     let load_bit = (opcode >> 11) & 1 == 1;    
-    match load_bit {
-        true => { // load
-            // U-bit set, P-bit not set
-            // Add offset to base
-            // Add offset after
+    match load_bit { 
+        true => { // load from memory
+            // LDMIA
+            // P bit off, U bit on
             while reg_list != 0 {
-                let next = reg_list.trailing_zeros();
-                let data = memory.read_u32(address);
+                let next = 7 - reg_list.leading_zeros();
 
-                let reg = cpu_regs.get_register_mut(next as u8, status.cpsr.mode);
-                *reg = data;
-                
+                let rnext = cpu_regs.get_register_mut(next as u8, status.cpsr.mode);
+                let new_data = memory.read_u32(address);
+                *rnext = new_data;
+
                 address += 4;
+
+                // clearing the bit representing the newly completed write
                 reg_list &= !(1 << next);
             }
-        },
-        false => { // store
-            // U-bit set, P-bit not set 
-            // Add offset after
-            let next = reg_list.trailing_zeros();
-            let reg = cpu_regs.get_register(next as u8, status.cpsr.mode);
+        }
+        false => { // store to memory
+            // STMIA
+            // P bit off, U bit on
+            while reg_list != 0 {
+                let next = reg_list.trailing_zeros();
 
-            memory.write_u32(address, reg);
-            address += 4;
-            reg_list &= !(1 << next);
-        },
+                let mut rnext = cpu_regs.get_register(next as u8, status.cpsr.mode);
+                if next == 15 {
+                    rnext += 4;
+                }
+                memory.write_u32(address, rnext);
+                address += 4;
+                        
+                reg_list &= !(1 << next);
+            }
+        }
     }
 }
 

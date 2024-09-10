@@ -91,7 +91,7 @@ fn data_processing(conditioned_opcode: u32, cpu_regs: &mut Cpu, status: &mut Sta
             let imm = opcode & 0xFF;
             let shift_amount = (opcode >> 8) & 0xF;
             op2 = imm.rotate_right(shift_amount * 2);
-    
+
             // i am just assuming that the carry bit functions in the same way
             // that the ROR carry bit works
             op2_carry = (op2 >> 31) & 1 != 0;
@@ -145,7 +145,6 @@ fn data_processing(conditioned_opcode: u32, cpu_regs: &mut Cpu, status: &mut Sta
             op1.overflowing_add(op2)
         }, // cmn
         0b1100 => {
-            println!("ORR => {}", op1 | op2);
             (op1 | op2, false)
         }, // orr
         0b1101 => (op2, false), // mov
@@ -188,42 +187,41 @@ fn psr_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
     // matching between the middle 10 bits
     match (opcode >> 12) & 0b11_1111_1111 {
         0b1010011111 => { // transfer register contents to PSR
-            let used_cpsr = match (opcode >> 22) & 1 {
-                0 => &status.cpsr,
-                1 => status.get_spsr(),
-                _ => unreachable!(),
-            };
+            // MSR
+            let cpsr_bit = (opcode >> 22) & 1 == 1;
+            
+            let rm_index = opcode as u8 & 0xF;
+            let rm = cpu_regs.get_register(rm_index, status.cpsr.mode);
 
-            let reg_index = opcode & 0b1111;
-            assert!(reg_index != 15, "register 15 cannot be used as the source register");
+            let dst_cpsr;
+            match cpsr_bit {
+                true => dst_cpsr = status.get_spsr_mut(),
+                false => dst_cpsr = &mut status.cpsr,
+            }
 
-            let reg = cpu_regs.get_register_mut(reg_index as u8, status.cpsr.mode);
-            *reg = convert_cpsr_u32(used_cpsr);
+            *dst_cpsr = convert_u32_cpsr(rm);
         }
         0b1010001111 => {
-            let operand_decider = (opcode >> 25) & 1 != 0;
-            let operand = match operand_decider {
+            let imm_op = (opcode >> 25) & 1 == 0;
+            let operand;
+            match imm_op {
                 false => {
-                    let reg_index = opcode & 0b1111;
+                    let reg_index = opcode as u8 & 0b1111;
                     assert!(reg_index != 15, "source register cannot be register 15");
-                    cpu_regs.get_register(reg_index as u8, status.cpsr.mode)
+                    operand = cpu_regs.get_register(reg_index, status.cpsr.mode);
                 }
                 true => {
                     let imm = opcode & 0xFF;
                     let shift_amount = (opcode >> 8) & 0xF;
 
                     // this better be done the same way as the one before
-                    imm.rotate_right(shift_amount * 2)
+                    operand = imm.rotate_right(shift_amount * 2);
                 }
-            };
-            
-            let new_psr;
-            match status.cpsr.mode {
-                ProcessorMode::User => new_psr = convert_u32_cpsr_limited(operand),
-                _ => new_psr = convert_u32_cpsr(operand),
             }
-
-            match (opcode >> 25) & 1 != 0 {
+            
+            let new_psr = convert_u32_cpsr(operand);
+            let psr_bit = (opcode >> 25) & 1 == 1;
+            match psr_bit {
                 true => status.set_flags_spsr(new_psr),
                 false => status.set_flags_cpsr(new_psr),
             }

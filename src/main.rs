@@ -106,6 +106,6 @@ fn debug_screen(cpu: &Cpu, instr: DecodedInstruction, opcode: u32) {
     
     stdout().flush().unwrap();
     let mut temp = String::new();
-    //stdin().read_line(&mut temp).unwrap();
+    stdin().read_line(&mut temp).unwrap();
     println!("");
 }

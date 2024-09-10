@@ -119,6 +119,17 @@ pub mod status_registers {
                 _ => &self.cpsr,
             }   
         }
+        pub fn get_spsr_mut(&mut self) -> &mut Cpsr {
+            use ProcessorMode::*;
+            match self.cpsr.mode {
+                FastInterrupt => &mut self.spsr[0],
+                Supervisor => &mut self.spsr[1],
+                Abort => &mut self.spsr[2],
+                Interrupt => &mut self.spsr[3],
+                Undefined => &mut self.spsr[4],
+                _ => &mut self.cpsr,
+            }
+        }
         pub fn set_flags_spsr(&mut self, new_spsr: Cpsr) {
             use ProcessorMode::*;
             let spsr = match self.cpsr.mode {
