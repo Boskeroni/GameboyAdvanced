@@ -103,10 +103,10 @@ fn data_processing(conditioned_opcode: u32, cpu_regs: &mut Cpu, status: &mut Sta
     let src_index = (opcode >> 12) as u8 & 0xF;
 
     let op1 = cpu_regs.get_register(op1_reg, status.cpsr.mode);
-    let src = cpu_regs.get_register_mut(src_index, status.cpsr.mode);
+    let dst = cpu_regs.get_register_mut(src_index, status.cpsr.mode);
 
     let mut undo = false;
-    let backup = *src;
+    let backup = *dst;
     let (result, alu_carry) = match operation {
         0b0000 => (op1 & op2, false), // and
         0b0001 => (op1 ^ op2, false), // eor
@@ -152,7 +152,7 @@ fn data_processing(conditioned_opcode: u32, cpu_regs: &mut Cpu, status: &mut Sta
         0b1111 => (!op2, false), // mvn
         _ => unreachable!()
     };
-    *src = result;
+    *dst = result;
 
     // checking if we are returning from a SWI
     if let ProcessorMode::Supervisor = status.cpsr.mode {
@@ -165,8 +165,8 @@ fn data_processing(conditioned_opcode: u32, cpu_regs: &mut Cpu, status: &mut Sta
     if !change_cpsr || op1_reg == 15 {
         return;
     }
-    status.cpsr.z = *src == 0;
-    status.cpsr.n = (*src >> 31) & 1 == 1;
+    status.cpsr.z = *dst == 0;
+    status.cpsr.n = (*dst >> 31) & 1 == 1;
 
     // the mathematical instructions
     if [0b0010, 0b0011, 0b0100, 0b0101, 0b0110, 0b0111, 0b1010, 0b1011].contains(&operation) {
@@ -179,7 +179,7 @@ fn data_processing(conditioned_opcode: u32, cpu_regs: &mut Cpu, status: &mut Sta
     }
 
     if undo {
-        *src = backup;
+        *dst = backup;
     }
 }
 
@@ -193,12 +193,18 @@ fn psr_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
             let rm_index = opcode as u8 & 0xF;
             let rm = cpu_regs.get_register(rm_index, status.cpsr.mode);
 
+            if let ProcessorMode::User = status.cpsr.mode {
+                if !cpsr_bit {
+                    status.set_flags_cpsr(convert_u32_cpsr(rm));
+                    return;
+                }
+            }
+
             let dst_cpsr;
             match cpsr_bit {
                 true => dst_cpsr = status.get_spsr_mut(),
                 false => dst_cpsr = &mut status.cpsr,
             }
-
             *dst_cpsr = convert_u32_cpsr(rm);
         }
         0b1010001111 => {
@@ -230,9 +236,9 @@ fn psr_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
             // just a quick test to make sure it is MRS, not a full check, just gives the program more confidence
             assert!((opcode >> 16) & 0b111111 == 0b001111, "not a MSR instruction");
 
-            let dest_reg_index = (opcode >> 12) & 0xF;
-            assert!(dest_reg_index != 15, "destination register cannot be register 15");
-            let dest_reg = cpu_regs.get_register_mut(dest_reg_index as u8, status.cpsr.mode);
+            let dst_index = (opcode >> 12) & 0xF;
+            assert!(dst_index != 15, "destination register cannot be register 15");
+            let dest_reg = cpu_regs.get_register_mut(dst_index as u8, status.cpsr.mode);
 
             let cpsr = match (opcode >> 22) & 1 != 0 {
                 true => convert_cpsr_u32(status.get_spsr()),
@@ -353,7 +359,6 @@ fn data_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &Status, memory: &mut 
 
     match load_store_bit {
         true => {
-            // load the value from memory
             let data = match data_size_bit {
                 true => memory.read_u8(address) as u32,
                 false => memory.read_u32(address),

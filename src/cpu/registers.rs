@@ -1,12 +1,12 @@
 #[derive(Debug, Copy, Clone, Default)]
 pub enum ProcessorMode {
-    #[default]
     User = 0b10000,
     FastInterrupt = 0b10001,
     Interrupt = 0b10010,
     Supervisor = 0b10011,
     Abort = 0b10111,
     Undefined = 0b11011,
+    #[default]
     System = 0b11111,
 }
 
@@ -14,7 +14,7 @@ pub enum ProcessorMode {
 pub struct Cpu {
     pub unbanked_registers: [u32; 8],
     // 1D array representing [[r8, r8_fiq], [r9, r9_fiq], ..., [r12, r12_fiq]]
-    pub double_banked_registers: [[u32; 2]; 6],
+    pub double_banked_registers: [[u32; 2]; 5],
     // same logic as the previous one, just with more [[r13, f13_fiq, r13_svc, r13_abt, r13_irq, r13_und], ...]
     pub many_banked_registers: [[u32; 6]; 2], 
     pub pc: u32,
@@ -228,21 +228,8 @@ pub mod status_registers {
                 0b10111 => ProcessorMode::Abort,
                 0b11011 => ProcessorMode::Undefined,
                 0b11111 => ProcessorMode::System,
-                _ => panic!("invalid Mode Bits in the u32 CPSR"),
+                _ => ProcessorMode::Undefined,
             } 
-        }
-    }
-    pub fn convert_u32_cpsr_limited(cpsr: u32) -> Cpsr {
-        Cpsr {
-            n: (cpsr >> 31) & 1 != 0,
-            z: (cpsr >> 30) & 1 != 0,
-            c: (cpsr >> 29) & 1 != 0,
-            v: (cpsr >> 28) & 1 != 0,
-            q: (cpsr >> 27) & 1 != 0,
-            i: (cpsr >> 7 ) & 1 != 0,
-            f: (cpsr >> 6 ) & 1 != 0,
-            t: false,
-            mode: ProcessorMode::User,
         }
     }
 }

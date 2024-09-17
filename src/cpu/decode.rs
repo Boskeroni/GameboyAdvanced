@@ -46,46 +46,35 @@ pub enum DecodedArm {
     Swi,
 }
 
-
-const PUSH_POP_MASK: u8 = 0b1111_0110;
-const PUSH_POP_ID: u8 = 0b1011_0100;
-
 const SWI_ID: u8 = 0b1101_1111;
 const ADD_OFF_ID: u8 = 0b1011_0000;
-
-/// these 2 can be used for both:
-/// => "load/store with register offset",
-/// => "load/store sign-extended byte/halfword"
-const LOAD_REG_OFFSET_MASK: u8 = 0b1111_0010;
-const LOAD_SIGN_MASK: u8 = 0b0101_0010;
-
 pub fn decode_thumb(opcode: u16) -> DecodedThumb {
     use DecodedThumb::*;
-    // the order in which i decode the instructions matters as it saves a lot of time
+
     let mut identifier = (opcode >> 8) as u8;
+
+    // these two opcodes require the first byte so easy to get out of the way
     match identifier {
         SWI_ID => return Swi,
         ADD_OFF_ID => return AddOffsetSp,
         _ => {},
     }
-    if (identifier & PUSH_POP_MASK) == PUSH_POP_ID {
-        return PushPop;
+    
+    // these opcodes have a 7 bit identifier
+    // this code works i promise works
+    identifier >>= 1;
+    match identifier & 0b1111_001 {
+        0b0101_000 => return LoadRegOffset,
+        0b0101_001 => return LoadSignExtended,
+        0b1011_000 => return PushPop,
+        _ => {}
     }
 
-    // since the 2nd to final bit can either be a 1/0 we account for both
-    match (identifier & LOAD_REG_OFFSET_MASK) ^ LOAD_SIGN_MASK {
-        0 => return LoadSignExtended,
-        2 => return LoadRegOffset,
-        _ => {},
-    }
-
-    // we can narrow down the identifiers
-    // just makes it easier to work with
-    identifier >>= 2;
+    identifier >>= 1;
     match identifier {
         0b010000 => return AluOperation,
         0b010001 => return HiRegisterOperations,
-        _ => {},
+        _ => {}
     }
 
     identifier >>= 1;
@@ -93,7 +82,7 @@ pub fn decode_thumb(opcode: u16) -> DecodedThumb {
         0b00011 => return AddSubtract,
         0b01001 => return PcRelativeLoad,
         0b11100 => return UnconditionalBranch,
-        _ => {},
+        _ => {}
     }
 
     identifier >>= 1;
@@ -114,7 +103,8 @@ pub fn decode_thumb(opcode: u16) -> DecodedThumb {
         0b011 => return LoadImmOffset,
         _ => {}
     }
-    unreachable!("this should never happen, possibly a mistake in the THUMB decoding");
+
+    unreachable!("THUMB opcode provided is invalid");
 }
 
 const BRANCH_EXCHANGE_MASK: u32 = 0b0000_1111_1111_1111_1111_1111_1111_0000;

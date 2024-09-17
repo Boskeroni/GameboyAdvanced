@@ -1,4 +1,4 @@
-const BIOS: &[u8; 0x4000] = include_bytes!("../bios/gba_bios.bin");
+const BIOS: &[u8; 0x4000] = include_bytes!("../gba_bios.bin");
 
 /// output =>
 /// 0bBBBBBBBBAAAAAAAA
@@ -139,7 +139,7 @@ impl Memory {
 
 
 const BASE_TIMER_ADDRESS: u32 = 0x4000100;
-pub fn update_timer(memory: &mut Memory, old_cycles: &mut u16, new_cycles: u16) {
+pub fn update_timer(memory: &mut Memory, old_cycles: &mut u32, new_cycles: u32) {
     let total_cycles = *old_cycles + new_cycles;
     let mut prev_cascade = false;
 
@@ -163,14 +163,14 @@ pub fn update_timer(memory: &mut Memory, old_cycles: &mut u16, new_cycles: u16) 
             _ => unreachable!()
         }
 
-        let timer_cycles = memory.read_u16(timer_address);
+        let timer_cycles = memory.read_u16(timer_address) as u32;
 
         let cascade_timer = (control >> 2) & 1 == 1;
         let (new_timer_cycles, overflow) = match cascade_timer {
-            true => old_cycles.overflowing_add(prev_cascade as u16),
+            true => old_cycles.overflowing_add(prev_cascade as u32),
             false => {
                 let cycles_to_add = (timer_cycles / frequency) - (total_cycles / frequency);
-                old_cycles.overflowing_add(cycles_to_add)
+                old_cycles.overflowing_add(cycles_to_add as u32)
             }
         };
         prev_cascade = overflow;
@@ -187,7 +187,7 @@ pub fn update_timer(memory: &mut Memory, old_cycles: &mut u16, new_cycles: u16) 
 
         match overflow {
             true => memory.write_io(timer_address, memory.timer_resets[timer as usize]),
-            false => memory.write_io(timer_address, new_timer_cycles),
+            false => memory.write_io(timer_address, new_timer_cycles as u16),
         }
     }
 

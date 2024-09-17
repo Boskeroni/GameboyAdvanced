@@ -2,7 +2,7 @@ mod cpu;
 mod memory;
 mod ppu;
 
-use std::io::{stdin, stdout, Write};
+use std::io::{stdout, Write};
 
 use cpu::handle_interrupts;
 use cpu::registers::{Cpu, status_registers::Status};
@@ -20,23 +20,21 @@ const SCREEN_HEIGHT: usize = 160;
 
 fn main() {
     let mut window = Window::new(
-        "GBA emulator",
-        SCREEN_WIDTH,
-        SCREEN_HEIGHT,
-        WindowOptions::default(),
+        "GBA emulter", 
+        SCREEN_WIDTH, 
+        SCREEN_HEIGHT, 
+        WindowOptions::default()
     ).unwrap();
-    window.set_target_fps(60);
-
-
 
     let mut cpu_regs = Cpu {
         pc: 0x8000000,
         unbanked_registers: [0, 0, 0, 0, 0, 0, 0 ,0],
-        double_banked_registers: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
+        double_banked_registers: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
+        //many_banked_registers: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]],
         many_banked_registers: [[0x03007F00, 0x03007F00, 0x03007F00, 0x03007F00, 0x03007F00, 0x03007F00], [0, 0, 0, 0, 0, 0]],
     };
     let mut status = Status::new();
-    let mut memory = memory::create_memory("test/armwrestler.gba");
+    let mut memory = memory::create_memory("test/arm.gba");
 
     let mut fetched: Option<u32> = None;
 
@@ -51,7 +49,7 @@ fn main() {
     loop {
         // update the timer
         // add 1 for now, make it more accurate later
-        update_timer(&mut memory, &mut total_cycles, 300);
+        update_timer(&mut memory, &mut total_cycles, 1);
 
         // check for any interrupts
         handle_interrupts(&mut memory, &mut status, &mut cpu_regs);
@@ -59,13 +57,19 @@ fn main() {
         // Execute
         if let Some(instruction) = decoded {
             let old_pc = cpu_regs.get_register(15, status.cpsr.mode);
+            
+            //if ![0xD1FC, 0x3904, 0xC004].contains(&decoded_opcode) {
+            //    println!("{decoded_opcode:X}");
+            //}
 
             match instruction {
                 Thumb(instr) => execute_thumb(decoded_opcode as u16, instr, &mut cpu_regs, &mut status, &mut memory),
                 Arm(instr) => execute_arm(decoded_opcode, instr, &mut cpu_regs, &mut status, &mut memory),
             };
 
-            debug_screen(&cpu_regs, instruction, decoded_opcode);
+            //if ![0xD1FC, 0x3904, 0xC004].contains(&decoded_opcode) {
+            //    debug_screen(&cpu_regs, instruction, decoded_opcode, &status, old_pc);
+            //}
 
             let new_pc = cpu_regs.get_register(15, status.cpsr.mode);
             if old_pc != new_pc {
@@ -91,21 +95,24 @@ fn main() {
             false => memory.read_u32(cpu_regs.get_pc_arm()),
         });
 
-        let window_buffer = update_ppu(&mut memory);
-        window.update_with_buffer(&window_buffer, SCREEN_WIDTH, SCREEN_HEIGHT).unwrap();
+        let buffer = update_ppu(&mut memory);
+        window.update_with_buffer(&buffer, SCREEN_WIDTH, SCREEN_HEIGHT).unwrap();
     }
 }
 
-fn debug_screen(cpu: &Cpu, instr: DecodedInstruction, opcode: u32) {
+fn debug_screen(cpu: &Cpu, instr: DecodedInstruction, opcode: u32, status: &Status, old_pc: u32) {
     println!("============= DEBUG SCREEN =============");
     println!("r0, r1, r2, r3, r4, r5, r6, r7: {:X?}", cpu.unbanked_registers);
     println!("r8, r9, r10, r11, r12: {:X?}", cpu.double_banked_registers);
     println!("r13, r14: {:X?}", cpu.many_banked_registers);
-    println!("pc: {:X}", cpu.pc);
+    println!("pc: {:X}, from: {:X}", cpu.pc, old_pc);
+    println!("cpsr: {:?}", status.cpsr);
     println!("========= Opcode completed: {instr:?}, {opcode:X} ============");
     
     stdout().flush().unwrap();
-    let mut temp = String::new();
-    stdin().read_line(&mut temp).unwrap();
+    //let mut temp = String::new();
+
+    //use std::io::stdin;
+    //stdin().read_line(&mut temp).unwrap();
     println!("");
 }

@@ -25,11 +25,6 @@ pub fn update_ppu(memory: &mut Memory) -> Vec<u32> {
     // }
 }
 
-fn ppu_mode_0() {}
-fn ppu_mode_1() {}
-fn ppu_mode_2() {}
-fn ppu_mode_3() {}
-
 // im starting with mode 4 cause thats what Arm.gba needs first
 fn ppu_mode_4(memory: &mut Memory) -> Vec<u32> {
     let palette_base_address = 0x5000000;
@@ -48,4 +43,3 @@ fn ppu_mode_4(memory: &mut Memory) -> Vec<u32> {
     // now what the fuck do I do with the buffer
 
 }
-fn ppu_mode_5() {}
