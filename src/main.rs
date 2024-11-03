@@ -95,9 +95,19 @@ fn main() {
             false => memory.read_u32(cpu_regs.get_pc_arm()),
         });
 
-        let buffer = update_ppu(&mut memory);
-        window.update_with_buffer(&buffer, SCREEN_WIDTH, SCREEN_HEIGHT).unwrap();
+        let pot_buffer = update_ppu(&mut memory);
+        if let Some(buffer) = pot_buffer {
+            let converted_buffer = convert_u16_color(buffer);
+            window.update_with_buffer(&converted_buffer, SCREEN_WIDTH, SCREEN_HEIGHT).unwrap();
+        }
     }
+}
+
+fn convert_u16_color(screen: Vec<u16>) -> Vec<u32> {
+    screen.iter().map(|c| {
+        let c = *c as u32;
+        c*c
+    }).collect()
 }
 
 fn debug_screen(cpu: &Cpu, instr: DecodedInstruction, opcode: u32, status: &Status, old_pc: u32) {
