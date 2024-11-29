@@ -27,11 +27,10 @@ fn main() {
     ).unwrap();
 
     let mut cpu_regs = Cpu {
-        pc: 0x8000000,
+        pc: 0x0000000,
         unbanked_registers: [0, 0, 0, 0, 0, 0, 0 ,0],
         double_banked_registers: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
-        //many_banked_registers: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]],
-        many_banked_registers: [[0x03007F00, 0x03007F00, 0x03007F00, 0x03007F00, 0x03007F00, 0x03007F00], [0, 0, 0, 0, 0, 0]],
+        many_banked_registers: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]],
     };
     let mut status = Status::new();
     let mut memory = memory::create_memory("test/arm.gba");
@@ -57,20 +56,14 @@ fn main() {
         // Execute
         if let Some(instruction) = decoded {
             let old_pc = cpu_regs.get_register(15, status.cpsr.mode);
-            
-            //if ![0xD1FC, 0x3904, 0xC004].contains(&decoded_opcode) {
-            //    println!("{decoded_opcode:X}");
-            //}
 
             match instruction {
                 Thumb(instr) => execute_thumb(decoded_opcode as u16, instr, &mut cpu_regs, &mut status, &mut memory),
                 Arm(instr) => execute_arm(decoded_opcode, instr, &mut cpu_regs, &mut status, &mut memory),
             };
 
-            //if ![0xD1FC, 0x3904, 0xC004].contains(&decoded_opcode) {
-            //    debug_screen(&cpu_regs, instruction, decoded_opcode, &status, old_pc);
-            //}
-
+            debug_screen(&cpu_regs, instruction, decoded_opcode, &status, old_pc);
+            
             let new_pc = cpu_regs.get_register(15, status.cpsr.mode);
             if old_pc != new_pc {
                 fetched = None;

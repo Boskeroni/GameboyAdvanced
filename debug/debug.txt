@@ -1,0 +1,336 @@
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [0, 0, 0, 0, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]]
+pc: 38, from: 8
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: false, f: false, t: false, mode: System }
+========= Opcode completed: Arm(Branch), EA00000C ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [DF, 0, 0, 0, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]]
+pc: 40, from: 40
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: false, f: false, t: false, mode: System }
+========= Opcode completed: Arm(DataProcessing), E3A000DF ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [DF, 0, 0, 0, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]]
+pc: 44, from: 44
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: System }
+========= Opcode completed: Arm(DataProcessing), E129F000 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [DF, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]]
+pc: 48, from: 48
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: System }
+========= Opcode completed: Arm(DataProcessing), E3A03301 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [DF, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]]
+pc: 4C, from: 4C
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: System }
+========= Opcode completed: Arm(SingleDataTransfer), E5C33208 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [DF, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 0, 0, 0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 1830, from: 50
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: System }
+========= Opcode completed: Arm(Branch), EB0005F8 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [D3, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 0, 0, 0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 1838, from: 1838
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: System }
+========= Opcode completed: Arm(DataProcessing), E3A000D3 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [D3, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 0, 0, 0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 183C, from: 183C
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: Supervisor }
+========= Opcode completed: Arm(DataProcessing), E129F000 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [D3, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 3007FE0, 0, 0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 1840, from: 1840
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: Supervisor }
+========= Opcode completed: Arm(SingleDataTransfer), E59FD044 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [D3, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 3007FE0, 0, 0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 1844, from: 1844
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: Supervisor }
+========= Opcode completed: Arm(DataProcessing), E3A0E000 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [D3, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 3007FE0, 0, 0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 1848, from: 1848
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: Supervisor }
+========= Opcode completed: Arm(DataProcessing), E169F00E ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [D2, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 3007FE0, 0, 0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 184C, from: 184C
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: Supervisor }
+========= Opcode completed: Arm(DataProcessing), E3A000D2 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [D2, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 3007FE0, 0, 0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 1850, from: 1850
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: Interrupt }
+========= Opcode completed: Arm(DataProcessing), E129F000 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [D2, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 3007FE0, 0, 3007FA0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 1854, from: 1854
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: Interrupt }
+========= Opcode completed: Arm(SingleDataTransfer), E59FD02C ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [D2, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 3007FE0, 0, 3007FA0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 1858, from: 1858
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: Interrupt }
+========= Opcode completed: Arm(DataProcessing), E3A0E000 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [D2, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 3007FE0, 0, 3007FA0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 185C, from: 185C
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: Interrupt }
+========= Opcode completed: Arm(DataProcessing), E169F00E ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [5F, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 3007FE0, 0, 3007FA0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 1860, from: 1860
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: Interrupt }
+========= Opcode completed: Arm(DataProcessing), E3A0005F ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [5F, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 3007FE0, 0, 3007FA0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 1864, from: 1864
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: false, f: true, t: false, mode: System }
+========= Opcode completed: Arm(DataProcessing), E129F000 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [5F, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[3007F00, 0, 3007FE0, 0, 3007FA0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 1868, from: 1868
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: false, f: true, t: false, mode: System }
+========= Opcode completed: Arm(SingleDataTransfer), E59FD014 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [0, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[3007F00, 0, 3007FE0, 0, 3007FA0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 186C, from: 186C
+cpsr: Cpsr { z: true, c: false, n: false, v: false, q: false, i: false, f: true, t: false, mode: System }
+========= Opcode completed: Arm(DataProcessing), E3B00000 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [0, FFFFFE00, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[3007F00, 0, 3007FE0, 0, 3007FA0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 1870, from: 1870
+cpsr: Cpsr { z: false, c: true, n: true, v: true, q: false, i: false, f: true, t: false, mode: System }
+========= Opcode completed: Arm(DataProcessing), E2501C02 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [0, 0, 0, 0, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]]
+pc: 38, from: 8
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: false, f: false, t: false, mode: System }
+========= Opcode completed: Arm(Branch), EA00000C ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [DF, 0, 0, 0, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]]
+pc: 40, from: 40
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: false, f: false, t: false, mode: System }
+========= Opcode completed: Arm(DataProcessing), E3A000DF ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [DF, 0, 0, 0, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]]
+pc: 44, from: 44
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: System }
+========= Opcode completed: Arm(DataProcessing), E129F000 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [DF, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]]
+pc: 48, from: 48
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: System }
+========= Opcode completed: Arm(DataProcessing), E3A03301 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [DF, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]]
+pc: 4C, from: 4C
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: System }
+========= Opcode completed: Arm(SingleDataTransfer), E5C33208 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [DF, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 0, 0, 0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 1830, from: 50
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: System }
+========= Opcode completed: Arm(Branch), EB0005F8 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [D3, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 0, 0, 0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 1838, from: 1838
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: System }
+========= Opcode completed: Arm(DataProcessing), E3A000D3 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [D3, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 0, 0, 0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 183C, from: 183C
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: Supervisor }
+========= Opcode completed: Arm(DataProcessing), E129F000 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [D3, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 3007FE0, 0, 0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 1840, from: 1840
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: Supervisor }
+========= Opcode completed: Arm(SingleDataTransfer), E59FD044 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [D3, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 3007FE0, 0, 0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 1844, from: 1844
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: Supervisor }
+========= Opcode completed: Arm(DataProcessing), E3A0E000 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [D3, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 3007FE0, 0, 0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 1848, from: 1848
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: Supervisor }
+========= Opcode completed: Arm(DataProcessing), E169F00E ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [D2, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 3007FE0, 0, 0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 184C, from: 184C
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: Supervisor }
+========= Opcode completed: Arm(DataProcessing), E3A000D2 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [D2, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 3007FE0, 0, 0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 1850, from: 1850
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: Interrupt }
+========= Opcode completed: Arm(DataProcessing), E129F000 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [D2, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 3007FE0, 0, 3007FA0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 1854, from: 1854
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: Interrupt }
+========= Opcode completed: Arm(SingleDataTransfer), E59FD02C ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [D2, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 3007FE0, 0, 3007FA0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 1858, from: 1858
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: Interrupt }
+========= Opcode completed: Arm(DataProcessing), E3A0E000 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [D2, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 3007FE0, 0, 3007FA0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 185C, from: 185C
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: Interrupt }
+========= Opcode completed: Arm(DataProcessing), E169F00E ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [5F, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 3007FE0, 0, 3007FA0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 1860, from: 1860
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: true, f: true, t: false, mode: Interrupt }
+========= Opcode completed: Arm(DataProcessing), E3A0005F ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [5F, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[0, 0, 3007FE0, 0, 3007FA0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 1864, from: 1864
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: false, f: true, t: false, mode: System }
+========= Opcode completed: Arm(DataProcessing), E129F000 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [5F, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[3007F00, 0, 3007FE0, 0, 3007FA0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 1868, from: 1868
+cpsr: Cpsr { z: false, c: false, n: false, v: false, q: false, i: false, f: true, t: false, mode: System }
+========= Opcode completed: Arm(SingleDataTransfer), E59FD014 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [0, 0, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[3007F00, 0, 3007FE0, 0, 3007FA0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 186C, from: 186C
+cpsr: Cpsr { z: true, c: false, n: false, v: false, q: false, i: false, f: true, t: false, mode: System }
+========= Opcode completed: Arm(DataProcessing), E3B00000 ============
+
+============= DEBUG SCREEN =============
+r0, r1, r2, r3, r4, r5, r6, r7: [0, FFFFFE00, 0, 4000000, 0, 0, 0, 0]
+r8, r9, r10, r11, r12: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+r13, r14: [[3007F00, 0, 3007FE0, 0, 3007FA0, 0], [50, 0, 0, 0, 0, 0]]
+pc: 1870, from: 1870
+cpsr: Cpsr { z: false, c: true, n: true, v: true, q: false, i: false, f: true, t: false, mode: System }
+========= Opcode completed: Arm(DataProcessing), E2501C02 ============
+

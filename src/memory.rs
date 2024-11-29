@@ -1,4 +1,4 @@
-const BIOS: &[u8; 0x4000] = include_bytes!("../gba_bios.bin");
+const BIOS: &[u8; 0x4000] = include_bytes!("../bios/bios.bin");
 
 /// output =>
 /// 0bBBBBBBBBAAAAAAAA
@@ -35,16 +35,22 @@ fn split_memory_address(address: u32) -> (u32, usize) {
 }
 
 
+const EWRAM_LENGTH: usize = 0x40000;
+const IWRAM_LENGTH: usize = 0x8000;
+const VRAM_LENGTH: usize = 0x18000;
+const IO_REG_LENGTH: usize = 0x400;
+const OBJ_PALL_LENGTH: usize = 0x400;
+const OAM_LENGTH: usize = 0x400;
 /// I guess that it is possible to store all of the stores as 
 /// their respective bus lengths, but it may mess with the little-endianness of the
 /// machine. May perform tests if it works
 pub struct Memory {
-    ewram: [u8; 0x40000], // WRAM - On-board Work RAM
-    iwram: [u8; 0x8000],  // WRAM - On-chip Work RAM
-    vram: [u8; 0x18000], // 96 KB - 16 bit bus
-    io_reg: [u8; 0x400],
-    obj_pall: [u8; 0x400],
-    oam: [u8; 0x400],
+    ewram: [u8; EWRAM_LENGTH], // WRAM - On-board Work RAM
+    iwram: [u8; IWRAM_LENGTH],  // WRAM - On-chip Work RAM
+    vram: [u8; VRAM_LENGTH], // 96 KB - 16 bit bus
+    io_reg: [u8; IO_REG_LENGTH],
+    obj_pall: [u8; OBJ_PALL_LENGTH],
+    oam: [u8; OAM_LENGTH],
     gp_rom: Vec<u8>,
 
     timer_resets: [u16; 4],
@@ -52,6 +58,10 @@ pub struct Memory {
 impl Memory {
     pub fn read_u8(&self, address: u32) -> u8 {
         let (upp_add, low_add) = split_memory_address(address);
+
+        if !check_valid_address(upp_add, low_add) {
+            panic!("out of bounds memory read {address:X}");
+        }
 
         match upp_add {
             0x0 => BIOS[low_add],
@@ -67,14 +77,14 @@ impl Memory {
 
     pub fn read_u16(&self, address: u32) -> u16 {
         lil_end_combine_u16(
-            self.read_u8(address), 
-            self.read_u8(address+1)
+            self.read_u8(address + 0), 
+            self.read_u8(address + 1)
         )
     }
 
     pub fn read_u32(&self, address: u32) -> u32 {
         lil_end_combine_u32(
-            self.read_u8(address), 
+            self.read_u8(address + 0), 
             self.read_u8(address + 1), 
             self.read_u8(address + 2), 
             self.read_u8(address + 3),
@@ -98,7 +108,10 @@ impl Memory {
         }
         
         let (upp_add, low_add) = split_memory_address(address);
-
+        
+        if !check_valid_address(upp_add, low_add) {
+            return;
+        }
         match upp_add {
             0x0 => panic!("cannot make a write to the BIOS"),
             0x2 => self.ewram[low_add] = data,
@@ -120,7 +133,7 @@ impl Memory {
 
     pub fn write_u32(&mut self, address: u32, data: u32) {
         let split = little_split_u32(data);
-        let address = address & 0xFFFFFFFC;
+        let address = address & !(0b11);
 
         self.write_u8(address + 0, split.0);
         self.write_u8(address + 1, split.1);
@@ -136,7 +149,18 @@ impl Memory {
         self.io_reg[address + 1] = split.1;
     }
 }
-
+fn check_valid_address(upper: u32, lower: usize) -> bool {
+    match upper {
+        0x0 => lower < BIOS.len(),
+        0x2 => lower < EWRAM_LENGTH,
+        0x3 => lower < IWRAM_LENGTH,
+        0x4 => lower < IO_REG_LENGTH,
+        0x5 => lower < OBJ_PALL_LENGTH,
+        0x6 => lower < VRAM_LENGTH,
+        0x7 => lower < OAM_LENGTH,
+        _ => unreachable!(),
+    }
+}
 
 const BASE_TIMER_ADDRESS: u32 = 0x4000100;
 pub fn update_timer(memory: &mut Memory, old_cycles: &mut u32, new_cycles: u32) {
