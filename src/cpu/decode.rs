@@ -112,6 +112,10 @@ pub enum DecodedArm {
 pub fn decode_arm(conditioned_opcode: u32) -> DecodedArm {
     let opcode = conditioned_opcode & REMOVE_CONDITION_MASK;
 
+    // this is just a preliminary check
+    if (opcode >> 25) == 0b001 {
+        return DecodedArm::DataProcessing;
+    }
     // these two just work differently
     if opcode & BRANCH_EXCHANGE_MASK == BRANCH_EXCHANGE_VALUE {
         return DecodedArm::BranchExchange

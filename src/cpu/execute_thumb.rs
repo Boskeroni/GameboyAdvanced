@@ -539,7 +539,7 @@ fn unconditional_branch(opcode: u16, cpu_regs: &mut Cpu, status: &Status) {
 
 fn conditional_branch(opcode: u16, cpu_regs: &mut Cpu, status: &Status) {
     let condition = (opcode >> 8) & 0xF;
-    if !check_condition(condition as u8, &status.cpsr) {
+    if !check_condition(condition as u32, &status.cpsr) {
         return;
     }
 

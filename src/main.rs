@@ -2,6 +2,7 @@ mod cpu;
 mod memory;
 mod ppu;
 
+use std::fs::File;
 use std::io::{stdout, Write};
 
 use cpu::handle_interrupts;
@@ -44,6 +45,7 @@ fn main() {
     // since all the steps of the FDE cycle take place in one turn, 
     // it technically doesnt matter the order and so I will do EDF for convenience
     use DecodedInstruction::*;
+    let mut f = File::create("debug/debug.txt").expect("the file couldnt be opened");
     let mut total_cycles = 0;
     loop {
         // update the timer
@@ -56,14 +58,15 @@ fn main() {
         // Execute
         if let Some(instruction) = decoded {
             let old_pc = cpu_regs.get_register(15, status.cpsr.mode);
+            let old_regs = cpu_regs.clone();
 
             match instruction {
                 Thumb(instr) => execute_thumb(decoded_opcode as u16, instr, &mut cpu_regs, &mut status, &mut memory),
                 Arm(instr) => execute_arm(decoded_opcode, instr, &mut cpu_regs, &mut status, &mut memory),
             };
 
-            debug_screen(&cpu_regs, instruction, decoded_opcode, &status, old_pc);
-            
+            debug_screen(&cpu_regs, instruction, decoded_opcode, &status, &old_regs, &mut f);
+
             let new_pc = cpu_regs.get_register(15, status.cpsr.mode);
             if old_pc != new_pc {
                 fetched = None;
@@ -103,14 +106,20 @@ fn convert_u16_color(screen: Vec<u16>) -> Vec<u32> {
     }).collect()
 }
 
-fn debug_screen(cpu: &Cpu, instr: DecodedInstruction, opcode: u32, status: &Status, old_pc: u32) {
-    println!("============= DEBUG SCREEN =============");
-    println!("r0, r1, r2, r3, r4, r5, r6, r7: {:X?}", cpu.unbanked_registers);
-    println!("r8, r9, r10, r11, r12: {:X?}", cpu.double_banked_registers);
-    println!("r13, r14: {:X?}", cpu.many_banked_registers);
-    println!("pc: {:X}, from: {:X}", cpu.pc, old_pc);
-    println!("cpsr: {:?}", status.cpsr);
-    println!("========= Opcode completed: {instr:?}, {opcode:X} ============");
+fn debug_screen(cpu: &Cpu, instr: DecodedInstruction, opcode: u32, status: &Status, old_regs: &Cpu, f: &mut File) {
+    writeln!(f, "======== DEBUG ========").unwrap();
+    for i in 0..=14 {
+        let old_value = old_regs.get_register(i, status.cpsr.mode);
+        let new_value = cpu.get_register(i, status.cpsr.mode);
+
+        if old_value == new_value { continue; }
+        write!(f, "r{i} ==> {old_value:X} = {new_value:X}... ").unwrap();
+    }
+    writeln!(f, "").unwrap();
+    writeln!(f, "pc: {:X}, from: {:X}", cpu.pc, old_regs.pc).unwrap();
+    writeln!(f, "status: {:?}", status.cpsr).unwrap();
+    writeln!(f, "======= {instr:?} {opcode:X} ========= ").unwrap();
+    writeln!(f, "").unwrap();
     
     stdout().flush().unwrap();
     //let mut temp = String::new();

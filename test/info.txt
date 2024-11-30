@@ -1,1 +1,0 @@
-"armwrestler.gba" = https://github.com/destoer/armwrestler-gba-fixed/blob/master/armwrestler-gba-fixed.gba

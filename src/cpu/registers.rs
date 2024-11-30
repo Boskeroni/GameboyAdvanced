@@ -178,7 +178,7 @@ pub mod status_registers {
         pub t: bool, // the state of the instruction set (0 = arm, 1 = thumb)
         pub mode: ProcessorMode, // processor mode (represented by the 5-bits shown in enum)
     }
-    pub fn check_condition(condition: u8, cpsr: &Cpsr) -> bool {
+    pub fn check_condition(condition: u32, cpsr: &Cpsr) -> bool {
         match condition {
             0b0000 => cpsr.z,
             0b0001 => !cpsr.z,

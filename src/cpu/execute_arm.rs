@@ -13,10 +13,9 @@ pub fn execute_arm(
 ) {
     // first check if we even have to do it
     let condition = opcode >> 28;
-    if !check_condition(condition as u8, &status.cpsr) {
+    if !check_condition(condition, &status.cpsr) {
         return;
     }
-
     use DecodedArm::*;
     match decoded_arm {
         DataProcessing => data_processing(opcode, cpu_regs, status),
@@ -30,26 +29,27 @@ pub fn execute_arm(
         Undefined => {},
         BlockDataTransfer => block_transfer(opcode, cpu_regs, status, memory),
         Branch => branch_link(opcode, cpu_regs, status),
-        CoprocDataOperation => eprintln!("Coprocessor Data Operations arent handled for GBA"),
-        CoprocDataTransfer => eprintln!("Coprocessor Data Transfers arent handled for GBA"),
-        CoprocRegTransfer => eprintln!("Coprocessor Register Transfers arent handled for GBA"),
+        CoprocDataOperation => panic!("Coprocessor Data Operations arent handled for GBA"),
+        CoprocDataTransfer => panic!("Coprocessor Data Transfers arent handled for GBA"),
+        CoprocRegTransfer => panic!("Coprocessor Register Transfers arent handled for GBA"),
         Swi => software_interrupt(cpu_regs, status),
     }
 }
 
 fn branch_link(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
     // the bottom 24-bits
-    let mut offset = (opcode & 0xFFFFFF) as u32;
+    let mut offset = (opcode & 0x00FFFFFF) as u32;
     offset <<= 2;
     if (opcode >> 23) & 1 == 1 {
-        offset |= 0b1111_1100_0000_0000_0000_0000_0000_0000;
+        offset |= 0xFC000000;
     }
 
     // link
     if (opcode >> 24) & 1 == 1 {
         let prev_pc = cpu_regs.get_register(15, status.cpsr.mode);
         let link = cpu_regs.get_register_mut(14, status.cpsr.mode);
-        *link = prev_pc;
+        // it is 2 instructions ahead, we only want it 1
+        *link = (prev_pc & !(0b11)) - 4;
     }
 
     let pc = cpu_regs.get_register_mut(15, status.cpsr.mode);
@@ -162,7 +162,7 @@ fn data_processing(conditioned_opcode: u32, cpu_regs: &mut Cpu, status: &mut Sta
     }
 
     // both operations respect the S bit and R15 rule
-    if !change_cpsr || op1_reg == 15 {
+    if !change_cpsr {
         return;
     }
     status.cpsr.z = *dst == 0;
