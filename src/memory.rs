@@ -59,7 +59,7 @@ impl Memory {
     pub fn read_u8(&self, address: u32) -> u8 {
         let (upp_add, low_add) = split_memory_address(address);
 
-        if !check_valid_address(upp_add, low_add) {
+        if !self.check_valid_address(upp_add, low_add) {
             panic!("out of bounds memory read {address:X}");
         }
 
@@ -109,7 +109,7 @@ impl Memory {
         
         let (upp_add, low_add) = split_memory_address(address);
         
-        if !check_valid_address(upp_add, low_add) {
+        if !self.check_valid_address(upp_add, low_add) {
             return;
         }
         match upp_add {
@@ -148,19 +148,21 @@ impl Memory {
         self.io_reg[address] = split.0;
         self.io_reg[address + 1] = split.1;
     }
-}
-fn check_valid_address(upper: u32, lower: usize) -> bool {
-    match upper {
-        0x0 => lower < BIOS.len(),
-        0x2 => lower < EWRAM_LENGTH,
-        0x3 => lower < IWRAM_LENGTH,
-        0x4 => lower < IO_REG_LENGTH,
-        0x5 => lower < OBJ_PALL_LENGTH,
-        0x6 => lower < VRAM_LENGTH,
-        0x7 => lower < OAM_LENGTH,
-        _ => unreachable!(),
+    fn check_valid_address(&self, upper: u32, lower: usize) -> bool {
+        match upper {
+            0x0 => lower < BIOS.len(),
+            0x2 => lower < EWRAM_LENGTH,
+            0x3 => lower < IWRAM_LENGTH,
+            0x4 => lower < IO_REG_LENGTH,
+            0x5 => lower < OBJ_PALL_LENGTH,
+            0x6 => lower < VRAM_LENGTH,
+            0x7 => lower < OAM_LENGTH,
+            0x8 => lower < self.gp_rom.len(),
+            _ => unreachable!(),
+        }
     }
 }
+
 
 const BASE_TIMER_ADDRESS: u32 = 0x4000100;
 pub fn update_timer(memory: &mut Memory, old_cycles: &mut u32, new_cycles: u32) {

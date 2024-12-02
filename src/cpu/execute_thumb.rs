@@ -440,7 +440,7 @@ fn load_address(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status, memory: &m
 
     let address = src + imm as u32;
     let rd = cpu_regs.get_register_mut(rd_index, status.cpsr.mode);
-    *rd = memory.read_u32(address);
+    *rd = address;
 }
 
 fn offset_sp(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status) {
