@@ -106,25 +106,47 @@ fn convert_u16_color(screen: Vec<u16>) -> Vec<u32> {
     }).collect()
 }
 
+
 fn debug_screen(cpu: &Cpu, instr: DecodedInstruction, opcode: u32, status: &Status, old_regs: &Cpu, f: &mut File) {
     writeln!(f, "======== DEBUG ========").unwrap();
+    let mut temp = Vec::new();
     for i in 0..=14 {
         let old_value = old_regs.get_register(i, status.cpsr.mode);
         let new_value = cpu.get_register(i, status.cpsr.mode);
+        temp.push(new_value);
 
         if old_value == new_value { continue; }
         write!(f, "r{i} ==> {old_value:X} = {new_value:X}... ").unwrap();
     }
+
     writeln!(f, "").unwrap();
+    writeln!(f, "{temp:X?}").unwrap();
     writeln!(f, "pc: {:X}, from: {:X}", cpu.pc, old_regs.pc).unwrap();
     writeln!(f, "status: {:?}", status.cpsr).unwrap();
     writeln!(f, "======= {instr:?} {opcode:X} ========= ").unwrap();
     writeln!(f, "").unwrap();
     
-    stdout().flush().unwrap();
-    //let mut temp = String::new();
+    // println!("======== DEBUG ========");
+    // let mut temp = Vec::new();
+    // for i in 0..=14 {
+    //     let old_value = old_regs.get_register(i, status.cpsr.mode);
+    //     let new_value = cpu.get_register(i, status.cpsr.mode);
+    //     temp.push(new_value);
 
-    //use std::io::stdin;
-    //stdin().read_line(&mut temp).unwrap();
-    println!("");
+    //     if old_value == new_value { continue; }
+    //     print!("r{i} ==> {old_value:X} = {new_value:X}... ");
+    // }
+
+    // println!("");
+    // println!("{temp:X?}");
+    // println!("pc: {:X}, from: {:X}", cpu.pc, old_regs.pc);
+    // println!("status: {:?}", status.cpsr);
+    // println!("======= {instr:?} {opcode:X} ========= ");
+    // println!("");
+
+    // stdout().flush().unwrap();
+    // let mut temp = String::new();
+
+    // use std::io::stdin;
+    // stdin().read_line(&mut temp).unwrap();
 }

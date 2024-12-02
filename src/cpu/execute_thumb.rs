@@ -31,7 +31,7 @@ pub fn execute_thumb(
         SpRelativeLoad => sp_relative_load(opcode, cpu_regs, status, memory),
         LoadAddress => load_address(opcode, cpu_regs, status, memory),
         AddOffsetSp => offset_sp(opcode, cpu_regs, status),
-        PushPop => todo!(),
+        PushPop => push_pop(opcode, cpu_regs, status, memory),
         MultipleLoadStore => multiple_load(opcode, cpu_regs, status, memory),
         ConditionalBranch => conditional_branch(opcode, cpu_regs, status),
         Swi => todo!(),
@@ -149,18 +149,18 @@ fn alu_ops(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status) {
 
     let mut undo = false;
     match op {
-        0b0000 => (result, carry) = (rd & rs, false),
-        0b0001 => (result, carry) = (rd ^ rs, false),
+        0b0000 => (result, carry) = (rd & rs, false), // yep
+        0b0001 => (result, carry) = (rd ^ rs, false), // yep
         0b0010 => {
-            result = rd << rs;
-            carry = (rd >> (32 - rs)) & 1 == 1;
+            result = rd << rs; // yep
+            carry = (rd >> (32 - rs)) & 1 == 1; // yep
         }
         0b0011 => {
-            result = rd >> rs;
-            carry = (rd >> (rs - 1)) & 1 == 1;
+            result = rd >> rs; // yep
+            carry = (rd >> (rs - 1)) & 1 == 1; // yep
         }
         0b0100 => {
-            let mut temp = rd >> rs;
+            let mut temp = rd >> rs; // yep
             if (rd >> 31) & 1 == 1 {
                 temp |= !(std::u32::MAX >> rs);
             }
@@ -168,19 +168,19 @@ fn alu_ops(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status) {
             carry = (rd >> (rs - 1)) & 1 == 1;
         }
         0b0101 => {
-            let temp = rd.overflowing_add(rs);
+            let temp = rd.overflowing_add(rs); // yeo
             let temp_2 = temp.0.overflowing_add(status.cpsr.c as u32);
             result = temp_2.0;
             carry = temp.1 | temp_2.1;
         }
         0b0110 => {
-            let temp = rd.overflowing_sub(rs);
+            let temp = rd.overflowing_sub(rs); // yep
             let temp_2 = temp.0.overflowing_sub(!status.cpsr.c as u32);
             result = temp_2.0;
             carry = temp.1 | temp_2.1;
         }
         0b0111 => {
-            result = rd.rotate_right(rs);
+            result = rd.rotate_right(rs); // yep
             carry = (result >> 31) & 1 == 1;
         }
         0b1000 => {
@@ -188,7 +188,7 @@ fn alu_ops(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status) {
             result = rd & rs;
             carry = false;
         }
-        0b1001 => (result, carry) = (!rd + 1, false),
+        0b1001 => (result, carry) = (!rs + 1, false),
         0b1010 => {(result, carry) = rd.overflowing_sub(rs); undo = true},
         0b1011 => {(result, carry) = rd.overflowing_add(rs); undo = true},
         0b1100 => (result, carry) = (rd | rs, false),
@@ -246,7 +246,7 @@ fn hi_operations(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status) {
             assert!(!h1, "H1=1 for this instruction is undefined");
 
             let pc = cpu_regs.get_register_mut(15, status.cpsr.mode);
-            *pc = rs;
+            *pc = rs & !(0b1);
             status.cpsr.t = rs & 1 == 1;
             return;
         }
@@ -287,7 +287,7 @@ fn load_register_offset(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status, me
     let rb = cpu_regs.get_register(rb_index, status.cpsr.mode);
 
     let address = ro.wrapping_add(rb);
-    println!("{address:X}");
+
     let l_bit = (opcode >> 11) & 1 == 1;
     let b_bit = (opcode >> 10) & 1 == 1;
 
@@ -355,17 +355,16 @@ fn load_sign_extended(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status, memo
 fn load_imm_offset(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status, memory: &mut Memory) {
     let rd_index = opcode as u8 & 0b111;
     let rb_index = (opcode >> 3) as u8 & 0b111;
-    let offset = (opcode >> 6) & 0b11111;
+    let offset = (opcode >> 6) & 0b1_1111;
 
     let rb = cpu_regs.get_register(rb_index, status.cpsr.mode);
-
     let l_bit = (opcode >> 11) & 1 == 1;
-    let b_bit = (opcode >> 10) & 1 == 1;
+    let b_bit = (opcode >> 12) & 1 == 1;
 
     let address;
     match b_bit {
         true => address = rb + offset as u32,
-        false => address = rb + (offset as u32) << 2,
+        false => address = rb + ((offset as u32) << 2),
     }
 
     match l_bit {
@@ -445,7 +444,7 @@ fn load_address(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status, memory: &m
 }
 
 fn offset_sp(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status) {
-    let offset = opcode & 0b111_1111;
+    let offset = (opcode & 0b111_1111) << 2;
     let s_bit = (opcode >> 7) & 1 == 1;
 
     let sp = cpu_regs.get_register_mut(13, status.cpsr.mode);
@@ -457,28 +456,49 @@ fn offset_sp(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status) {
 
 fn push_pop(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status, memory: &mut Memory) {
     let mut rlist = opcode & 0x7F;
-    
-    let r_bit = (opcode >> 8) & 1 == 1;
     let l_bit = (opcode >> 11) & 1 == 1;
+    let r_bit = (opcode >> 8) & 1 == 1;
 
-    let mut used_address = cpu_regs.get_register(13, status.cpsr.mode);
-    
+    let sp = cpu_regs.get_register(13, ProcessorMode::User);
     match l_bit {
-        true => { // POP
-            if r_bit {
-                let pc = cpu_regs.get_register_mut(15, status.cpsr.mode);
-                *pc = memory.read_u32(used_address);
-                used_address += 4;
-            }
+        true => {
+            let mut base_address = sp;
             while rlist != 0 {
-                let next = 7 - rlist.leading_zeros();
-                
+                let next_r = rlist.trailing_zeros();
+                let reg = cpu_regs.get_register_mut(next_r as u8, status.cpsr.mode);
+                let change = memory.read_u32(base_address);
+                *reg = change;
+                base_address += 4;
+                rlist &= !(1<<next_r);
             }
+            if r_bit {
+                let reg = cpu_regs.get_register_mut(14, status.cpsr.mode);
+                let change = memory.read_u32(base_address);
+                *reg = change;
+                base_address += 4;
+            }
+            let sp_mut = cpu_regs.get_register_mut(13, status.cpsr.mode);
+            *sp_mut = base_address;
         }
-        false => { // PUSH
-
+        false => {
+            let mut base_address = sp - (rlist.count_ones() + r_bit as u32) * 4;
+            let base_address_copy = base_address;
+            while rlist != 0 {
+                let next_r = rlist.trailing_zeros();
+                let reg = cpu_regs.get_register(next_r as u8, status.cpsr.mode);
+                memory.write_u32(base_address, reg);
+                base_address += 4;
+                rlist &= !(1<<next_r);
+            }
+            if r_bit {
+                let reg = cpu_regs.get_register(14, status.cpsr.mode);
+                memory.write_u32(base_address, reg);
+            }
+            let sp = cpu_regs.get_register_mut(13, status.cpsr.mode);
+            *sp = base_address_copy;
         }
     }
+
 }
 
 fn multiple_load(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status, memory: &mut Memory) {
@@ -488,20 +508,18 @@ fn multiple_load(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status, memory: &
     let rb_index = (opcode >> 8) as u8 & 0b111;
     let mut address = cpu_regs.get_register(rb_index, status.cpsr.mode);
 
-    let load_bit = (opcode >> 11) & 1 == 1;    
+    let load_bit = (opcode >> 11) & 1 == 1;
     match load_bit { 
         true => { // load from memory
             // LDMIA
             // P bit off, U bit on
             while reg_list != 0 {
-                let next = 7 - reg_list.leading_zeros();
-
+                let next = reg_list.trailing_zeros();
                 let rnext = cpu_regs.get_register_mut(next as u8, status.cpsr.mode);
                 let new_data = memory.read_u32(address);
                 *rnext = new_data;
 
                 address += 4;
-
                 // clearing the bit representing the newly completed write
                 reg_list &= !(1 << next);
             }
@@ -510,15 +528,10 @@ fn multiple_load(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status, memory: &
             // STMIA
             // P bit off, U bit on
             while reg_list != 0 {
-                let next = reg_list.trailing_zeros();
-
-                let mut rnext = cpu_regs.get_register(next as u8, status.cpsr.mode);
-                if next == 15 {
-                    rnext += 4;
-                }
-                memory.write_u32(address, rnext);
                 address += 4;
-                        
+                let next = reg_list.trailing_zeros();
+                let rnext = cpu_regs.get_register(next as u8, status.cpsr.mode);
+                memory.write_u32(address, rnext);
                 reg_list &= !(1 << next);
             }   
         }
@@ -560,6 +573,9 @@ fn long_branch_link(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status) {
     let pc = cpu_regs.get_register(15, status.cpsr.mode);
     match h_bit {
         false => {
+            if (offset >> 10) & 1 == 1 {
+                offset |= 0xFFFFF800;
+            }
             offset <<= 12;
             let lr = cpu_regs.get_register_mut(14, status.cpsr.mode);
             *lr = pc.wrapping_add(offset);
@@ -569,8 +585,8 @@ fn long_branch_link(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status) {
             let lr = cpu_regs.get_register(14, status.cpsr.mode);
             let pc = cpu_regs.get_register_mut(15, status.cpsr.mode);
 
-            let temp = *pc;
-            *pc = lr + offset;
+            let temp = *pc - 2;
+            *pc = lr.wrapping_add(offset);
             let lr = cpu_regs.get_register_mut(14, status.cpsr.mode);
             *lr = temp | 1;
         },
