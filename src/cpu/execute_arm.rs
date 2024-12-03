@@ -69,6 +69,8 @@ fn branch_exchange(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
 }
 
 fn data_processing(conditioned_opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
+    println!("{conditioned_opcode:X}");
+
     let opcode = conditioned_opcode & 0x0FFFFFFF;
     let change_cpsr = (opcode >> 20) & 1 == 1;
     let operation = (opcode >> 21) & 0b1111;
@@ -480,61 +482,75 @@ fn halfword_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &Status, memory: &
 }
 
 fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status, memory: &mut Memory) {
-    let mut reg_list = opcode as u16;
-    assert!(reg_list != 0, "register list cannot be empty");
-
-    let rn_index = (opcode >> 16) & 0xF;
-    assert!(rn_index != 15, "pc cannot be used as base");
-
-    let rn = cpu_regs.get_register(rn_index as u8, status.cpsr.mode);
+    println!("thing = {opcode:X}");
+    
+    let mut rlist = opcode & 0xFFFF;
+    let rn_index = (opcode >> 16) & 0b1111;
+    assert!(rn_index != 15, "r15 cannot be used as the base register");
 
     let l_bit = (opcode >> 20) & 1 == 1;
-    let p_bit = (opcode >> 24) & 1 == 1;
+    let w_bit = (opcode >> 21) & 1 == 1;
     let s_bit = (opcode >> 22) & 1 == 1;
+    let u_bit = (opcode >> 23) & 1 == 1;
+    let p_bit = (opcode >> 24) & 1 == 1;
 
-    let mut used_mode = status.cpsr.mode;
-    if s_bit && ((reg_list >> 15) & 1 == 0 || (!l_bit)) {
-        used_mode = ProcessorMode::User;    
+    let rn = cpu_regs.get_register(rn_index as u8, status.cpsr.mode);
+    let mut base_address;
+    let is_r15_there = (rlist >> 15) & 1 == 1;
+
+    println!("{rn:X}");
+
+    let used_mode;
+    match s_bit {
+        true => used_mode = ProcessorMode::User,
+        false => used_mode = status.cpsr.mode,
     }
 
-    let u_bit = (opcode >> 23) & 1 == 1;
-    let mut base_address;
     match u_bit {
         true => base_address = rn,
-        false => base_address = rn - ((reg_list.count_ones() - (!p_bit) as u32) * 4),
+        false => base_address = rn - (rlist.count_ones() * 4),
     }
-
-    let reg_list_copy = reg_list;
-    while reg_list != 0 {
-        let next_r = reg_list.trailing_zeros();
-        base_address += 4 * p_bit as u32;
-
-        match l_bit {
-            true => {
-                let new_reg = memory.read_u32(base_address);
-                let reg = cpu_regs.get_register_mut(next_r as u8, used_mode);
-                *reg = new_reg;
+    match l_bit {
+        true => {
+            while rlist != 0 {
+                if p_bit == u_bit  {
+                    base_address += 4;
+                }
+    
+                let next_r = rlist.trailing_zeros();
+                let rb = cpu_regs.get_register_mut(next_r as u8, used_mode);
+                *rb = memory.read_u32(base_address);
+    
+                if p_bit != u_bit {
+                    base_address += 4;
+                }
+                rlist &= !(1<<next_r);
             }
-            false => {
-                let reg = cpu_regs.get_register(next_r as u8, used_mode);
-                memory.write_u32(base_address, reg);
+            if s_bit && is_r15_there {
+                status.set_cpsr_to_spsr();
             }
         }
-        base_address += 4 * !p_bit as u32;
-        reg_list &= !(1<<next_r);
+        false => {
+            while rlist != 0 {
+                if p_bit == u_bit  {
+                    base_address += 4;
+                }
+    
+                let next_r = rlist.trailing_zeros();
+                let rb = cpu_regs.get_register(next_r as u8, used_mode);
+                memory.write_u32(base_address, rb);
+    
+                if p_bit != u_bit {
+                    base_address += 4;
+                }
+                rlist &= !(1<<next_r);
+            }
+        }
     }
-
-    if s_bit {
-        status.set_cpsr_to_spsr();
-    }
-
-    let w_bit = (opcode >> 21) & 1 == 1;
+    
     if w_bit {
-        // we can just calculate the final address again
-        let final_address = rn as i32 + (reg_list_copy.count_ones() as i32 + p_bit as i32) * 4 * (-1 * u_bit as i32);
-
-        let change_rn = cpu_regs.get_register_mut(rn_index as u8, status.cpsr.mode);
-        *change_rn = final_address as u32;
+        let rn_mut = cpu_regs.get_register_mut(rn_index as u8, status.cpsr.mode);
+        *rn_mut = base_address;
     }
 }
 

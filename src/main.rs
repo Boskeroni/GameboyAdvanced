@@ -3,7 +3,7 @@ mod memory;
 mod ppu;
 
 use std::fs::File;
-use std::io::{stdout, Write};
+use std::io::Write;
 
 use cpu::handle_interrupts;
 use cpu::registers::{Cpu, status_registers::Status};
@@ -28,13 +28,13 @@ fn main() {
     ).unwrap();
 
     let mut cpu_regs = Cpu {
-        pc: 0x0000000,
+        pc: 0x000000,
         unbanked_registers: [0, 0, 0, 0, 0, 0, 0 ,0],
         double_banked_registers: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
         many_banked_registers: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]],
     };
     let mut status = Status::new();
-    let mut memory = memory::create_memory("test/arm.gba");
+    let mut memory = memory::create_memory("test/armwrestler.gba");
 
     let mut fetched: Option<u32> = None;
 

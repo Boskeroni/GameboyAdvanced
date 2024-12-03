@@ -16,16 +16,19 @@ pub fn get_shifted_value(cpu_regs: &Cpu, opcode: u32, status: &Status) -> (u32, 
     let rm_index = opcode & 0xF;
     let rm = cpu_regs.get_register(rm_index as u8, status.cpsr.mode);
 
-    let mut shift_amount = match (opcode >> 4) & 1 != 0 {
-        false => (opcode >> 7) & 0x1F, // the simple case :)
+
+    let shift_format_bit = (opcode >> 4) & 1 == 1;
+    let mut shift_amount;
+    match shift_format_bit {
+        false => shift_amount = (opcode >> 7) & 0x1F, // the simple case :)
         true => {
             let rs = (opcode >> 8) as u8 & 0xF;
             assert!(rs != 15, "Rs cannot equal 15 in this case");
-            cpu_regs.get_register(rs, status.cpsr.mode) & 0xFF
-        },
-    };
-    let shift_type = (opcode >> 5) & 0b11;
+            shift_amount = cpu_regs.get_register(rs, status.cpsr.mode) & 0xFF
+        }
+    }
 
+    let shift_type = (opcode >> 5) & 0b11;
     match shift_type {
         0b00 => {
             // the carry bit stays the same if the shift instruction is LSL #0
@@ -52,11 +55,11 @@ pub fn get_shifted_value(cpu_regs: &Cpu, opcode: u32, status: &Status) -> (u32, 
         } // logical right shift
         0b10 => {
             let padding = (rm & 0x80000000) as i32;
-            if shift_amount > 32 {
-                return ((padding >> 31) as u32, padding != 0)
-            }
             if shift_amount == 0 {
                 shift_amount = 32;
+            }
+            if shift_amount >= 32 {
+                return ((padding >> 31) as u32, padding != 0)
             }
             return ((rm >> shift_amount) | (padding >> shift_amount) as u32, rm >> (shift_amount - 1) & 1 != 0)
         } // Arithmetic shift left

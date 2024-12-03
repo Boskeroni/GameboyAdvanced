@@ -29,7 +29,7 @@ pub fn execute_thumb(
         LoadImmOffset => load_imm_offset(opcode, cpu_regs, status, memory),
         LoadHalfword => load_halfword(opcode, cpu_regs, status, memory),
         SpRelativeLoad => sp_relative_load(opcode, cpu_regs, status, memory),
-        LoadAddress => load_address(opcode, cpu_regs, status, memory),
+        LoadAddress => load_address(opcode, cpu_regs, status),
         AddOffsetSp => offset_sp(opcode, cpu_regs, status),
         PushPop => push_pop(opcode, cpu_regs, status, memory),
         MultipleLoadStore => multiple_load(opcode, cpu_regs, status, memory),
@@ -131,6 +131,10 @@ fn alu_imm(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status) {
     status.cpsr.n = (result >> 31) & 1 == 1;
     status.cpsr.z = result == 0;
 
+    // CMP doesnt change the value
+    if op == 1 {
+        return;
+    }
     let rd = cpu_regs.get_register_mut(rd_index, status.cpsr.mode);
     *rd = result;
 }
@@ -427,7 +431,7 @@ fn sp_relative_load(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status, memory
     }
 }
 
-fn load_address(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status, memory: &mut Memory) {
+fn load_address(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status) {
     let imm = (opcode & 0xFF) << 2;
     let rd_index = (opcode >> 8) as u8 & 0b111;
 
@@ -472,9 +476,9 @@ fn push_pop(opcode: u16, cpu_regs: &mut Cpu, status: &mut Status, memory: &mut M
                 rlist &= !(1<<next_r);
             }
             if r_bit {
-                let reg = cpu_regs.get_register_mut(14, status.cpsr.mode);
+                let reg = cpu_regs.get_register_mut(15, status.cpsr.mode);
                 let change = memory.read_u32(base_address);
-                *reg = change;
+                *reg = change & !(1);
                 base_address += 4;
             }
             let sp_mut = cpu_regs.get_register_mut(13, status.cpsr.mode);
