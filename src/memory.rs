@@ -141,7 +141,8 @@ impl Memory {
         self.write_u8(address + 3, split.3);
     }
 
-    fn write_io(&mut self, address: u32, data: u16) {
+    /// this should only be used by the 
+    pub fn write_io(&mut self, address: u32, data: u16) {
         let address = address as usize - 0x4000000;
         let split = lil_end_split_u16(data);
 

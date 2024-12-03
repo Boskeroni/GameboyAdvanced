@@ -69,8 +69,6 @@ fn branch_exchange(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
 }
 
 fn data_processing(conditioned_opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
-    println!("{conditioned_opcode:X}");
-
     let opcode = conditioned_opcode & 0x0FFFFFFF;
     let change_cpsr = (opcode >> 20) & 1 == 1;
     let operation = (opcode >> 21) & 0b1111;
@@ -426,9 +424,7 @@ fn halfword_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &Status, memory: &
     let sh = (opcode >> 5) as u8 & 0b11;
     let load_bit = (opcode >> 20) & 1 == 1;
     match sh {
-        0b00 => {
-            unreachable!("i'm just going to say this is impossible, my decoding should deal with this")
-        }
+        0b00 => unreachable!("unreachable due to decoding protocol"),
         0b01 => {
             //Unsigned halfwords
             match load_bit {
@@ -481,9 +477,7 @@ fn halfword_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &Status, memory: &
     }
 }
 
-fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status, memory: &mut Memory) {
-    println!("thing = {opcode:X}");
-    
+fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status, memory: &mut Memory) {    
     let mut rlist = opcode & 0xFFFF;
     let rn_index = (opcode >> 16) & 0b1111;
     assert!(rn_index != 15, "r15 cannot be used as the base register");
@@ -498,8 +492,6 @@ fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status, memory: 
     let mut base_address;
     let is_r15_there = (rlist >> 15) & 1 == 1;
 
-    println!("{rn:X}");
-
     let used_mode;
     match s_bit {
         true => used_mode = ProcessorMode::User,
@@ -510,6 +502,7 @@ fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status, memory: 
         true => base_address = rn,
         false => base_address = rn - (rlist.count_ones() * 4),
     }
+    let original_base = base_address;
     match l_bit {
         true => {
             while rlist != 0 {
@@ -550,7 +543,10 @@ fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status, memory: 
     
     if w_bit {
         let rn_mut = cpu_regs.get_register_mut(rn_index as u8, status.cpsr.mode);
-        *rn_mut = base_address;
+        match u_bit {
+            true => *rn_mut = base_address,
+            false => *rn_mut = original_base,
+        }
     }
 }
 
