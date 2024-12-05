@@ -12,7 +12,7 @@ use cpu::execute_arm::execute_arm;
 use cpu::execute_thumb::execute_thumb;
 use cpu::decode::DecodedInstruction;
 use memory::update_timer;
-use minifb::{Window, WindowOptions};
+use minifb::{Key, Window, WindowOptions};
 use ppu::{update_ppu, PpuState};
 
 
@@ -26,15 +26,16 @@ fn main() {
         SCREEN_HEIGHT, 
         WindowOptions::default()
     ).unwrap();
+    window.set_target_fps(60);
 
     let mut cpu_regs = Cpu {
-        pc: 0x000000,
+        pc: 0x8000000,
         unbanked_registers: [0, 0, 0, 0, 0, 0, 0 ,0],
         double_banked_registers: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
-        many_banked_registers: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]],
+        many_banked_registers: [[0x03007F00, 0, 0x03007FE0, 0, 0x03007FA0, 0], [0, 0, 0, 0, 0, 0]],
     };
     let mut status = Status::new();
-    let mut memory = memory::create_memory("test/armwrestler.gba");
+    let mut memory = memory::create_memory("test/arm.gba");
     let mut ppu = PpuState::new();
 
     let mut fetched: Option<u32> = None;
@@ -48,11 +49,21 @@ fn main() {
     use DecodedInstruction::*;
     let mut f = File::create("debug/debug.txt").expect("the file couldnt be opened");
     let mut total_cycles = 0;
-    loop {
+    while window.is_open() && !window.is_key_down(Key::Escape) {
         // update the timer
         // add 1 for now, make it more accurate later
         update_timer(&mut memory, &mut total_cycles, 1);
         update_ppu(&mut ppu, &mut memory);
+
+        if ppu.new_screen {
+            let mut new_frame = Vec::new();
+            for pixel in &ppu.stored_screen {
+                new_frame.push(*pixel as u32);
+            }
+            window.update_with_buffer(&new_frame, SCREEN_WIDTH, SCREEN_HEIGHT).expect("i wonder what error this will be");
+            ppu.new_screen = false;
+        }
+
         // check for any interrupts
         handle_interrupts(&mut memory, &mut status, &mut cpu_regs);
 
