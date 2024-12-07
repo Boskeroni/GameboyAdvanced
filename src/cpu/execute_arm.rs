@@ -8,7 +8,7 @@ pub fn execute_arm(
     opcode: u32, 
     decoded_arm: DecodedArm,
     cpu_regs: &mut Cpu,
-    status: &mut Status,
+    status: &mut CpuStatus,
     memory: &mut Memory,
 ) {
     // first check if we even have to do it
@@ -36,7 +36,7 @@ pub fn execute_arm(
     }
 }
 
-fn branch_link(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
+fn branch_link(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
     // the bottom 24-bits
     let mut offset = (opcode & 0x00FFFFFF) as u32;
     offset <<= 2;
@@ -54,9 +54,10 @@ fn branch_link(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
 
     let pc = cpu_regs.get_register_mut(15, status.cpsr.mode);
     *pc = pc.wrapping_add_signed(offset as i32);
+    status.clear_pipe = true;
 }
 
-fn branch_exchange(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
+fn branch_exchange(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
     assert!((opcode & 0xF) != 15, "BRANCH EXCHANGE is undefined if Rn == 15");
 
     let rn_index = opcode as u8 & 0xF;
@@ -66,9 +67,10 @@ fn branch_exchange(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
     status.cpsr.t = (rn & 1) == 1;
 
     *pc = rn & 0xFFFFFFFE;
+    status.clear_pipe = true;
 }
 
-fn data_processing(conditioned_opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
+fn data_processing(conditioned_opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
     let opcode = conditioned_opcode & 0x0FFFFFFF;
     let change_cpsr = (opcode >> 20) & 1 == 1;
     let operation = (opcode >> 21) & 0b1111;
@@ -96,7 +98,7 @@ fn data_processing(conditioned_opcode: u32, cpu_regs: &mut Cpu, status: &mut Sta
             // that the ROR carry bit works
             op2_carry = (op2 >> 31) & 1 != 0;
         }
-        false => (op2, op2_carry) = get_shifted_value(cpu_regs, opcode & 0xFFF, status),
+        false => (op2, op2_carry) = get_shifted_value(cpu_regs, opcode, status),
     }
 
     let op1_reg = (opcode >> 16) as u8 & 0xF;
@@ -183,7 +185,7 @@ fn data_processing(conditioned_opcode: u32, cpu_regs: &mut Cpu, status: &mut Sta
     }
 }
 
-fn psr_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
+fn psr_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
     // matching between the middle 10 bits
     match (opcode >> 12) & 0b11_1111_1111 {
         0b1010011111 => { // transfer register contents to PSR
@@ -250,7 +252,7 @@ fn psr_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
     }
 }
 
-fn multiply(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
+fn multiply(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
     let rn_index = (opcode >> 12) as u8 & 0xF;
     let rd_index = (opcode >> 16) as u8 & 0xF;
     let rs_index = (opcode >> 8)  as u8 & 0xF;
@@ -277,7 +279,7 @@ fn multiply(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
     }
 }
 
-fn multiply_long(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
+fn multiply_long(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
     let rm_index = opcode        as u8 & 0xF;
     let rs_index = (opcode >> 8) as u8 & 0xF;
     let rdl_index = (opcode >> 12) as u8 & 0xF;
@@ -319,7 +321,7 @@ fn multiply_long(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status) {
 }
 
 /// this instruction shouldnt change any of the CPSR flags
-fn software_interrupt(cpu_regs: &mut Cpu, status: &mut Status) {
+fn software_interrupt(cpu_regs: &mut Cpu, status: &mut CpuStatus) {
     // spsr_svc gets the old cpsr transferred into it
     status.set_specific_spsr(status.cpsr, ProcessorMode::Supervisor);
 
@@ -332,13 +334,13 @@ fn software_interrupt(cpu_regs: &mut Cpu, status: &mut Status) {
     *change_pc = 0x08;
 }
 
-fn data_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &Status, memory: &mut Memory) {
+fn data_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &CpuStatus, memory: &mut Memory) {
     let rd_index = (opcode >> 12) as u8 & 0xF;
     let rn_index = (opcode >> 16) as u8 & 0xF;
 
     let offset;
     if (opcode >> 25) & 1 != 0 {
-        offset = get_shifted_value(cpu_regs, opcode & 0b0111_1111_1111, status).0;
+        offset = get_shifted_value(cpu_regs, opcode, status).0;
     } else {
         offset = opcode & 0b0111_1111_1111;
     }
@@ -393,7 +395,7 @@ fn data_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &Status, memory: &mut 
 
 /// this function handles both the immediate and register offsets
 /// Both pretty much have identical implementation besides for data acquisition
-fn halfword_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &Status, memory: &mut Memory) {
+fn halfword_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &CpuStatus, memory: &mut Memory) {
     let rd_index = (opcode >> 12) as u8 & 0xF;
     let rn_index = (opcode >> 16) as u8 & 0xF;
 
@@ -477,7 +479,7 @@ fn halfword_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &Status, memory: &
     }
 }
 
-fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status, memory: &mut Memory) {    
+fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mut Memory) {    
     let mut rlist = opcode & 0xFFFF;
     let rn_index = (opcode >> 16) & 0b1111;
     assert!(rn_index != 15, "r15 cannot be used as the base register");
@@ -550,7 +552,7 @@ fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut Status, memory: 
     }
 }
 
-fn single_swap(opcode: u32, cpu_regs: &mut Cpu, status: &Status, memory: &mut Memory) {
+fn single_swap(opcode: u32, cpu_regs: &mut Cpu, status: &CpuStatus, memory: &mut Memory) {
     // for now just have them happen at the same time
     let rn_index = (opcode >> 16) as u8 & 0xF;
     let rm_index = opcode as u8 & 0xF;

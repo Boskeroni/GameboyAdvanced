@@ -3,10 +3,10 @@ mod memory;
 mod ppu;
 
 use std::fs::File;
-use std::io::Write;
+use std::io::{Read, Write};
 
 use cpu::handle_interrupts;
-use cpu::registers::{Cpu, status_registers::Status};
+use cpu::registers::{Cpu, status_registers::CpuStatus};
 use cpu::decode::{decode_arm, decode_thumb};
 use cpu::execute_arm::execute_arm;
 use cpu::execute_thumb::execute_thumb;
@@ -29,12 +29,12 @@ fn main() {
     window.set_target_fps(60);
 
     let mut cpu_regs = Cpu {
-        pc: 0x8000000,
+        pc: 0x000000,
         unbanked_registers: [0, 0, 0, 0, 0, 0, 0 ,0],
         double_banked_registers: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
-        many_banked_registers: [[0x03007F00, 0, 0x03007FE0, 0, 0x03007FA0, 0], [0, 0, 0, 0, 0, 0]],
+        many_banked_registers: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]],
     };
-    let mut status = Status::new();
+    let mut status = CpuStatus::new();
     let mut memory = memory::create_memory("test/arm.gba");
     let mut ppu = PpuState::new();
 
@@ -69,7 +69,6 @@ fn main() {
 
         // Execute
         if let Some(instruction) = decoded {
-            let old_pc = cpu_regs.get_register(15, status.cpsr.mode);
             let old_regs = cpu_regs.clone();
 
             match instruction {
@@ -79,8 +78,8 @@ fn main() {
 
             debug_screen(&cpu_regs, instruction, decoded_opcode, &status, &old_regs, &mut f);
 
-            let new_pc = cpu_regs.get_register(15, status.cpsr.mode);
-            if old_pc != new_pc {
+            if status.clear_pipe {
+                status.clear_pipe = false;
                 fetched = None;
                 decoded = None;
                 continue;
@@ -105,7 +104,7 @@ fn main() {
     }
 }
 
-fn debug_screen(cpu: &Cpu, instr: DecodedInstruction, opcode: u32, status: &Status, old_regs: &Cpu, f: &mut File) {
+fn debug_screen(cpu: &Cpu, instr: DecodedInstruction, opcode: u32, status: &CpuStatus, old_regs: &Cpu, f: &mut File) {
     writeln!(f, "======== DEBUG ========").unwrap();
     let mut temp = Vec::new();
     for i in 0..=14 {
@@ -123,4 +122,25 @@ fn debug_screen(cpu: &Cpu, instr: DecodedInstruction, opcode: u32, status: &Stat
     writeln!(f, "status: {:?}", status.cpsr).unwrap();
     writeln!(f, "======= {instr:?} {opcode:X} ========= ").unwrap();
     writeln!(f, "").unwrap();
+
+    // let mut temp = String::new();
+    // std::io::stdin().read_line(&mut temp).unwrap();
+
+    // println!("======== DEBUG ========");
+    // let mut temp = Vec::new();
+    // for i in 0..=14 {
+    //     let old_value = old_regs.get_register(i, status.cpsr.mode);
+    //     let new_value = cpu.get_register(i, status.cpsr.mode);
+    //     temp.push(new_value);
+
+    //     if old_value == new_value { continue; }
+    //     print!("r{i} ==> {old_value:X} = {new_value:X}... ");
+    // }
+
+    // println!("");
+    // println!("{temp:X?}");
+    // println!("pc: {:X}, from: {:X}", cpu.pc, old_regs.pc);
+    // println!("status: {:?}", status.cpsr);
+    // println!("======= {instr:?} {opcode:X} ========= ");
+    // println!("");
 }

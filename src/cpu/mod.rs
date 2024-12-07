@@ -1,4 +1,4 @@
-use registers::{status_registers::Status, Cpu, ProcessorMode};
+use registers::{status_registers::CpuStatus, Cpu, ProcessorMode};
 
 use crate::memory::Memory;
 
@@ -12,67 +12,71 @@ pub mod decode;
 /// both the shifted value and the carry flag are returned
 /// 
 /// opcode should be the 11 bits which represent the shift + register
-pub fn get_shifted_value(cpu_regs: &Cpu, opcode: u32, status: &Status) -> (u32, bool) {
-    let rm_index = opcode & 0xF;
-    let rm = cpu_regs.get_register(rm_index as u8, status.cpsr.mode);
-
-
-    let shift_format_bit = (opcode >> 4) & 1 == 1;
-    let mut shift_amount;
-    match shift_format_bit {
-        false => shift_amount = (opcode >> 7) & 0x1F, // the simple case :)
+pub fn get_shifted_value(cpu_regs: &Cpu, opcode: u32, status: &CpuStatus) -> (u32, bool) {
+    let data_method = (opcode >> 4) & 1 == 1;
+    let shift_amount;
+    match data_method {
         true => {
-            let rs = (opcode >> 8) as u8 & 0xF;
-            assert!(rs != 15, "Rs cannot equal 15 in this case");
-            shift_amount = cpu_regs.get_register(rs, status.cpsr.mode) & 0xFF
+            let rs_index = (opcode >> 8) & 0xF;
+            let rs = cpu_regs.get_register(rs_index as u8, status.cpsr.mode);
+            shift_amount = rs & 0xFF;
         }
+        false => shift_amount = (opcode >> 7) & 0x1F,
     }
 
+    let rd_index = opcode & 0xF;
+    let rd = cpu_regs.get_register(rd_index as u8, status.cpsr.mode);
+
+    let (result, carry);
     let shift_type = (opcode >> 5) & 0b11;
     match shift_type {
         0b00 => {
-            // the carry bit stays the same if the shift instruction is LSL #0
-            // the shift amount can be greater than 32 if its from a register
-            if shift_amount > 32 {
-                return (0, false)
-            }
-            let res = rm << shift_amount;
+            // this is a special case
             if shift_amount == 0 {
-                return (res, status.cpsr.c)
+                return (rd, status.cpsr.c);
             }
-            // this line may look wrong but the math does check out
-            return (res, (rm >> (32 - shift_amount)) & 1 != 0)
-        } // Logical left shift
+
+            result = rd << shift_amount;
+            let carry_interim = rd << (shift_amount - 1);
+            carry = (carry_interim >> 31) & 1 == 1;
+
+            return (result, carry);
+        }
         0b01 => {
-            if shift_amount > 32 {
-                return (0, false)
-            }
-            // LSR #0 automatically becomes LSL #0 so it doesnt need an edge case
             if shift_amount == 0 {
-                shift_amount = 32;
+                return (0, (rd >> 31) & 1 == 1)
             }
-            return (rm >> shift_amount, (rm >> (shift_amount - 1) & 1) != 0)
-        } // logical right shift
+
+            result = rd >> shift_amount;
+            carry = (rd >> (shift_amount - 1)) & 1 == 1;
+            return (result, carry)
+        }
         0b10 => {
-            let padding = (rm & 0x80000000) as i32;
+            let fill: i32 = (rd as i32) & !0x7FFFFFFF;
             if shift_amount == 0 {
-                shift_amount = 32;
+                return ((fill >> 31) as u32, fill != 0)
             }
-            if shift_amount >= 32 {
-                return ((padding >> 31) as u32, padding != 0)
-            }
-            return ((rm >> shift_amount) | (padding >> shift_amount) as u32, rm >> (shift_amount - 1) & 1 != 0)
-        } // Arithmetic shift left
+
+            let interim_result = rd >> shift_amount;
+            result = (fill >> shift_amount) as u32 | interim_result;
+            carry = (rd >> (shift_amount - 1)) & 1 == 1;
+            return (result, carry)
+        }
         0b11 => {
-            // when it is ROR #0 it means RRX
             if shift_amount == 0 {
-                return ((rm >> 1) | (status.cpsr.c as u32) << 31, rm & 1 != 0)
+                carry = rd & 1 == 1;
+                result = (rd >> 1) | ((status.cpsr.c as u32) << 31);
+
+                return (result, carry)
             }
-            let res = rm.rotate_right(shift_amount);
-            return (res, (res >> 31) & 1 != 0)
-        },
-        _ => unreachable!(),
-    };
+
+            result = rd.rotate_right(shift_amount);
+            carry = (result >> 31) & 1 == 1;
+
+            return (result, carry)
+        }
+        _ => unreachable!()
+    }
 }
 
 enum CpuRegisters {
@@ -81,7 +85,7 @@ enum CpuRegisters {
     If = 0x4000202,
 }
 
-pub fn handle_interrupts(memory: &mut Memory, status: &mut Status, cpu_regs: &mut Cpu) {
+pub fn handle_interrupts(memory: &mut Memory, status: &mut CpuStatus, cpu_regs: &mut Cpu) {
     let interrupt_allowed = memory.read_u16(CpuRegisters::Ime as u32) & 1 == 1;
     if !interrupt_allowed {
         return;
@@ -99,4 +103,5 @@ pub fn handle_interrupts(memory: &mut Memory, status: &mut Status, cpu_regs: &mu
 
     let pc = cpu_regs.get_register_mut(15, status.cpsr.mode);
     *pc = 0x18;
+    status.clear_pipe = true;
 }

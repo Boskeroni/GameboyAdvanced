@@ -96,13 +96,15 @@ pub mod status_registers {
     use crate::cpu::registers::ProcessorMode;
 
     #[derive(Debug)]
-    pub struct Status {
+    pub struct CpuStatus {
+        pub clear_pipe: bool,
         pub cpsr: Cpsr,
         spsr: [Cpsr; 5] // [spsr_fiq, spsr_svc, spsr_abt, spsr_irq, spsr_und]
     }
-    impl Status {
+    impl CpuStatus {
         pub fn new() -> Self {
             Self {
+                clear_pipe: false,
                 cpsr: Cpsr::default(),
                 spsr: [Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default()],
             }

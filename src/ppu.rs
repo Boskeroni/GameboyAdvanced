@@ -101,7 +101,6 @@ pub fn update_ppu(ppu: &mut PpuState, memory: &mut Memory) {
 fn mode_4_display(ppu: &mut PpuState, memory: &mut Memory) {
     let dispcnt = memory.read_u16(PpuRegisters::Dispcnt as u32);
     let displayed_frame = (dispcnt >> 4) & 1 == 1;
-    
 
     let base;
     let palette_base = 0x5000000;
@@ -109,7 +108,7 @@ fn mode_4_display(ppu: &mut PpuState, memory: &mut Memory) {
         true => base = 0x600A000,
         false => base = 0x6000000,
     }
-
+    println!("something should be rendered pls");
     let mut screen = Vec::new();
     let total_pixels = 240*160;
     for index in 0..total_pixels {
