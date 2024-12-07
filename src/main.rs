@@ -70,6 +70,7 @@ fn main() {
         // Execute
         if let Some(instruction) = decoded {
             let old_pc = cpu_regs.get_register(15, status.cpsr.mode);
+            let old_t = status.cpsr.t;
             let old_regs = cpu_regs.clone();
 
             match instruction {
@@ -79,9 +80,10 @@ fn main() {
 
             debug_screen(&cpu_regs, instruction, decoded_opcode, &status, &old_regs, &mut f);
             let new_pc = cpu_regs.get_register(15, status.cpsr.mode);
+            let new_t = status.cpsr.t;
+            let clear_pipeline = old_pc != new_pc || old_t != new_t;
 
-            if status.clear_pipe || old_pc != new_pc {
-                status.clear_pipe = false;
+            if clear_pipeline {
                 fetched = None;
                 decoded = None;
                 continue;
