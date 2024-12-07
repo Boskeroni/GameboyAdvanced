@@ -103,5 +103,4 @@ pub fn handle_interrupts(memory: &mut Memory, status: &mut CpuStatus, cpu_regs: 
 
     let pc = cpu_regs.get_register_mut(15, status.cpsr.mode);
     *pc = 0x18;
-    status.clear_pipe = true;
 }

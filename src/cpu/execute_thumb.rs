@@ -254,7 +254,6 @@ fn hi_operations(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
             *pc = rs & !(0b1);
 
             status.cpsr.t = (rs & 1) == 1;
-            status.clear_pipe = true;
             return;
         }
         _ => unreachable!(),
@@ -555,7 +554,6 @@ fn unconditional_branch(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus)
 
     let pc = cpu_regs.get_register_mut(15, status.cpsr.mode);
     *pc = pc.wrapping_add_signed(offset as i32);
-    status.clear_pipe = true;
 }
 
 fn conditional_branch(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
@@ -572,7 +570,6 @@ fn conditional_branch(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
         offset |= 0xFFFFFF00;
     }
     *pc = pc.wrapping_add_signed(offset as i32);
-    status.clear_pipe = true;
 }
 
 fn long_branch_link(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
@@ -600,7 +597,6 @@ fn long_branch_link(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
             *pc = lr.wrapping_add(offset);
             let lr = cpu_regs.get_register_mut(14, status.cpsr.mode);
             *lr = temp | 1;
-            status.clear_pipe = true;
         },
     }
 }

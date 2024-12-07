@@ -54,7 +54,6 @@ fn branch_link(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
 
     let pc = cpu_regs.get_register_mut(15, status.cpsr.mode);
     *pc = pc.wrapping_add_signed(offset as i32);
-    status.clear_pipe = true;
 }
 
 fn branch_exchange(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
@@ -67,7 +66,6 @@ fn branch_exchange(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
     status.cpsr.t = (rn & 1) == 1;
 
     *pc = rn & 0xFFFFFFFE;
-    status.clear_pipe = true;
 }
 
 fn data_processing(conditioned_opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
