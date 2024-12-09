@@ -467,7 +467,7 @@ fn push_pop(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mu
 
     let sp = cpu_regs.get_register(13, ProcessorMode::User);
     match l_bit {
-        true => {
+        true => { // load
             let mut base_address = sp;
             while rlist != 0 {
                 let next_r = rlist.trailing_zeros();
@@ -487,7 +487,8 @@ fn push_pop(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mu
             *sp_mut = base_address;
         }
         false => {
-            let mut base_address = sp - (rlist.count_ones() + r_bit as u32) * 4;
+            let total_increments = rlist.count_ones() + r_bit as u32 + 1;
+            let mut base_address = sp - (total_increments * 4);
             let base_address_copy = base_address;
             while rlist != 0 {
                 let next_r = rlist.trailing_zeros();
