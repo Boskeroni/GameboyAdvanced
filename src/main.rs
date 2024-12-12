@@ -3,7 +3,7 @@ mod memory;
 mod ppu;
 
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::Write;
 
 use cpu::handle_interrupts;
 use cpu::registers::{Cpu, status_registers::CpuStatus};
