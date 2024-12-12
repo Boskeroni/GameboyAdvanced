@@ -22,9 +22,9 @@ fn lil_end_combine_u32(a: u8, b: u8, c: u8, d: u8) -> u32 {
     return (d<<24) | (c<<16) | (b<<8) | (a);
 }
 
-#[inline]
 /// input => 0bDDDDDDDDCCCCCCCCBBBBBBBBAAAAAAAA
 /// output => (0bAAAAAAAA, 0bBBBBBBBB, 0bCCCCCCCC, 0bDDDDDDDD)
+#[inline]
 fn little_split_u32(a: u32) -> (u8, u8, u8, u8) {
     return (a as u8, (a >> 8) as u8, (a >> 16) as u8, (a >> 24) as u8)
 }

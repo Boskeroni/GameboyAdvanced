@@ -84,6 +84,7 @@ fn main() {
             let clear_pipeline = old_pc != new_pc || old_t != new_t;
 
             if clear_pipeline {
+                assert!(new_pc != 0, "its calling back to the start");
                 fetched = None;
                 decoded = None;
                 continue;

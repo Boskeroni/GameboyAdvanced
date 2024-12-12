@@ -450,14 +450,14 @@ fn load_address(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
 }
 
 fn offset_sp(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
-    let mut offset = (opcode as u32 & 0b111_1111) << 2;
+    let offset = (opcode as u32 & 0b111_1111) << 2;
     let s_bit = (opcode >> 7) & 1 == 1;
-    if s_bit {
-        offset |= 0xFFFF_FF00;
-    }
-
+    
     let sp = cpu_regs.get_register_mut(13, status.cpsr.mode);
-    *sp = sp.wrapping_add(offset);
+    match s_bit {
+        true => *sp = sp.wrapping_sub(offset),
+        false => *sp = sp.wrapping_add(offset),
+    }
 }
 
 fn push_pop(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mut Memory) {
