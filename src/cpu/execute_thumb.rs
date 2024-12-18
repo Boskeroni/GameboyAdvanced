@@ -249,7 +249,6 @@ fn hi_operations(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
         0b11 => {
             assert!(!h1, "H1=1 for this instruction is undefined");
 
-            println!("{rs_index:X}, {rs:X}");
             let pc = cpu_regs.get_register_mut(15, status.cpsr.mode);
             *pc = rs & !(0b1);
 
@@ -471,9 +470,11 @@ fn push_pop(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mu
             let mut base_address = sp;
             while rlist != 0 {
                 let next_r = rlist.trailing_zeros();
+
                 let reg = cpu_regs.get_register_mut(next_r as u8, status.cpsr.mode);
                 let change = memory.read_u32(base_address);
                 *reg = change;
+                
                 base_address += 4;
                 rlist &= !(1<<next_r);
             }
@@ -487,7 +488,7 @@ fn push_pop(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mu
             *sp_mut = base_address;
         }
         false => {
-            let total_increments = rlist.count_ones() + r_bit as u32 + 1;
+            let total_increments = rlist.count_ones() + r_bit as u32;
             let mut base_address = sp - (total_increments * 4);
             let base_address_copy = base_address;
             while rlist != 0 {
@@ -591,8 +592,6 @@ fn long_branch_link(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
             offset <<= 1;
             let lr = cpu_regs.get_register(14, status.cpsr.mode);
             let pc = cpu_regs.get_register_mut(15, status.cpsr.mode);
-
-            println!("{offset:X}");
 
             let temp = *pc - 2;
             *pc = lr.wrapping_add(offset);

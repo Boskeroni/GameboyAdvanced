@@ -107,18 +107,6 @@ pub mod status_registers {
                 spsr: [Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default()],
             }
         }
-        pub fn set_cpsr_to_spsr(&mut self) {
-            use ProcessorMode::*;
-            let spsr = match self.cpsr.mode {
-                FastInterrupt => self.spsr[0],
-                Supervisor => self.spsr[1],
-                Abort => self.spsr[2],
-                Interrupt => self.spsr[3],
-                Undefined => self.spsr[4],
-                _ => panic!("i just don't really know what to do here"),
-            };
-            self.cpsr = spsr;
-        }
         // if there is no spsr, it returns the global cpsr
         pub fn get_spsr(&self) -> &Cpsr {
             use ProcessorMode::*;

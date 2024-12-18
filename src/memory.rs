@@ -159,7 +159,7 @@ impl Memory {
             0x6 => lower < VRAM_LENGTH,
             0x7 => lower < OAM_LENGTH,
             0x8 => lower < self.gp_rom.len(),
-            _ => unreachable!(),
+            _ => panic!("{upper:X}"),
         }
     }
 }

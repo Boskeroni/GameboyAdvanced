@@ -108,7 +108,7 @@ fn mode_4_display(ppu: &mut PpuState, memory: &mut Memory) {
         true => base = 0x600A000,
         false => base = 0x6000000,
     }
-    println!("something should be rendered pls");
+
     let mut screen = Vec::new();
     let total_pixels = 240*160;
     for index in 0..total_pixels {

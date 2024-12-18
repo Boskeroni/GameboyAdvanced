@@ -172,7 +172,7 @@ fn data_processing(conditioned_opcode: u32, cpu_regs: &mut Cpu, status: &mut Cpu
     if [0b0010, 0b0011, 0b0100, 0b0101, 0b0110, 0b0111, 0b1010, 0b1011].contains(&operation) {
         // it says that this should be ignored sometimes
         // but honestly i don't know when so i am doing it all the time
-        status.cpsr.v = ((op1 ^ result) & (op2 ^ result)) >> 31 & 1 != 0; 
+        status.cpsr.v = ((op1 ^ result) & (op2 ^ result)) >> 31 & 1 != 0;
         status.cpsr.c = alu_carry;
     } else {
         status.cpsr.c = op2_carry;
@@ -326,7 +326,7 @@ fn software_interrupt(cpu_regs: &mut Cpu, status: &mut CpuStatus) {
     status.cpsr.mode = ProcessorMode::Supervisor;
     let pc = cpu_regs.get_register(15, status.cpsr.mode);
     let save_pc = cpu_regs.get_register_mut(14, status.cpsr.mode);
-    *save_pc = pc;
+    *save_pc = pc - 8;
 
     let change_pc = cpu_regs.get_register_mut(15, status.cpsr.mode);
     *change_pc = 0x08;
@@ -519,9 +519,6 @@ fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus, memor
                 }
                 rlist &= !(1<<next_r);
             }
-            if s_bit && is_r15_there {
-                status.set_cpsr_to_spsr();
-            }
         }
         false => {
             while rlist != 0 {
@@ -530,7 +527,10 @@ fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus, memor
                 }
     
                 let next_r = rlist.trailing_zeros();
-                let rb = cpu_regs.get_register(next_r as u8, used_mode);
+                let mut rb = cpu_regs.get_register(next_r as u8, used_mode);
+                if next_r == 15 {
+                    rb += 4;
+                }
                 memory.write_u32(base_address, rb);
     
                 if p_bit != u_bit {
@@ -540,7 +540,11 @@ fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus, memor
             }
         }
     }
-    
+    // was rn in the transfer?
+    if l_bit && (opcode >> rn_index) & 1 == 1 {
+        return;
+    }
+
     if w_bit {
         let rn_mut = cpu_regs.get_register_mut(rn_index as u8, status.cpsr.mode);
         match u_bit {
