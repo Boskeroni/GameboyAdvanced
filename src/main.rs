@@ -29,7 +29,7 @@ fn main() {
     window.set_target_fps(60);
 
     let mut cpu_regs = Cpu {
-        pc: 0x8000000,
+        pc: 0x000000,
         unbanked_registers: [0, 0, 0, 0, 0, 0, 0 ,0],
         double_banked_registers: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
         many_banked_registers: [[0x03007F00, 0, 0x03007FE0, 0, 0x03007FA0, 0], [0, 0, 0, 0, 0, 0]],
@@ -49,6 +49,7 @@ fn main() {
     use DecodedInstruction::*;
     let mut f = File::create("debug/debug.txt").expect("the file couldnt be opened");
     let mut total_cycles = 0;
+    let mut has_booted = false;
     while window.is_open() && !window.is_key_down(Key::Escape) {
         // update the timer
         // add 1 for now, make it more accurate later
@@ -101,11 +102,16 @@ fn main() {
             decoded_opcode = opcode;
         }
 
+        if has_booted && cpu_regs.pc == 0 {
+            panic!("called back to the start");
+        }
+
         // Fetch
         fetched = Some(match status.cpsr.t {
             true => memory.read_u16(cpu_regs.get_pc_thumb()) as u32,
             false => memory.read_u32(cpu_regs.get_pc_arm()),
         });
+        has_booted = true;
     }
 }
 

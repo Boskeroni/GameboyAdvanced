@@ -490,7 +490,6 @@ fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus, memor
 
     let rn = cpu_regs.get_register(rn_index as u8, status.cpsr.mode);
     let mut base_address;
-    let is_r15_there = (rlist >> 15) & 1 == 1;
 
     let used_mode;
     match s_bit {
