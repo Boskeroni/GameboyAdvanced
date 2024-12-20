@@ -212,14 +212,14 @@ pub mod status_registers {
     }
     pub fn convert_u32_cpsr(cpsr: u32) -> Cpsr {
         Cpsr {
-            n: (cpsr >> 31) & 1 != 0,
-            z: (cpsr >> 30) & 1 != 0,
-            c: (cpsr >> 29) & 1 != 0,
-            v: (cpsr >> 28) & 1 != 0,
-            q: (cpsr >> 27) & 1 != 0,
-            i: (cpsr >> 7 ) & 1 != 0,
-            f: (cpsr >> 6 ) & 1 != 0,
-            t: (cpsr >> 5 ) & 1 != 0,
+            n: (cpsr >> 31) & 1 == 1,
+            z: (cpsr >> 30) & 1 == 1,
+            c: (cpsr >> 29) & 1 == 1,
+            v: (cpsr >> 28) & 1 == 1,
+            q: (cpsr >> 27) & 1 == 1,
+            i: (cpsr >> 7 ) & 1 == 1,
+            f: (cpsr >> 6 ) & 1 == 1,
+            t: (cpsr >> 5 ) & 1 == 1,
             mode: match cpsr & 0b11111 {
                 0b10000 => ProcessorMode::User,
                 0b10001 => ProcessorMode::FastInterrupt,

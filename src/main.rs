@@ -29,13 +29,13 @@ fn main() {
     window.set_target_fps(60);
 
     let mut cpu_regs = Cpu {
-        pc: 0x000000,
+        pc: 0x8000000,
         unbanked_registers: [0, 0, 0, 0, 0, 0, 0 ,0],
         double_banked_registers: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
         many_banked_registers: [[0x03007F00, 0, 0x03007FE0, 0, 0x03007FA0, 0], [0, 0, 0, 0, 0, 0]],
     };
     let mut status = CpuStatus::new();
-    let mut memory = memory::create_memory("test/arm.gba");
+    let mut memory = memory::create_memory("test/armwrestler.gba");
     let mut ppu = PpuState::new();
 
     let mut fetched: Option<u32> = None;
@@ -124,7 +124,7 @@ fn debug_screen(cpu: &Cpu, instr: DecodedInstruction, opcode: u32, status: &CpuS
         temp.push(new_value);
 
         if old_value == new_value { continue; }
-        write!(f, "r{i} ==> {old_value:X} = {new_value:X}... ").unwrap();
+        write!(f, "r{i} ==> {new_value:X}... ").unwrap();
     }
 
     writeln!(f, "").unwrap();

@@ -2,12 +2,6 @@ use crate::cpu::registers::{*, status_registers::*};
 use crate::cpu::decode::DecodedThumb;
 use crate::memory::Memory;
 
-// executing the Thumb instructions
-// hopefully they are nice to do :)
-
-/// during these instructions, i may not always use `status.cpsr.mode`,
-/// this is because the register retrieval doesnt rely upon it as heavily as with ARM.
-/// `ProcessorMode::User` is usually just used
 pub fn execute_thumb(
     opcode: u16,
     instruction: DecodedThumb,
@@ -464,7 +458,7 @@ fn push_pop(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mu
     let l_bit = (opcode >> 11) & 1 == 1;
     let r_bit = (opcode >> 8) & 1 == 1;
 
-    let sp = cpu_regs.get_register(13, ProcessorMode::User);
+    let sp = cpu_regs.get_register(13, status.cpsr.mode);
     match l_bit {
         true => { // load
             let mut base_address = sp;
@@ -506,7 +500,6 @@ fn push_pop(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mu
             *sp = base_address_copy;
         }
     }
-
 }
 
 fn multiple_load(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mut Memory) {
