@@ -108,8 +108,8 @@ fn data_processing(conditioned_opcode: u32, cpu_regs: &mut Cpu, status: &mut Cpu
     let mut undo = false;
     let backup = *dst;
     let (result, alu_carry) = match operation {
-        0b0000 => (op1 & op2, false), // and
-        0b0001 => (op1 ^ op2, false), // eor
+        0b0000 => (op1 & op2, op2_carry), // and
+        0b0001 => (op1 ^ op2, op2_carry), // eor
         0b0010 => op1.overflowing_sub(op2), // sub
         0b0011 => op2.overflowing_sub(op1), // rsb
         0b0100 => op1.overflowing_add(op2), // add
@@ -130,11 +130,11 @@ fn data_processing(conditioned_opcode: u32, cpu_regs: &mut Cpu, status: &mut Cpu
         }, // rsc
         0b1000 => {
             undo = true; 
-            (op1 & op2, false)
+            (op1 & op2, op2_carry)
         }, // tst
         0b1001 => {
             undo = true; 
-            (op1 ^ op2, false)
+            (op1 ^ op2, op2_carry)
         }, // teq
         0b1010 => {
             undo = true;
@@ -145,11 +145,11 @@ fn data_processing(conditioned_opcode: u32, cpu_regs: &mut Cpu, status: &mut Cpu
             op1.overflowing_add(op2)
         }, // cmn
         0b1100 => {
-            (op1 | op2, false)
+            (op1 | op2, op2_carry)
         }, // orr
-        0b1101 => (op2, false), // mov
-        0b1110 => (op1 & !op2, false), // bic
-        0b1111 => (!op2, false), // mvn
+        0b1101 => (op2, op2_carry), // mov
+        0b1110 => (op1 & !op2, op2_carry), // bic
+        0b1111 => (!op2, op2_carry), // mvn
         _ => unreachable!()
     };
     *dst = result;
@@ -168,15 +168,10 @@ fn data_processing(conditioned_opcode: u32, cpu_regs: &mut Cpu, status: &mut Cpu
     status.cpsr.z = *dst == 0;
     status.cpsr.n = (*dst >> 31) & 1 == 1;
 
-    // the mathematical instructions
-    if [0b0010, 0b0011, 0b0100, 0b0101, 0b0110, 0b0111, 0b1010, 0b1011].contains(&operation) {
-        // it says that this should be ignored sometimes
-        // but honestly i don't know when so i am doing it all the time
-        status.cpsr.v = ((op1 ^ result) & (op2 ^ result)) >> 31 & 1 != 0;
-        status.cpsr.c = alu_carry;
-    } else {
-        status.cpsr.c = op2_carry;
-    }
+    // it says that this should be ignored sometimes
+    // but honestly i don't know when so i am doing it all the time
+    status.cpsr.v = ((op1 ^ result) & (op2 ^ result)) >> 31 & 1 != 0;
+    status.cpsr.c = alu_carry;
 
     if undo {
         *dst = backup;

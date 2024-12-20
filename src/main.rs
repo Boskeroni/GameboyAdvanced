@@ -35,7 +35,7 @@ fn main() {
         many_banked_registers: [[0x03007F00, 0, 0x03007FE0, 0, 0x03007FA0, 0], [0, 0, 0, 0, 0, 0]],
     };
     let mut status = CpuStatus::new();
-    let mut memory = memory::create_memory("test/armwrestler.gba");
+let mut memory = memory::create_memory("test/armwrestler.gba");
     let mut ppu = PpuState::new();
 
     let mut fetched: Option<u32> = None;
