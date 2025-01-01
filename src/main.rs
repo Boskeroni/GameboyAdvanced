@@ -3,9 +3,9 @@ mod memory;
 mod ppu;
 
 use std::fs::File;
-use std::io::Write;
+use std::io::{stdout, Write};
 
-use cpu::handle_interrupts;
+use cpu::interrupt::handle_interrupts;
 use cpu::registers::{Cpu, status_registers::CpuStatus};
 use cpu::decode::{decode_arm, decode_thumb};
 use cpu::execute_arm::execute_arm;
@@ -73,13 +73,14 @@ let mut memory = memory::create_memory("test/armwrestler.gba");
             let old_pc = cpu_regs.get_register(15, status.cpsr.mode);
             let old_t = status.cpsr.t;
             let old_regs = cpu_regs.clone();
+            let old_stat = status.clone();
 
             match instruction {
                 Thumb(instr) => execute_thumb(decoded_opcode as u16, instr, &mut cpu_regs, &mut status, &mut memory),
                 Arm(instr) => execute_arm(decoded_opcode, instr, &mut cpu_regs, &mut status, &mut memory),
             };
 
-            debug_screen(&cpu_regs, instruction, decoded_opcode, &status, &old_regs, &mut f);
+            debug_screen(&cpu_regs, instruction, decoded_opcode, &status, &old_regs, &mut f, &old_stat);
             let new_pc = cpu_regs.get_register(15, status.cpsr.mode);
             let new_t = status.cpsr.t;
             let clear_pipeline = old_pc != new_pc || old_t != new_t;
@@ -115,7 +116,15 @@ let mut memory = memory::create_memory("test/armwrestler.gba");
     }
 }
 
-fn debug_screen(cpu: &Cpu, instr: DecodedInstruction, opcode: u32, status: &CpuStatus, old_regs: &Cpu, f: &mut File) {
+fn debug_screen(
+    cpu: &Cpu, 
+    instr: DecodedInstruction, 
+    opcode: u32, 
+    status: &CpuStatus, 
+    old_regs: &Cpu, 
+    f: &mut File,
+    old_stat: &CpuStatus
+) {
     writeln!(f, "======== DEBUG ========").unwrap();
     let mut temp = Vec::new();
     for i in 0..=14 {
@@ -134,24 +143,33 @@ fn debug_screen(cpu: &Cpu, instr: DecodedInstruction, opcode: u32, status: &CpuS
     writeln!(f, "======= {instr:?} {opcode:X} ========= ").unwrap();
     writeln!(f, "").unwrap();
 
-    // let mut temp = String::new();
-    // std::io::stdin().read_line(&mut temp).unwrap();
+    let mut temp = String::new();
+    std::io::stdin().read_line(&mut temp).unwrap();
+    print!("{instr:?} | {opcode:X} | ");
 
-    // println!("======== DEBUG ========");
-    // let mut temp = Vec::new();
-    // for i in 0..=14 {
-    //     let old_value = old_regs.get_register(i, status.cpsr.mode);
-    //     let new_value = cpu.get_register(i, status.cpsr.mode);
-    //     temp.push(new_value);
+    for i in 0..=15 {
+        let old_value = old_regs.get_register(i, status.cpsr.mode);
+        let new_value = cpu.get_register(i, status.cpsr.mode);
 
-    //     if old_value == new_value { continue; }
-    //     print!("r{i} ==> {old_value:X} = {new_value:X}... ");
-    // }
-
-    // println!("");
-    // println!("{temp:X?}");
-    // println!("pc: {:X}, from: {:X}", cpu.pc, old_regs.pc);
-    // println!("status: {:?}", status.cpsr);
-    // println!("======= {instr:?} {opcode:X} ========= ");
-    // println!("");
+        if old_value == new_value { continue; }
+        print!("r{i} ==> {old_value:X} = {new_value:X} ");
+    }
+    print!(" | ");
+    if old_stat.cpsr.c != status.cpsr.c {
+        let clear = status.cpsr.c;
+        print!("c = {clear}");
+    }
+    if old_stat.cpsr.z != status.cpsr.z {
+        let clear = status.cpsr.t;
+        print!("z = {clear}");
+    }
+    if old_stat.cpsr.n != status.cpsr.n {
+        let clear = status.cpsr.n;
+        print!("c = {clear}");
+    }
+    if old_stat.cpsr.v != status.cpsr.v {
+        let clear = status.cpsr.v;
+        print!("c = {clear}");
+    }
+    stdout().flush().unwrap();
 }

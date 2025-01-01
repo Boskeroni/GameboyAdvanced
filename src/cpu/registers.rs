@@ -95,7 +95,7 @@ impl Cpu {
 pub mod status_registers {
     use crate::cpu::registers::ProcessorMode;
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone, Copy)]
     pub struct CpuStatus {
         pub cpsr: Cpsr,
         spsr: [Cpsr; 5] // [spsr_fiq, spsr_svc, spsr_abt, spsr_irq, spsr_und]
