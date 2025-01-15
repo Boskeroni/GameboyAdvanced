@@ -29,7 +29,7 @@ fn main() {
     window.set_target_fps(60);
 
     let mut cpu_regs = Cpu {
-        pc: 0x000000,
+        pc: 0x8000000,
         unbanked_registers: [0, 0, 0, 0, 0, 0, 0 ,0],
         double_banked_registers: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
         many_banked_registers: [[0x03007F00, 0, 0x03007FE0, 0, 0x03007FA0, 0], [0, 0, 0, 0, 0, 0]],
