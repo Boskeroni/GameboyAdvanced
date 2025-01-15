@@ -54,6 +54,7 @@ fn branch_link(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
 
     let pc = cpu_regs.get_register_mut(15, status.cpsr.mode);
     *pc = pc.wrapping_add_signed(offset as i32);
+    cpu_regs.clear_pipeline = true;
 }
 
 fn branch_exchange(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
@@ -66,27 +67,26 @@ fn branch_exchange(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
     status.cpsr.t = (rn & 1) == 1;
 
     *pc = rn & 0xFFFFFFFE;
+    cpu_regs.clear_pipeline = true;
 }
 
-fn data_processing(conditioned_opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
-    let opcode = conditioned_opcode & 0x0FFFFFFF;
-    let change_cpsr = (opcode >> 20) & 1 == 1;
-    let operation = (opcode >> 21) & 0b1111;
+fn data_processing(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
+    let s_bit = (opcode >> 20) & 1 == 1;
+    let operation = (opcode >> 21) & 0xF;
 
     // its a test one, but doesnt change cpsr, so psr transfer
-    if operation >= 8 && operation <= 11 && !change_cpsr {
+    if operation >= 8 && operation <= 11 && !s_bit {
         psr_transfer(opcode, cpu_regs, status);
         return
     }
     
     // there are so many edge cases and weird procedures that its easier to 
     // have these predefined so they can be assigned whenever and exited
-    let op2;
+    let mut op2;
     let op2_carry;
-
-    // means that the Operand2 is a Register with a shift applied
-    let operand_bit = (opcode >> 25) & 1 == 1;
-    match operand_bit {
+    let i_bit = (opcode >> 25) & 1 == 1;
+    match i_bit {
+        // operand 2 is an immediate value
         true => {
             let imm = opcode & 0xFF;
             let shift_amount = (opcode >> 8) & 0xF;
@@ -96,22 +96,29 @@ fn data_processing(conditioned_opcode: u32, cpu_regs: &mut Cpu, status: &mut Cpu
             // that the ROR carry bit works
             op2_carry = (op2 >> 31) & 1 != 0;
         }
+        // operand 2 is a register
         false => (op2, op2_carry) = get_shifted_value(cpu_regs, opcode, status),
     }
 
-    let op1_reg = (opcode >> 16) as u8 & 0xF;
-    let src_index = (opcode >> 12) as u8 & 0xF;
+    let rn_index = (opcode >> 16) as u8 & 0xF;
+    let rd_index = (opcode >> 12) as u8 & 0xF;
 
-    let op1 = cpu_regs.get_register(op1_reg, status.cpsr.mode);
-    let dst = cpu_regs.get_register_mut(src_index, status.cpsr.mode);
+    let mut op1 = cpu_regs.get_register(rn_index, status.cpsr.mode);
+    let dst = cpu_regs.get_register_mut(rd_index, status.cpsr.mode);
 
     let mut undo = false;
     let backup = *dst;
     let (result, alu_carry) = match operation {
         0b0000 => (op1 & op2, op2_carry), // and
         0b0001 => (op1 ^ op2, op2_carry), // eor
-        0b0010 => op1.overflowing_sub(op2), // sub
-        0b0011 => op2.overflowing_sub(op1), // rsb
+        0b0010 => {
+            op2 = !op2.wrapping_add(1);
+            op1.overflowing_add(op2)
+        }, // sub
+        0b0011 => {
+            op1 = !op1.wrapping_add(1);
+            op2.overflowing_sub(op1)
+        }, // rsb
         0b0100 => op1.overflowing_add(op2), // add
         0b0101 => {
             let (inter_res, inter_of) = op1.overflowing_add(op2);
@@ -119,12 +126,14 @@ fn data_processing(conditioned_opcode: u32, cpu_regs: &mut Cpu, status: &mut Cpu
             (end_res, inter_of | end_of)
         }, // adc
         0b0110 => {
-            let (inter_res, inter_of) = op1.overflowing_sub(op2);
+            op2 = !op2.wrapping_add(1);
+            let (inter_res, inter_of) = op1.overflowing_add(op2);
             let (end_res, end_of) = inter_res.overflowing_sub(!status.cpsr.c as u32);
             (end_res, inter_of | end_of)
         }, // sbc,
         0b0111 => {
-            let (inter_res, inter_of) = op2.overflowing_sub(op1);
+            op1 = !op1.wrapping_add(1);
+            let (inter_res, inter_of) = op2.overflowing_add(op1);
             let (end_res, end_of) = inter_res.overflowing_sub(!status.cpsr.c as u32);
             (end_res, inter_of | end_of)
         }, // rsc
@@ -138,7 +147,12 @@ fn data_processing(conditioned_opcode: u32, cpu_regs: &mut Cpu, status: &mut Cpu
         }, // teq
         0b1010 => {
             undo = true;
-            op1.overflowing_sub(op2)
+            if rn_index == 1 {
+                println!("{:?}", op1.overflowing_sub(op2));
+            }
+
+            op2 = (!op2).wrapping_add(1);
+            op1.overflowing_add(op2)
         }, // cmp
         0b1011 => {
             undo = true; 
@@ -156,13 +170,13 @@ fn data_processing(conditioned_opcode: u32, cpu_regs: &mut Cpu, status: &mut Cpu
 
     // checking if we are returning from a SWI
     if let ProcessorMode::Supervisor = status.cpsr.mode {
-        if operation == 0b1101 && operand_bit && opcode & 0xF == 14 {
+        if operation == 0b1101 && i_bit && opcode & 0xF == 14 {
             status.cpsr.mode = ProcessorMode::User;
         }
     }
 
     // both operations respect the S bit and R15 rule
-    if !change_cpsr {
+    if !s_bit {
         return;
     }
     status.cpsr.z = *dst == 0;
@@ -325,6 +339,7 @@ fn software_interrupt(cpu_regs: &mut Cpu, status: &mut CpuStatus) {
 
     let change_pc = cpu_regs.get_register_mut(15, status.cpsr.mode);
     *change_pc = 0x08;
+    cpu_regs.clear_pipeline = true;
 }
 
 fn data_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &CpuStatus, memory: &mut Memory) {
@@ -497,6 +512,7 @@ fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus, memor
         false => base_address = rn - (rlist.count_ones() * 4),
     }
     let original_base = base_address;
+
     match l_bit {
         true => {
             while rlist != 0 {

@@ -33,6 +33,7 @@ fn main() {
         unbanked_registers: [0, 0, 0, 0, 0, 0, 0 ,0],
         double_banked_registers: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
         many_banked_registers: [[0x03007F00, 0, 0x03007FE0, 0, 0x03007FA0, 0], [0, 0, 0, 0, 0, 0]],
+        clear_pipeline: false,
     };
     let mut status = CpuStatus::new();
 let mut memory = memory::create_memory("test/armwrestler.gba");
@@ -70,8 +71,7 @@ let mut memory = memory::create_memory("test/armwrestler.gba");
 
         // Execute
         if let Some(instruction) = decoded {
-            let old_pc = cpu_regs.get_register(15, status.cpsr.mode);
-            let old_t = status.cpsr.t;
+            // debug reasons
             let old_regs = cpu_regs.clone();
             let old_stat = status.clone();
 
@@ -82,13 +82,11 @@ let mut memory = memory::create_memory("test/armwrestler.gba");
 
             debug_screen(&cpu_regs, instruction, decoded_opcode, &status, &old_regs, &mut f, &old_stat);
             let new_pc = cpu_regs.get_register(15, status.cpsr.mode);
-            let new_t = status.cpsr.t;
-            let clear_pipeline = old_pc != new_pc || old_t != new_t;
 
-            if clear_pipeline {
-                assert!(new_pc != 0, "its calling back to the start");
+            if cpu_regs.clear_pipeline {
                 fetched = None;
                 decoded = None;
+                cpu_regs.clear_pipeline = false;
                 continue;
             }
         }
@@ -157,19 +155,19 @@ fn debug_screen(
     print!(" | ");
     if old_stat.cpsr.c != status.cpsr.c {
         let clear = status.cpsr.c;
-        print!("c = {clear}");
+        print!("c = {clear} ");
     }
     if old_stat.cpsr.z != status.cpsr.z {
-        let clear = status.cpsr.t;
-        print!("z = {clear}");
+        let zero = status.cpsr.z;
+        print!("z = {zero} ");
     }
     if old_stat.cpsr.n != status.cpsr.n {
-        let clear = status.cpsr.n;
-        print!("c = {clear}");
+        let negative = status.cpsr.n;
+        print!("n = {negative} ");
     }
     if old_stat.cpsr.v != status.cpsr.v {
-        let clear = status.cpsr.v;
-        print!("c = {clear}");
+        let overflow = status.cpsr.v;
+        print!("v = {overflow} ");
     }
     stdout().flush().unwrap();
 }

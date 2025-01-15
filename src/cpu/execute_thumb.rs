@@ -1,3 +1,4 @@
+use crate::cpu;
 use crate::cpu::registers::{*, status_registers::*};
 use crate::cpu::decode::DecodedThumb;
 use crate::memory::Memory;
@@ -76,21 +77,17 @@ fn move_shifted(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
 fn add_sub(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
     let rd_index = opcode as u8 & 0b111;
     let rs_index = (opcode >> 3) as u8 & 0b111;
-
-    let value_bit = (opcode >> 10) & 1 == 1;
     let imm = (opcode >> 6) & 0b111;
 
-    let offset;
-    match value_bit {
-        true => offset = imm as u32,
-        false => offset = cpu_regs.get_register(imm as u8, status.cpsr.mode),
-    }
-
-    let sub_bit = (opcode >> 9) & 1 == 1;
     let rs = cpu_regs.get_register(rs_index, status.cpsr.mode);
+    let value_bit = (opcode >> 10) & 1 == 1;
+    let offset = match value_bit {
+        true => imm as u32,
+        false => cpu_regs.get_register(imm as u8, status.cpsr.mode),
+    };
 
-    let result;
-    let carry;
+    let (result, carry);
+    let sub_bit = (opcode >> 9) & 1 == 1;
     match sub_bit {
         true => (result, carry) = rs.overflowing_sub(offset),
         false => (result, carry) = rs.overflowing_add(offset),
@@ -247,6 +244,7 @@ fn hi_operations(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
             *pc = rs & !(0b1);
 
             status.cpsr.t = (rs & 1) == 1;
+            cpu_regs.clear_pipeline = true;
             return;
         }
         _ => unreachable!(),
@@ -454,7 +452,7 @@ fn offset_sp(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
 }
 
 fn push_pop(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mut Memory) {
-    let mut rlist = opcode & 0x7F;
+    let mut rlist = opcode & 0xFF;
     let l_bit = (opcode >> 11) & 1 == 1;
     let r_bit = (opcode >> 8) & 1 == 1;
 
@@ -483,6 +481,7 @@ fn push_pop(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mu
         }
         false => {
             let total_increments = rlist.count_ones() + r_bit as u32;
+
             let mut base_address = sp - (total_increments * 4);
             let base_address_copy = base_address;
             while rlist != 0 {
@@ -496,6 +495,7 @@ fn push_pop(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mu
                 let reg = cpu_regs.get_register(14, status.cpsr.mode);
                 memory.write_u32(base_address, reg);
             }
+
             let sp = cpu_regs.get_register_mut(13, status.cpsr.mode);
             *sp = base_address_copy;
         }
@@ -549,6 +549,7 @@ fn unconditional_branch(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus)
 
     let pc = cpu_regs.get_register_mut(15, status.cpsr.mode);
     *pc = pc.wrapping_add_signed(offset as i32);
+    cpu_regs.clear_pipeline = true;
 }
 
 fn conditional_branch(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
@@ -558,26 +559,27 @@ fn conditional_branch(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
     }
 
     let pc = cpu_regs.get_register_mut(15, status.cpsr.mode);
-
     let mut offset = (opcode & 0xFF) as u32;
     offset <<= 1;
     if (offset >> 8) & 1 == 1 {
         offset |= 0xFFFFFF00;
     }
     *pc = pc.wrapping_add_signed(offset as i32);
+    cpu_regs.clear_pipeline = true;
 }
 
 fn long_branch_link(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
     let mut offset = opcode as u32 & 0x7FF;
     let h_bit = (opcode >> 11) & 1 == 1;
 
-    let pc = cpu_regs.get_register(15, status.cpsr.mode);
     match h_bit {
         false => {
             if (offset >> 10) & 1 == 1 {
                 offset |= 0xFFFFF800;
             }
             offset <<= 12;
+            
+            let pc = cpu_regs.get_register(15, status.cpsr.mode);
             let lr = cpu_regs.get_register_mut(14, status.cpsr.mode);
             *lr = pc.wrapping_add(offset);
         },
@@ -590,6 +592,7 @@ fn long_branch_link(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
             *pc = lr.wrapping_add(offset);
             let lr = cpu_regs.get_register_mut(14, status.cpsr.mode);
             *lr = temp | 1;
+            cpu_regs.clear_pipeline = true;
         },
-    }
+    };
 }

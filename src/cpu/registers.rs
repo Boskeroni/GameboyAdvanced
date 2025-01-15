@@ -18,6 +18,7 @@ pub struct Cpu {
     // same logic as the previous one, just with more [[r13, f13_fiq, r13_svc, r13_abt, r13_irq, r13_und], ...]
     pub many_banked_registers: [[u32; 6]; 2], 
     pub pc: u32,
+    pub clear_pipeline: bool,
 }
 impl Cpu {
     /// the mode is technically not always needed but will always be needed to be passed
