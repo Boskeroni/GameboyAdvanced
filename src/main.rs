@@ -79,9 +79,7 @@ let mut memory = memory::create_memory("test/armwrestler.gba");
                 Thumb(instr) => execute_thumb(decoded_opcode as u16, instr, &mut cpu_regs, &mut status, &mut memory),
                 Arm(instr) => execute_arm(decoded_opcode, instr, &mut cpu_regs, &mut status, &mut memory),
             };
-
             debug_screen(&cpu_regs, instruction, decoded_opcode, &status, &old_regs, &mut f, &old_stat);
-            let new_pc = cpu_regs.get_register(15, status.cpsr.mode);
 
             if cpu_regs.clear_pipeline {
                 fetched = None;

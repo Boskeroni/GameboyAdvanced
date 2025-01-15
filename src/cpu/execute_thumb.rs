@@ -1,4 +1,3 @@
-use crate::cpu;
 use crate::cpu::registers::{*, status_registers::*};
 use crate::cpu::decode::DecodedThumb;
 use crate::memory::Memory;
@@ -578,7 +577,7 @@ fn long_branch_link(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
                 offset |= 0xFFFFF800;
             }
             offset <<= 12;
-            
+
             let pc = cpu_regs.get_register(15, status.cpsr.mode);
             let lr = cpu_regs.get_register_mut(14, status.cpsr.mode);
             *lr = pc.wrapping_add(offset);
