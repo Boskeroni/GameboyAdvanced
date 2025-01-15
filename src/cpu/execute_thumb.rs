@@ -74,52 +74,55 @@ fn move_shifted(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
 }
 
 fn add_sub(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
-    let rd_index = opcode as u8 & 0b111;
-    let rs_index = (opcode >> 3) as u8 & 0b111;
-    let imm = (opcode >> 6) & 0b111;
+    let rd_index = opcode & 0x7;
+    let rs_index = (opcode >> 3) & 0x7;
+    let value = (opcode >> 6) & 0x7;
 
-    let rs = cpu_regs.get_register(rs_index, status.cpsr.mode);
-    let value_bit = (opcode >> 10) & 1 == 1;
-    let offset = match value_bit {
-        true => imm as u32,
-        false => cpu_regs.get_register(imm as u8, status.cpsr.mode),
+    let i_bit = (opcode >> 10) & 1 == 1;
+    let mut offset = match i_bit {
+        true => value as u32,
+        false => cpu_regs.get_register(value as u8, status.cpsr.mode),
     };
 
-    let (result, carry);
-    let sub_bit = (opcode >> 9) & 1 == 1;
-    match sub_bit {
-        true => (result, carry) = rs.overflowing_sub(offset),
-        false => (result, carry) = rs.overflowing_add(offset),
+    let op = (opcode >> 9) & 1 == 1;
+    if op { // this means its a subtraction
+        offset = (!offset).wrapping_add(1);
     }
+
+    let rs = cpu_regs.get_register(rs_index as u8, status.cpsr.mode);
+    let (result, carry) = rs.overflowing_add(offset);
 
     status.cpsr.c = carry;
     status.cpsr.z = result == 0;
     status.cpsr.n = (result >> 31) & 1 == 1;
+    status.cpsr.v = ((rs ^ result) & (offset ^ result)) >> 31 & 1 == 1;
 
-    let rd = cpu_regs.get_register_mut(rd_index, status.cpsr.mode);
+    let rd = cpu_regs.get_register_mut(rd_index as u8, status.cpsr.mode);
     *rd = result;
+
 }
 
 fn alu_imm(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
-    let offset = opcode as u32 & 0xFF;
-
-    let rd_index = (opcode >> 8) as u8 & 0b111;
+    let mut offset = (opcode as u32) & 0xFF;
+    let rd_index = (opcode >> 8) as u8 & 0x7;
     let rd = cpu_regs.get_register(rd_index, status.cpsr.mode);
 
-    let result;
-    let carry;
-    let op = (opcode >> 11) & 0b11;
-    match op {
-        0b00 => (result, carry) = (offset, false),
-        0b01 => (result, carry) = rd.overflowing_sub(offset),
-        0b10 => (result, carry) = rd.overflowing_add(offset),
-        0b11 => (result, carry) = rd.overflowing_sub(offset),
-        _ => unreachable!(),
+
+    let op = (opcode >> 11) & 0x3;
+    if op & 1 == 1 { // all the sub instructions
+        offset = (!offset).wrapping_add(1);
     }
+
+    let (result, carry) = match op {
+        0b00 => (offset, false),
+        0b01..=0b11 => rd.overflowing_add(offset),
+        _ => unreachable!(),
+    };
 
     status.cpsr.c = carry;
     status.cpsr.n = (result >> 31) & 1 == 1;
     status.cpsr.z = result == 0;
+    status.cpsr.v = ((rd ^ result) & (offset ^ result)) >> 31 & 1 == 1;
 
     // CMP doesnt change the value
     if op == 1 {
@@ -130,67 +133,52 @@ fn alu_imm(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
 }
 
 fn alu_ops(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
-    let rd_index = opcode as u8 & 0b111;
-    let rs_index = (opcode >> 3) as u8 & 0b111;
-
+    let rd_index = opcode as u8 & 0x7;
+    let rs_index = (opcode >> 3) as u8 & 0x7;
     let rd = cpu_regs.get_register(rd_index, status.cpsr.mode);
-    let rs = cpu_regs.get_register(rs_index, status.cpsr.mode);
+    let mut rs = cpu_regs.get_register(rs_index, status.cpsr.mode);
 
-    let op = (opcode >> 6) & 0b1111;
-    let result;
-    let carry;
-
-
+    let op = (opcode >> 6) & 0xF;
     let mut undo = false;
-    match op {
-        0b0000 => (result, carry) = (rd & rs, false), // yep
-        0b0001 => (result, carry) = (rd ^ rs, false), // yep
-        0b0010 => {
-            result = rd << rs; // yep
-            carry = (rd >> (32 - rs)) & 1 == 1; // yep
-        }
-        0b0011 => {
-            result = rd >> rs; // yep
-            carry = (rd >> (rs - 1)) & 1 == 1; // yep
-        }
+
+    let (result, carry) = match op {
+        0b0000 => (rd & rs, false), // yep
+        0b0001 => (rd ^ rs, false), // yep
+        0b0010 => (rd << rs, (rd >> (32 - rs)) & 1 == 1), // yep
+        0b0011 => (rd >> rs, (rd >> (rs - 1)) & 1 == 1), // yep
         0b0100 => {
             let mut temp = rd >> rs; // yep
             if (rd >> 31) & 1 == 1 {
                 temp |= !(std::u32::MAX >> rs);
             }
-            result = temp;
-            carry = (rd >> (rs - 1)) & 1 == 1;
+            (temp, (rd >> (rs - 1)) & 1 == 1)
         }
         0b0101 => {
-            let temp = rd.overflowing_add(rs); // yeo
-            let temp_2 = temp.0.overflowing_add(status.cpsr.c as u32);
-            result = temp_2.0;
-            carry = temp.1 | temp_2.1;
+            let (first_result, first_carry) = rd.overflowing_add(rs);
+            let (second_result, second_carry) = first_result.overflowing_add(status.cpsr.c as u32);
+            (second_result, second_carry | first_carry)
         }
         0b0110 => {
-            let temp = rd.overflowing_sub(rs); // yep
-            let temp_2 = temp.0.overflowing_sub(!status.cpsr.c as u32);
-            result = temp_2.0;
-            carry = temp.1 | temp_2.1;
+            rs = (!rs).wrapping_add(1);
+            let c_bit_add = (!((!status.cpsr.c) as u32)).wrapping_add(1);
+            let (first_result, first_carry) = rd.overflowing_add(rs);
+            let (second_result, second_carry) = first_result.overflowing_add(c_bit_add);
+            (second_result, second_carry | first_carry)
         }
-        0b0111 => {
-            result = rd.rotate_right(rs); // yep
-            carry = (result >> 31) & 1 == 1;
-        }
+        0b0111 => (rd.rotate_right(rs), (rd.rotate_right(rs) >> 31) & 1 == 1),
         0b1000 => {
             undo = true;
-            result = rd & rs;
-            carry = false;
+            (rd & rs, false)
         }
-        0b1001 => (result, carry) = (!rs + 1, false),
-        0b1010 => {(result, carry) = rd.overflowing_sub(rs); undo = true},
-        0b1011 => {(result, carry) = rd.overflowing_add(rs); undo = true},
-        0b1100 => (result, carry) = (rd | rs, false),
-        0b1101 => (result, carry) = rd.overflowing_mul(rs),
-        0b1110 => (result, carry) = (rd & !rs, false),
-        0b1111 => (result, carry) = (!rs, false),
+        0b1001 => (!rs + 1, false),
+        0b1010 => {undo = true; rd.overflowing_add((!rs).wrapping_add(1))},
+        0b1011 => {undo = true; rd.overflowing_add(rs)},
+        0b1100 => (rd | rs, false),
+        0b1101 => rd.overflowing_mul(rs),
+        0b1110 => (rd & !rs, false),
+        0b1111 => (!rs, false),
         _ => unreachable!(),
-    }
+    };
 
     status.cpsr.c = carry;
     status.cpsr.z = result == 0;
@@ -228,13 +216,22 @@ fn hi_operations(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
         assert!(op == 0b11, "H1=0, H2=0, instruction is invalid for these values");
     }
 
-    let rs = cpu_regs.get_register(rs_index, status.cpsr.mode);
+    let mut rs = cpu_regs.get_register(rs_index, status.cpsr.mode);
     let rd = cpu_regs.get_register(rd_index, status.cpsr.mode);
 
     let result;
     match op {
         0b00 => result = rd.wrapping_add(rs),
-        0b01 => result = 0,
+        0b01 => {
+            // this is the only instruction that sets the codes
+            rs = (!rs).wrapping_add(1);
+            let (result, carry) = rd.overflowing_add(rs);
+            status.cpsr.c = carry;
+            status.cpsr.n = (result >> 31) & 1 == 1;
+            status.cpsr.z = result == 0;
+            status.cpsr.v = ((rs ^ result) & (rd ^ result)) >> 31 & 1 == 1;
+            return;
+        },
         0b10 => result = rs,
         0b11 => {
             assert!(!h1, "H1=1 for this instruction is undefined");
@@ -247,15 +244,6 @@ fn hi_operations(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
             return;
         }
         _ => unreachable!(),
-    }
-
-    if op == 0b01 {
-        // this is the only instruction that sets the codes
-        let (result, carry) = rd.overflowing_sub(rs);
-        status.cpsr.c = carry;
-        status.cpsr.n = (result >> 31) & 1 == 1;
-        status.cpsr.z = result == 0;
-        status.cpsr.v = ((rs ^ result) & (rd ^ result)) >> 31 & 1 == 1;
     }
 
     let rd = cpu_regs.get_register_mut(rd_index, status.cpsr.mode);

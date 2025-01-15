@@ -104,20 +104,18 @@ fn data_processing(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
     let rd_index = (opcode >> 12) as u8 & 0xF;
 
     let mut op1 = cpu_regs.get_register(rn_index, status.cpsr.mode);
-    let dst = cpu_regs.get_register_mut(rd_index, status.cpsr.mode);
 
     let mut undo = false;
-    let backup = *dst;
     let (result, alu_carry) = match operation {
         0b0000 => (op1 & op2, op2_carry), // and
         0b0001 => (op1 ^ op2, op2_carry), // eor
         0b0010 => {
-            op2 = !op2.wrapping_add(1);
+            op2 = (!op2).wrapping_add(1);
             op1.overflowing_add(op2)
         }, // sub
         0b0011 => {
-            op1 = !op1.wrapping_add(1);
-            op2.overflowing_sub(op1)
+            op1 = (!op1).wrapping_add(1);
+            op2.overflowing_add(op1)
         }, // rsb
         0b0100 => op1.overflowing_add(op2), // add
         0b0101 => {
@@ -126,16 +124,16 @@ fn data_processing(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
             (end_res, inter_of | end_of)
         }, // adc
         0b0110 => {
-            op2 = !op2.wrapping_add(1);
-            let (inter_res, inter_of) = op1.overflowing_add(op2);
-            let (end_res, end_of) = inter_res.overflowing_sub(!status.cpsr.c as u32);
-            (end_res, inter_of | end_of)
+            op2 = (!op2).wrapping_add(1).wrapping_add(status.cpsr.c as u32);
+            let (first_result, first_carry) = op1.overflowing_add(op2);
+            let (second_result, second_carry) = first_result.overflowing_add(std::u32::MAX - 1);
+            (second_result, first_carry | second_carry)
         }, // sbc,
         0b0111 => {
-            op1 = !op1.wrapping_add(1);
-            let (inter_res, inter_of) = op2.overflowing_add(op1);
-            let (end_res, end_of) = inter_res.overflowing_sub(!status.cpsr.c as u32);
-            (end_res, inter_of | end_of)
+            op1 = (!op1).wrapping_add(1).wrapping_add(status.cpsr.c as u32);
+            let (first_result, first_carry) = op2.overflowing_add(op1);
+            let (second_result, second_carry) = first_result.overflowing_add(std::u32::MAX - 1);
+            (second_result, first_carry | second_carry)
         }, // rsc
         0b1000 => {
             undo = true; 
@@ -147,10 +145,6 @@ fn data_processing(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
         }, // teq
         0b1010 => {
             undo = true;
-            if rn_index == 1 {
-                println!("{:?}", op1.overflowing_sub(op2));
-            }
-
             op2 = (!op2).wrapping_add(1);
             op1.overflowing_add(op2)
         }, // cmp
@@ -166,8 +160,6 @@ fn data_processing(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
         0b1111 => (!op2, op2_carry), // mvn
         _ => unreachable!()
     };
-    *dst = result;
-
     // checking if we are returning from a SWI
     if let ProcessorMode::Supervisor = status.cpsr.mode {
         if operation == 0b1101 && i_bit && opcode & 0xF == 14 {
@@ -175,21 +167,22 @@ fn data_processing(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
         }
     }
 
-    // both operations respect the S bit and R15 rule
-    if !s_bit {
-        return;
-    }
-    status.cpsr.z = *dst == 0;
-    status.cpsr.n = (*dst >> 31) & 1 == 1;
+    if s_bit {
+        status.cpsr.z = result == 0;
+        status.cpsr.n = (result >> 31) & 1 == 1;
+        status.cpsr.c = alu_carry;
+        // the v flag is only affected when the instruction is arithmetic
+        if ![0b0000, 0b0001, 0b1000, 0b1001, 0b1100, 0b1101, 0b1110, 0b1111].contains(&operation) {
+            status.cpsr.v = ((op1 ^ result) & (op2 ^ result)) >> 31 & 1 != 0;
+        }
 
-    // it says that this should be ignored sometimes
-    // but honestly i don't know when so i am doing it all the time
-    status.cpsr.v = ((op1 ^ result) & (op2 ^ result)) >> 31 & 1 != 0;
-    status.cpsr.c = alu_carry;
-
-    if undo {
-        *dst = backup;
+        if undo {
+            return;
+        }
     }
+
+    let dst = cpu_regs.get_register_mut(rd_index, status.cpsr.mode);
+    *dst = result;
 }
 
 fn psr_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
