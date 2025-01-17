@@ -29,14 +29,14 @@ fn main() {
     window.set_target_fps(60);
 
     let mut cpu_regs = Cpu {
-        pc: 0x000000,
+        pc: 0x8000000,
         unbanked_registers: [0, 0, 0, 0, 0, 0, 0 ,0],
         double_banked_registers: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
         many_banked_registers: [[0x03007F00, 0, 0x03007FE0, 0, 0x03007FA0, 0], [0, 0, 0, 0, 0, 0]],
         clear_pipeline: false,
     };
     let mut status = CpuStatus::new();
-let mut memory = memory::create_memory("test/armwrestler.gba");
+    let mut memory = memory::create_memory("test/arm.gba");
     let mut ppu = PpuState::new();
 
     let mut fetched: Option<u32> = None;
@@ -140,7 +140,7 @@ fn debug_screen(
     writeln!(f, "").unwrap();
 
     let mut temp = String::new();
-    std::io::stdin().read_line(&mut temp).unwrap();
+    //std::io::stdin().read_line(&mut temp).unwrap();
     print!("{instr:?} | {opcode:X} | ");
 
     for i in 0..=15 {

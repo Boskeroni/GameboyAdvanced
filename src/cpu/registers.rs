@@ -1,12 +1,12 @@
 #[derive(Debug, Copy, Clone, Default)]
 pub enum ProcessorMode {
+    #[default]
     User = 0b10000,
     FastInterrupt = 0b10001,
     Interrupt = 0b10010,
     Supervisor = 0b10011,
     Abort = 0b10111,
     Undefined = 0b11011,
-    #[default]
     System = 0b11111,
 }
 
