@@ -29,6 +29,11 @@ pub fn get_shifted_value(cpu_regs: &Cpu, opcode: u32, status: &CpuStatus) -> (u3
     let rm_index = opcode as u8 & 0xF;
     let rm = cpu_regs.get_register(rm_index, status.cpsr.mode);
 
+    // if 0 is from a register, then unchanged
+    if shift_id && shift_amount == 0 {
+        return (rm, status.cpsr.c);
+    }
+
     match shift_type {
         0b00 => {
             match shift_amount {
@@ -48,6 +53,7 @@ pub fn get_shifted_value(cpu_regs: &Cpu, opcode: u32, status: &CpuStatus) -> (u3
                 32.. => return (0, false),
                 _ => {}
             }
+
             if shift_amount == 0 {
                 return (0, (rm >> 31) & 1 == 1);
             }
@@ -58,6 +64,7 @@ pub fn get_shifted_value(cpu_regs: &Cpu, opcode: u32, status: &CpuStatus) -> (u3
                 let result = if (rm >> 31) & 1 == 1 {std::u32::MAX} else {0};
                 return (result, result != 0);
             }
+
             let mut temp = rm >> shift_amount;
             if (rm >> 31) & 1 == 1 {
                 temp |= !(std::u32::MAX >> shift_amount);

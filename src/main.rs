@@ -140,7 +140,7 @@ fn debug_screen(
     writeln!(f, "").unwrap();
 
     let mut temp = String::new();
-    //std::io::stdin().read_line(&mut temp).unwrap();
+    std::io::stdin().read_line(&mut temp).unwrap();
     print!("{instr:?} | {opcode:X} | ");
 
     for i in 0..=15 {
