@@ -103,7 +103,12 @@ fn data_processing(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
     let rn_index = (opcode >> 16) as u8 & 0xF;
     let rd_index = (opcode >> 12) as u8 & 0xF;
 
-    let op1 = cpu_regs.get_register(rn_index, status.cpsr.mode);
+    let op1;
+    if rn_index == 15 && !i_bit && (opcode >> 4) & 1 == 1 {
+        op1 = cpu_regs.get_register(15, status.cpsr.mode) + 4;
+    } else {
+        op1 = cpu_regs.get_register(rn_index, status.cpsr.mode);
+    }
 
     let mut undo = false;
     let (result, alu_carry) = match operation {
@@ -163,11 +168,17 @@ fn data_processing(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
         0b1111 => (!op2, op2_carry), // mvn
         _ => unreachable!()
     };
-    // checking if we are returning from a SWI
-    if let ProcessorMode::Supervisor = status.cpsr.mode {
-        if operation == 0b1101 && i_bit && opcode & 0xF == 14 {
-            status.cpsr.mode = ProcessorMode::User;
+
+    if rd_index == 15 && s_bit {
+        if let ProcessorMode::User = status.cpsr.mode {
+            panic!("this instruction shouldn't be used in user mode");
         }
+
+        let rd = cpu_regs.get_register_mut(rd_index, status.cpsr.mode);
+        *rd = result;
+
+        status.cpsr = *status.get_spsr();
+        return;
     }
 
     if s_bit {
@@ -185,33 +196,41 @@ fn data_processing(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
         }
     }
 
+    cpu_regs.clear_pipeline = rd_index == 15;
     let dst = cpu_regs.get_register_mut(rd_index, status.cpsr.mode);
     *dst = result;
 }
 
 fn psr_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
-    // matching between the middle 10 bits
-    match (opcode >> 12) & 0b11_1111_1111 {
+    // no clear id is given for these instructions so this is the one i'll use
+    let personal_id = (opcode >> 12) & 0x3FF;
+
+    match personal_id {
         0b1010011111 => { // transfer register contents to PSR
             // MSR
+            // i am convinced that it can be both reg or imm
             let cpsr_bit = (opcode >> 22) & 1 == 1;
             
-            let rm_index = opcode as u8 & 0xF;
-            let rm = cpu_regs.get_register(rm_index, status.cpsr.mode);
-
-            if let ProcessorMode::User = status.cpsr.mode {
-                if !cpsr_bit {
-                    status.set_flags_cpsr(convert_u32_cpsr(rm));
-                    return;
+            let i_bit = (opcode >> 25) & 1 == 1;
+            let operand = match i_bit {
+                true => {
+                    let imm = opcode & 0xFF;
+                    let shift_amount = (opcode >> 8) & 0xF;
+                    imm.rotate_right(shift_amount * 2)
                 }
-            }
+                false => {
+                    let reg_index = opcode as u8 & 0b1111;
+                    assert!(reg_index != 15, "source register cannot be register 15");
+                    cpu_regs.get_register(reg_index, status.cpsr.mode)
+                }
+            };
 
             let dst_cpsr;
             match cpsr_bit {
                 true => dst_cpsr = status.get_spsr_mut(),
                 false => dst_cpsr = &mut status.cpsr,
             }
-            *dst_cpsr = convert_u32_cpsr(rm);
+            *dst_cpsr = convert_u32_cpsr(operand);
         }
         0b1010001111 => {
             // MSR FLAG BITS ONLY

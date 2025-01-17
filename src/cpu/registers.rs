@@ -108,6 +108,7 @@ pub mod status_registers {
                 spsr: [Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default()],
             }
         }
+
         // if there is no spsr, it returns the global cpsr
         pub fn get_spsr(&self) -> &Cpsr {
             use ProcessorMode::*;
@@ -117,7 +118,7 @@ pub mod status_registers {
                 Abort => &self.spsr[2],
                 Interrupt => &self.spsr[3],
                 Undefined => &self.spsr[4],
-                _ => &self.cpsr,
+                _ => panic!("this shouldnt be accessed"),
             }   
         }
         pub fn get_spsr_mut(&mut self) -> &mut Cpsr {

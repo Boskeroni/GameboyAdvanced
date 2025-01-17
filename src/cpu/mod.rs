@@ -27,7 +27,13 @@ pub fn get_shifted_value(cpu_regs: &Cpu, opcode: u32, status: &CpuStatus) -> (u3
     }
 
     let rm_index = opcode as u8 & 0xF;
-    let rm = cpu_regs.get_register(rm_index, status.cpsr.mode);
+
+    let rm;
+    if shift_id && rm_index == 15 {
+        rm = cpu_regs.get_register(rm_index, status.cpsr.mode) + 4;
+    } else {
+        rm = cpu_regs.get_register(rm_index, status.cpsr.mode);
+    }
 
     // if 0 is from a register, then unchanged
     if shift_id && shift_amount == 0 {
