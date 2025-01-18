@@ -94,6 +94,8 @@ impl Cpu {
 }
 
 pub mod status_registers {
+    use core::panic;
+
     use crate::cpu::registers::ProcessorMode;
 
     #[derive(Debug, Clone, Copy)]
@@ -118,6 +120,7 @@ pub mod status_registers {
                 Abort => &self.spsr[2],
                 Interrupt => &self.spsr[3],
                 Undefined => &self.spsr[4],
+                System => &self.cpsr, // edge case got from a discord person
                 _ => panic!("this shouldnt be accessed"),
             }   
         }
@@ -132,28 +135,6 @@ pub mod status_registers {
                 _ => &mut self.cpsr,
             }
         }
-        pub fn set_flags_spsr(&mut self, new_spsr: Cpsr) {
-            use ProcessorMode::*;
-            let spsr = match self.cpsr.mode {
-                FastInterrupt => &mut self.spsr[0],
-                Supervisor => &mut self.spsr[1],
-                Abort => &mut self.spsr[2],
-                Interrupt => &mut self.spsr[3],
-                Undefined => &mut self.spsr[4],
-                _ => &mut self.cpsr,
-            };
-            spsr.n = new_spsr.n;
-            spsr.c = new_spsr.c;
-            spsr.v = new_spsr.v;
-            spsr.z = new_spsr.z;
-        }
-        pub fn set_flags_cpsr(&mut self, new_cpsr: Cpsr) {
-            self.cpsr.n = new_cpsr.n;
-            self.cpsr.c = new_cpsr.c;
-            self.cpsr.z = new_cpsr.z;
-            self.cpsr.v = new_cpsr.v;
-        }
-
         pub fn set_specific_spsr(&mut self, new_cpsr: Cpsr, mode: ProcessorMode) {
             use ProcessorMode::*;
             let spsr = match mode {
@@ -174,11 +155,33 @@ pub mod status_registers {
         pub c: bool, // true if the was a carry
         pub n: bool, // true if the value is signed
         pub v: bool, // true if overflow
-        pub q: bool, // sticky overflow (not too sure yet of its purpose, ill see when it is used)
         pub i: bool, // IRQ disable
         pub f: bool, // FIQ disable
         pub t: bool, // the state of the instruction set (0 = arm, 1 = thumb)
         pub mode: ProcessorMode, // processor mode (represented by the 5-bits shown in enum)
+    }
+    impl Cpsr {
+        pub fn set_flags(&mut self, bits: u32) {
+            self.n = (bits >> 31) & 1 == 1;
+            self.z = (bits >> 30) & 1 == 1;
+            self.c = (bits >> 29) & 1 == 1;
+            self.v = (bits >> 28) & 1 == 1;
+        }
+        pub fn set_control(&mut self, bits: u32) {
+            self.i = (bits >> 7) & 1 == 1;
+            self.f = (bits >> 6) & 1 == 1;
+            self.t = (bits >> 5) & 1 == 1;
+            self.mode = match bits & 0b11111 {
+                0b10000 => ProcessorMode::User,
+                0b10001 => ProcessorMode::FastInterrupt,
+                0b10010 => ProcessorMode::Interrupt,
+                0b10011 => ProcessorMode::Supervisor,
+                0b10111 => ProcessorMode::Abort,
+                0b11011 => ProcessorMode::Undefined,
+                0b11111 => ProcessorMode::System,
+                _ => panic!("unrecognised CPSR mode"),
+            }
+        }
     }
     pub fn check_condition(condition: u32, cpsr: &Cpsr) -> bool {
         match condition {
@@ -201,37 +204,14 @@ pub mod status_registers {
             _ => unreachable!("condition is only 4 bits long")
         }
     }
-    pub fn convert_cpsr_u32(cpsr: &Cpsr) -> u32 {
+    pub fn convert_psr_u32(cpsr: &Cpsr) -> u32 {
         (cpsr.n as u32) << 31 |
         (cpsr.z as u32) << 30 |
         (cpsr.c as u32) << 29 |
         (cpsr.v as u32) << 28 |
-        (cpsr.q as u32) << 27 |
         (cpsr.i as u32) << 7  |
         (cpsr.f as u32) << 6  |
         (cpsr.t as u32) << 5  |
         (cpsr.mode as u32)
-    }
-    pub fn convert_u32_cpsr(cpsr: u32) -> Cpsr {
-        Cpsr {
-            n: (cpsr >> 31) & 1 == 1,
-            z: (cpsr >> 30) & 1 == 1,
-            c: (cpsr >> 29) & 1 == 1,
-            v: (cpsr >> 28) & 1 == 1,
-            q: (cpsr >> 27) & 1 == 1,
-            i: (cpsr >> 7 ) & 1 == 1,
-            f: (cpsr >> 6 ) & 1 == 1,
-            t: (cpsr >> 5 ) & 1 == 1,
-            mode: match cpsr & 0b11111 {
-                0b10000 => ProcessorMode::User,
-                0b10001 => ProcessorMode::FastInterrupt,
-                0b10010 => ProcessorMode::Interrupt,
-                0b10011 => ProcessorMode::Supervisor,
-                0b10111 => ProcessorMode::Abort,
-                0b11011 => ProcessorMode::Undefined,
-                0b11111 => ProcessorMode::System,
-                _ => ProcessorMode::Undefined,
-            } 
-        }
     }
 }

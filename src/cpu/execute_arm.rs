@@ -173,11 +173,14 @@ fn data_processing(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
         if let ProcessorMode::User = status.cpsr.mode {
             panic!("this instruction shouldn't be used in user mode");
         }
+        status.cpsr = *status.get_spsr();
 
+        if undo {
+            return;
+        }
         let rd = cpu_regs.get_register_mut(rd_index, status.cpsr.mode);
         *rd = result;
 
-        status.cpsr = *status.get_spsr();
         return;
     }
 
@@ -202,73 +205,50 @@ fn data_processing(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
 }
 
 fn psr_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
-    // no clear id is given for these instructions so this is the one i'll use
-    let personal_id = (opcode >> 12) & 0x3FF;
+    let psr_bit = (opcode >> 22) & 1 == 1;
+    let op = (opcode >> 21) & 1 == 1;
 
-    match personal_id {
-        0b1010011111 => { // transfer register contents to PSR
+    match op {
+        true => {
             // MSR
-            // i am convinced that it can be both reg or imm
-            let cpsr_bit = (opcode >> 22) & 1 == 1;
-            
             let i_bit = (opcode >> 25) & 1 == 1;
+            let f_bit = (opcode >> 19) & 1 == 1;
+            let c_bit = (opcode >> 16) & 1 == 1;
+
             let operand = match i_bit {
                 true => {
                     let imm = opcode & 0xFF;
-                    let shift_amount = (opcode >> 8) & 0xF;
-                    imm.rotate_right(shift_amount * 2)
+                    let rotate = (opcode >> 8) & 0xF;
+                    imm.rotate_right(rotate * 2)
                 }
                 false => {
-                    let reg_index = opcode as u8 & 0b1111;
-                    assert!(reg_index != 15, "source register cannot be register 15");
-                    cpu_regs.get_register(reg_index, status.cpsr.mode)
+                    let rm_index = opcode as u8 & 0xF;
+                    cpu_regs.get_register(rm_index, status.cpsr.mode)
                 }
             };
 
-            let dst_cpsr;
-            match cpsr_bit {
-                true => dst_cpsr = status.get_spsr_mut(),
-                false => dst_cpsr = &mut status.cpsr,
-            }
-            *dst_cpsr = convert_u32_cpsr(operand);
-        }
-        0b1010001111 => {
-            // MSR FLAG BITS ONLY
-            let i_flag = (opcode >> 25) & 1 == 1;
-            let operand = match i_flag {
-                true => {
-                    let imm = opcode & 0xFF;
-                    let shift_amount = (opcode >> 8) & 0xF;
-                    imm.rotate_right(shift_amount * 2)
-                }
-                false => {
-                    let reg_index = opcode as u8 & 0b1111;
-                    assert!(reg_index != 15, "source register cannot be register 15");
-                    cpu_regs.get_register(reg_index, status.cpsr.mode)
-                }
+            let psr = match psr_bit {
+                true => status.get_spsr_mut(),
+                false => &mut status.cpsr,
             };
-            
-            let new_psr = convert_u32_cpsr(operand);
-            let p_bit = (opcode >> 22) & 1 == 1;
-            match p_bit {
-                true => status.set_flags_spsr(new_psr),
-                false => status.set_flags_cpsr(new_psr),
+
+            if f_bit {
+                psr.set_flags(operand);
+            }
+            if c_bit {
+                psr.set_control(operand);
             }
         }
-        _ => { // im just assuming all the other ones are MRS
-            // just a quick test to make sure it is MRS, not a full check, just gives the program more confidence
-            assert!((opcode >> 16) & 0b111111 == 0b001111, "not a MSR instruction");
-
-            let dst_index = (opcode >> 12) & 0xF;
-            assert!(dst_index != 15, "destination register cannot be register 15");
-            let dest_reg = cpu_regs.get_register_mut(dst_index as u8, status.cpsr.mode);
-
-            let cpsr = match (opcode >> 22) & 1 != 0 {
-                true => convert_cpsr_u32(status.get_spsr()),
-                false => convert_cpsr_u32(&status.cpsr),
+        false => {
+            // MRS
+            let psr = match psr_bit {
+                true => status.get_spsr(),
+                false => &status.cpsr,
             };
 
-            *dest_reg = cpsr;
+            let rd_index = (opcode >> 12) as u8 & 0xF;
+            let rd = cpu_regs.get_register_mut(rd_index, status.cpsr.mode);
+            *rd = convert_psr_u32(psr);
         }
     }
 }
@@ -291,7 +271,7 @@ fn multiply(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
 
     *rd = rm.wrapping_mul(rs);
     if (opcode >> 21) & 1 == 1 {
-        *rd += rn;
+        *rd = rd.wrapping_add(rn);
     }
 
     if (opcode >> 20) & 1 == 1 {
@@ -301,8 +281,8 @@ fn multiply(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
 }
 
 fn multiply_long(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
-    let rm_index = opcode        as u8 & 0xF;
-    let rs_index = (opcode >> 8) as u8 & 0xF;
+    let rm_index = opcode          as u8 & 0xF;
+    let rs_index = (opcode >> 8)   as u8 & 0xF;
     let rdl_index = (opcode >> 12) as u8 & 0xF;
     let rdh_index = (opcode >> 16) as u8 & 0xF;
 
@@ -317,16 +297,30 @@ fn multiply_long(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
     let rm = cpu_regs.get_register(rm_index, status.cpsr.mode);
     let rs = cpu_regs.get_register(rs_index, status.cpsr.mode);
 
-    let mut result = match (opcode >> 22) & 1 != 0 {
-        true => ((rm as i64) * (rs as i64)) as u64,
-        false => (rm as u64) * (rs as u64)
+    let u_bit = (opcode >> 22) & 1 == 1;
+    
+    let mut result = match u_bit {
+        true => {
+            let (op1, op2);
+            match (rm >> 31) & 1 == 1 {
+                true => op1 = (0xFFFFFFFF00000000 as u64 | rm as u64) as i64,
+                false => op1 = rm as i64
+            }
+            match (rs >> 31) & 1 == 1 {
+                true => op2 = (0xFFFFFFFF00000000 as u64 | rs as u64) as i64,
+                false => op2 = rs as i64,
+            }
+            op1.wrapping_mul(op2) as u64
+        },
+        false => (rm as u64).wrapping_mul(rs as u64),
     };
 
-    if (opcode >> 21) & 1 != 0 {
+    let a_bit = (opcode >> 21) & 1 == 1;
+    if a_bit{
         let low_acc = cpu_regs.get_register(rdl_index, status.cpsr.mode) as u64;
         let hi_acc = cpu_regs.get_register(rdh_index, status.cpsr.mode) as u64;
 
-        result += (hi_acc << 32) | low_acc;
+        result = result.wrapping_add((hi_acc << 32) | low_acc);
     }
 
     let rdl = cpu_regs.get_register_mut(rdl_index, status.cpsr.mode);
@@ -335,9 +329,10 @@ fn multiply_long(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
     let rdh = cpu_regs.get_register_mut(rdh_index, status.cpsr.mode);
     *rdh = (result >> 32) as u32;
 
-    if (opcode >> 20 ) & 1 != 0 {
+    let s_bit = (opcode >> 20) & 1 == 1;
+    if s_bit {
         status.cpsr.z = result == 0;
-        status.cpsr.n = (result >> 63) & 1 != 0;
+        status.cpsr.n = (result >> 63) & 1 == 1;
     }
 }
 
