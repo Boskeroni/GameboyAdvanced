@@ -384,9 +384,18 @@ fn data_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &CpuStatus, memory: &m
             };
             let rd = cpu_regs.get_register_mut(rd_index, status.cpsr.mode);
             *rd = data;
+
+            cpu_regs.clear_pipeline = rd_index == 15;
+            if rn_index == rd_index {
+                return;
+            }
         },
         false => {
-            let rd = cpu_regs.get_register(rd_index, status.cpsr.mode);
+            let rd;
+            match rd_index {
+                15 => rd = cpu_regs.get_register(rd_index, status.cpsr.mode) + 4,
+                _ => rd = cpu_regs.get_register(rd_index, status.cpsr.mode),
+            }
             match b_bit {
                 true => memory.write_u8(address, rd as u8),
                 false => memory.write_u32(address, rd),
