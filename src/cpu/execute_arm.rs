@@ -555,10 +555,21 @@ fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus, memor
         true => ProcessorMode::User,
         false => status.cpsr.mode,
     };
-    let mut current_address = match u_bit {
-        true => rn,
-        false => rn - (rlist.count_ones() * 4),
-    };
+    let mut current_address;
+    match started_empty {
+        true => {
+            current_address = match u_bit {
+                true => rn,
+                false => rn - 0x40,
+            };
+        }
+        false => {
+            current_address = match u_bit {
+                true => rn,
+                false => rn - (rlist.count_ones() * 4),
+            };
+        }
+    }
 
     let starting_base = current_address;
     let ending_base = match u_bit {
@@ -624,7 +635,7 @@ fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus, memor
         if started_empty {
             match u_bit {
                 true => *rn_mut = starting_base + 0x40,
-                false => *rn_mut = starting_base - 0x40,
+                false => *rn_mut = starting_base, // this one has already been accounted for
             }
             return;
         }

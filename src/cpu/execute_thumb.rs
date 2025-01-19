@@ -259,6 +259,11 @@ fn hi_operations(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
 
     let rd = cpu_regs.get_register_mut(rd_index, status.cpsr.mode);
     *rd = result;
+    if rd_index == 15 {
+        *rd &= !(0b1);
+        cpu_regs.clear_pipeline = true;
+    }
+
 }
 
 fn pc_relative_load(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mut Memory) {
