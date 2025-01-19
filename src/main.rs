@@ -29,14 +29,14 @@ fn main() {
     window.set_target_fps(60);
 
     let mut cpu_regs = Cpu {
-        pc: 0x8000000,
+        pc: 0x000000,
         unbanked_registers: [0, 0, 0, 0, 0, 0, 0 ,0],
         double_banked_registers: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
         many_banked_registers: [[0x03007F00, 0, 0x03007FE0, 0, 0x03007FA0, 0], [0, 0, 0, 0, 0, 0]],
         clear_pipeline: false,
     };
     let mut status = CpuStatus::new();
-    let mut memory = memory::create_memory("test/arm.gba");
+    let mut memory = memory::create_memory("bios/bios.bin");
     let mut ppu = PpuState::new();
 
     let mut fetched: Option<u32> = None;
@@ -139,34 +139,34 @@ fn debug_screen(
     writeln!(f, "======= {instr:?} {opcode:X} ========= ").unwrap();
     writeln!(f, "").unwrap();
 
-    let mut temp = String::new();
-    //std::io::stdin().read_line(&mut temp).unwrap();
-    println!("");
-    print!("{instr:?} | {opcode:X} | ");
+    // let mut temp = String::new();
+    // //std::io::stdin().read_line(&mut temp).unwrap();
+    // println!("");
+    // print!("{instr:?} | {opcode:X} | ");
 
-    for i in 0..=15 {
-        let old_value = old_regs.get_register(i, status.cpsr.mode);
-        let new_value = cpu.get_register(i, status.cpsr.mode);
+    // for i in 0..=15 {
+    //     let old_value = old_regs.get_register(i, status.cpsr.mode);
+    //     let new_value = cpu.get_register(i, status.cpsr.mode);
 
-        if old_value == new_value { continue; }
-        print!("r{i} ==> {old_value:X} = {new_value:X} ");
-    }
-    print!(" | ");
-    if old_stat.cpsr.c != status.cpsr.c {
-        let clear = status.cpsr.c;
-        print!("c = {clear} ");
-    }
-    if old_stat.cpsr.z != status.cpsr.z {
-        let zero = status.cpsr.z;
-        print!("z = {zero} ");
-    }
-    if old_stat.cpsr.n != status.cpsr.n {
-        let negative = status.cpsr.n;
-        print!("n = {negative} ");
-    }
-    if old_stat.cpsr.v != status.cpsr.v {
-        let overflow = status.cpsr.v;
-        print!("v = {overflow} ");
-    }
-    stdout().flush().unwrap();
+    //     if old_value == new_value { continue; }
+    //     print!("r{i} ==> {old_value:X} = {new_value:X} ");
+    // }
+    // print!(" | ");
+    // if old_stat.cpsr.c != status.cpsr.c {
+    //     let clear = status.cpsr.c;
+    //     print!("c = {clear} ");
+    // }
+    // if old_stat.cpsr.z != status.cpsr.z {
+    //     let zero = status.cpsr.z;
+    //     print!("z = {zero} ");
+    // }
+    // if old_stat.cpsr.n != status.cpsr.n {
+    //     let negative = status.cpsr.n;
+    //     print!("n = {negative} ");
+    // }
+    // if old_stat.cpsr.v != status.cpsr.v {
+    //     let overflow = status.cpsr.v;
+    //     print!("v = {overflow} ");
+    // }
+    // stdout().flush().unwrap();
 }

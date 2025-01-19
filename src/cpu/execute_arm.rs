@@ -531,15 +531,12 @@ fn halfword_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &CpuStatus, memory
     }
 }
 
-fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mut Memory) {    
+fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mut Memory) {
     let mut rlist = opcode & 0xFFFF;
-    let rn_index = (opcode >> 16) & 0b1111;
     let started_empty = rlist == 0;
-
     if started_empty {
         rlist |= 0x8000;
     }
-    assert!(rn_index != 15, "r15 cannot be used as the base register");
 
     let l_bit = (opcode >> 20) & 1 == 1;
     let w_bit = (opcode >> 21) & 1 == 1;
@@ -547,60 +544,71 @@ fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus, memor
     let u_bit = (opcode >> 23) & 1 == 1;
     let p_bit = (opcode >> 24) & 1 == 1;
 
+
+    // might need to clear the pipeline
+    cpu_regs.clear_pipeline = (rlist >> 15) & 1 == 1 && l_bit;
+
+    let rn_index = (opcode >> 16) & 0xF;
     let rn = cpu_regs.get_register(rn_index as u8, status.cpsr.mode);
-    let mut base_address;
 
-    let used_mode;
-    match s_bit {
-        true => used_mode = ProcessorMode::User,
-        false => used_mode = status.cpsr.mode,
-    }
+    let used_mode = match s_bit {
+        true => ProcessorMode::User,
+        false => status.cpsr.mode,
+    };
+    let mut current_address = match u_bit {
+        true => rn,
+        false => rn - (rlist.count_ones() * 4),
+    };
 
-    match u_bit {
-        true => base_address = rn,
-        false => base_address = rn - (rlist.count_ones() * 4),
-    }
-
-    let r15_in_list = (rlist >> 15) & 1 == 1;
-    if r15_in_list && l_bit {
-        cpu_regs.clear_pipeline = true;
-    }
-
-    let original_base = base_address;
+    let starting_base = current_address;
+    let ending_base = match u_bit {
+        true => starting_base + (rlist.count_ones() * 4),
+        false => current_address,
+    };
 
     match l_bit {
         true => {
             while rlist != 0 {
-                if p_bit == u_bit  {
-                    base_address += 4;
+                if p_bit == u_bit {
+                    current_address += 4;
                 }
-    
+
                 let next_r = rlist.trailing_zeros();
                 let rb = cpu_regs.get_register_mut(next_r as u8, used_mode);
-                *rb = memory.read_u32(base_address & !(0b11));
-    
+                *rb = memory.read_u32(current_address & (!0b11));
+
                 if p_bit != u_bit {
-                    base_address += 4;
+                    current_address += 4;
                 }
                 rlist &= !(1<<next_r);
             }
         }
         false => {
+            let mut first_run = true;
+
             while rlist != 0 {
-                if p_bit == u_bit  {
-                    base_address += 4;
+                // why do the docs not make a mention of this???
+                if !first_run && (rlist >> rn_index) & 1 == 1 && w_bit {
+                    let rn_mut = cpu_regs.get_register_mut(rn_index as u8, status.cpsr.mode);
+                    *rn_mut = ending_base;
                 }
-    
+
+                if p_bit == u_bit {
+                    current_address += 4;
+                }
+
                 let next_r = rlist.trailing_zeros();
-                let mut rb = cpu_regs.get_register(next_r as u8, used_mode);
-                if next_r == 15 {
-                    rb += 4;
-                }
-                memory.write_u32(base_address, rb);
-    
+                let rb = match next_r {
+                    15 => cpu_regs.get_register(15, used_mode) + 4,
+                    _ => cpu_regs.get_register(next_r as u8, used_mode),
+                };
+
+                memory.write_u32(current_address & !(0b11), rb);
                 if p_bit != u_bit {
-                    base_address += 4;
+                    current_address += 4;
                 }
+
+                first_run = false;
                 rlist &= !(1<<next_r);
             }
         }
@@ -615,16 +623,15 @@ fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus, memor
         let rn_mut = cpu_regs.get_register_mut(rn_index as u8, status.cpsr.mode);
         if started_empty {
             match u_bit {
-                true => *rn_mut = original_base + 0x40,
-                false => *rn_mut = original_base - 0x40,
+                true => *rn_mut = starting_base + 0x40,
+                false => *rn_mut = starting_base - 0x40,
             }
             return;
         }
 
-
         match u_bit {
-            true => *rn_mut = base_address,
-            false => *rn_mut = original_base,
+            true => *rn_mut = current_address,
+            false => *rn_mut = starting_base,
         }
     }
 }

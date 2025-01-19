@@ -179,7 +179,7 @@ pub mod status_registers {
                 0b10111 => ProcessorMode::Abort,
                 0b11011 => ProcessorMode::Undefined,
                 0b11111 => ProcessorMode::System,
-                _ => panic!("unrecognised CPSR mode"),
+                _ => ProcessorMode::Undefined,
             }
         }
     }
