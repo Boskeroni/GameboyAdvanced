@@ -130,20 +130,20 @@ impl Memory {
 
     pub fn write_u16(&mut self, address: u32, data: u16) {
         let split = lil_end_split_u16(data);
-        let base_address = (address / 2) * 2;
+        let address = address & !(0b1);
 
-        self.write_u8(base_address + ((address + 0) % 2), split.0);
-        self.write_u8(base_address + ((address + 1) % 2), split.1);
+        self.write_u8(address + 0, split.0);
+        self.write_u8(address + 1, split.1);
     }
 
     pub fn write_u32(&mut self, address: u32, data: u32) {
         let split = little_split_u32(data);
-        let base_address = (address / 4) * 4;
+        let address = address & !(0b11);
 
-        self.write_u8(base_address + (address + 0) % 4, split.0);
-        self.write_u8(base_address + (address + 1) % 4, split.1);
-        self.write_u8(base_address + (address + 2) % 4, split.2);
-        self.write_u8(base_address + (address + 3) % 4, split.3);
+        self.write_u8(address + 0, split.0);
+        self.write_u8(address + 1, split.1);
+        self.write_u8(address + 2, split.2);
+        self.write_u8(address + 3, split.3);
     }
 
     /// this should only be used by the 

@@ -459,7 +459,10 @@ fn halfword_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &CpuStatus, memory
             match l_bit {
                 true => {
                     let rd = cpu_regs.get_register_mut(rd_index, status.cpsr.mode);
-                    *rd = memory.read_u16(address) as u32;
+                    *rd = (memory.read_u16(address & !(0b1)) as u32).rotate_right((address % 2) * 8);
+                    if rd_index == rn_index {
+                        return;
+                    }
                 }
                 false => {
                     let rd = cpu_regs.get_register(rd_index, status.cpsr.mode);
@@ -479,30 +482,50 @@ fn halfword_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &CpuStatus, memory
 
             let rd = cpu_regs.get_register_mut(rd_index, status.cpsr.mode);
             *rd = raw_reading;
+            if rd_index == rn_index {
+                return;
+            }
         }
         0b11 => {
             // signed halfword
             assert!(l_bit, "L bit should not be set low");
 
-            let mut raw_reading = memory.read_u16(address) as u32;
-            if (raw_reading >> 15) & 1 == 1 {
-                raw_reading |= 0xFFFF0000;
+            let mut raw_reading;
+            let is_aligned = address & 1 == 1;
+            match is_aligned {
+                true => {
+                    raw_reading = memory.read_u8(address) as u32;
+                    if (raw_reading >> 7) & 1 == 1 {
+                        raw_reading |= 0xFFFFFF00;
+                    }
+                },
+                false => {
+                    raw_reading = memory.read_u16(address & !(1)) as u32;
+                    if (raw_reading >> 15) & 1 == 1 {
+                        raw_reading |= 0xFFFF0000;
+                    }
+                }
             }
 
             let rd = cpu_regs.get_register_mut(rd_index, status.cpsr.mode);
             *rd = raw_reading;
+            if rd_index == rn_index {
+                return;
+            }
         }
         _ => unreachable!()
     }
-
+    
     if !p_bit {
         match u_bit {
             true => address += offset,
             false => address -= offset,
         }
     }
+
     let write_back = (opcode >> 21) & 1 == 1;
     if write_back || !p_bit {
+        assert!(rn_index != 15);
         let rn = cpu_regs.get_register_mut(rn_index, status.cpsr.mode);
         *rn = address;
     }
@@ -511,9 +534,12 @@ fn halfword_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &CpuStatus, memory
 fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mut Memory) {    
     let mut rlist = opcode & 0xFFFF;
     let rn_index = (opcode >> 16) & 0b1111;
+    let started_empty = rlist == 0;
 
+    if started_empty {
+        rlist |= 0x8000;
+    }
     assert!(rn_index != 15, "r15 cannot be used as the base register");
-    assert!(rlist != 0, "reg list cannot be empty");
 
     let l_bit = (opcode >> 20) & 1 == 1;
     let w_bit = (opcode >> 21) & 1 == 1;
@@ -545,15 +571,15 @@ fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus, memor
     match l_bit {
         true => {
             while rlist != 0 {
-                if p_bit != u_bit  {
+                if p_bit == u_bit  {
                     base_address += 4;
                 }
     
                 let next_r = rlist.trailing_zeros();
                 let rb = cpu_regs.get_register_mut(next_r as u8, used_mode);
-                *rb = memory.read_u32(base_address);
+                *rb = memory.read_u32(base_address & !(0b11));
     
-                if p_bit == u_bit {
+                if p_bit != u_bit {
                     base_address += 4;
                 }
                 rlist &= !(1<<next_r);
@@ -561,7 +587,7 @@ fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus, memor
         }
         false => {
             while rlist != 0 {
-                if p_bit != u_bit  {
+                if p_bit == u_bit  {
                     base_address += 4;
                 }
     
@@ -572,13 +598,14 @@ fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus, memor
                 }
                 memory.write_u32(base_address, rb);
     
-                if p_bit == u_bit {
+                if p_bit != u_bit {
                     base_address += 4;
                 }
                 rlist &= !(1<<next_r);
             }
         }
     }
+
     // was rn in the transfer?
     if l_bit && (opcode >> rn_index) & 1 == 1 {
         return;
@@ -586,6 +613,15 @@ fn block_transfer(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus, memor
 
     if w_bit {
         let rn_mut = cpu_regs.get_register_mut(rn_index as u8, status.cpsr.mode);
+        if started_empty {
+            match u_bit {
+                true => *rn_mut = original_base + 0x40,
+                false => *rn_mut = original_base - 0x40,
+            }
+            return;
+        }
+
+
         match u_bit {
             true => *rn_mut = base_address,
             false => *rn_mut = original_base,
