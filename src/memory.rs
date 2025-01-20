@@ -151,8 +151,8 @@ impl Memory {
         let address = address as usize - 0x4000000;
         let split = lil_end_split_u16(data);
 
-        self.io_reg[address] = split.1;
-        self.io_reg[address + 1] = split.0;
+        self.io_reg[address] = split.0;
+        self.io_reg[address + 1] = split.1;
     }
     fn check_valid_address(&self, upper: u32, lower: usize) -> bool {
         match upper {

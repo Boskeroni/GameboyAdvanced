@@ -259,7 +259,6 @@ fn multiply(opcode: u32, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
     let rs_index = (opcode >> 8)  as u8 & 0xF;
     let rm_index = opcode         as u8 & 0xF;
 
-    assert_ne!(rd_index, rm_index, "destination and source register cannot be the same");
     if rn_index == 15 || rd_index == 15 || rs_index == 15 || rm_index == 15 {
         panic!("register 15 cannot be used as an operand or destination");
     }

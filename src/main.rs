@@ -139,33 +139,33 @@ fn debug_screen(
     writeln!(f, "======= {instr:?} {opcode:X} ========= ").unwrap();
     writeln!(f, "").unwrap();
 
-    let mut temp = String::new();
-    std::io::stdin().read_line(&mut temp).unwrap();
-    print!("{instr:?} | {opcode:X} | ");
+    // let mut temp = String::new();
+    // //std::io::stdin().read_line(&mut temp).unwrap();
+    // print!("{instr:?} | {opcode:X} | ");
 
-    for i in 0..=15 {
-        let old_value = old_regs.get_register(i, status.cpsr.mode);
-        let new_value = cpu.get_register(i, status.cpsr.mode);
+    // for i in 0..=15 {
+    //     let old_value = old_regs.get_register(i, status.cpsr.mode);
+    //     let new_value = cpu.get_register(i, status.cpsr.mode);
 
-        if old_value == new_value { continue; }
-        print!("r{i} ==> {old_value:X} = {new_value:X} ");
-    }
-    print!(" | ");
-    if old_stat.cpsr.c != status.cpsr.c {
-        let clear = status.cpsr.c;
-        print!("c = {clear} ");
-    }
-    if old_stat.cpsr.z != status.cpsr.z {
-        let zero = status.cpsr.z;
-        print!("z = {zero} ");
-    }
-    if old_stat.cpsr.n != status.cpsr.n {
-        let negative = status.cpsr.n;
-        print!("n = {negative} ");
-    }
-    if old_stat.cpsr.v != status.cpsr.v {
-        let overflow = status.cpsr.v;
-        print!("v = {overflow} ");
-    }
-    stdout().flush().unwrap();
+    //     if old_value == new_value { continue; }
+    //     print!("r{i} ==> {old_value:X} = {new_value:X} ");
+    // }
+    // print!(" | ");
+    // if old_stat.cpsr.c != status.cpsr.c {
+    //     let clear = status.cpsr.c;
+    //     print!("c = {clear} ");
+    // }
+    // if old_stat.cpsr.z != status.cpsr.z {
+    //     let zero = status.cpsr.z;
+    //     print!("z = {zero} ");
+    // }
+    // if old_stat.cpsr.n != status.cpsr.n {
+    //     let negative = status.cpsr.n;
+    //     print!("n = {negative} ");
+    // }
+    // if old_stat.cpsr.v != status.cpsr.v {
+    //     let overflow = status.cpsr.v;
+    //     print!("v = {overflow} ");
+    // }
+    // stdout().flush().unwrap();
 }

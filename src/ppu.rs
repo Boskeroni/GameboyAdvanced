@@ -65,7 +65,6 @@ pub fn update_ppu(ppu: &mut PpuState, memory: &mut Memory) {
         }        
     }
 
-
     // work in progress
     ppu.elapsed_time += 20;
     

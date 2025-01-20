@@ -2,6 +2,8 @@ use crate::cpu::registers::{*, status_registers::*};
 use crate::cpu::decode::DecodedThumb;
 use crate::memory::Memory;
 
+use super::get_shifted_value;
+
 pub fn execute_thumb(
     opcode: u16,
     instruction: DecodedThumb,
@@ -42,22 +44,23 @@ fn move_shifted(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
 
     let (result, carry);
     let op = (opcode >> 11) & 0b11;
+
+    // convert this opcode into the arm version
+    // its just easier than doing it all over again
+    let mut shift = (rs_index as u32) | ((imm as u32) << 7);
+
     match op {
         0b00 => {
-            result = rs << imm;
-            carry = (rs << (imm - 1)) >> 31 & 1 == 1;
+            shift |= 0b00 << 5;
+            (result, carry) = get_shifted_value(cpu_regs, shift, status); 
         }
         0b01 => {
-            result = rs >> imm;
-            carry = (rs >> (imm - 1)) & 1 == 1;
+            shift |= 0b01 << 5;
+            (result, carry) = get_shifted_value(cpu_regs, shift, status); 
         }
         0b10 => {
-            let mut temp = rs >> imm;
-            if (rs >> 31) & 1 == 1 {
-                temp |= !((std::u32::MAX) >> imm);
-            } 
-            result = temp;
-            carry = (rs >> (imm - 1)) & 1 == 1;
+            shift |= 0b10 << 5;
+            (result, carry) = get_shifted_value(cpu_regs, shift, status); 
         }
         _ => unreachable!(),
     }
@@ -143,14 +146,29 @@ fn alu_ops(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
         0b0000 => (rd & rs, false), // and
         0b0001 => (rd ^ rs, false), // eor
         0b0010 => {
-            let result = rd.wrapping_sub(rs);
-            (result, rd >= rs)
-        }, // sub
+            let sent_opcode = 
+                (rs_index as u32 & 0xF) << 8 |
+                (0b0001) << 4 |   
+                rd_index as u32 & 0xF;
+            get_shifted_value(cpu_regs, sent_opcode, status)
+        } // lsl
         0b0011 => {
-            let result = rs.wrapping_sub(rd);
-            (result, rs >= rd)
-        }, // rsb
-        0b0100 => rd.overflowing_add(rs), // add
+            let sent_opcode = 
+                (rs_index as u32 & 0xF) << 8 |
+                (0b0011) << 4 |   
+                rd_index as u32 & 0xF;
+            
+            let temp = get_shifted_value(cpu_regs, sent_opcode, status);
+            temp
+        } // lsr
+        0b0100 => {
+            // convert the opcode
+            let sent_opcode = 
+                (rs_index as u32 & 0xF) << 8 |
+                (0b0101) << 4 |   
+                rd_index as u32 & 0xF;
+            get_shifted_value(cpu_regs, sent_opcode, status)
+        } // asr
         0b0101 => {
             let (inter_res, inter_of) = rd.overflowing_add(rs);
             let (end_res, end_of) = inter_res.overflowing_add(status.cpsr.c as u32);
@@ -162,10 +180,12 @@ fn alu_ops(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
             (result, rd >= subtract_operand)
         }, // sbc,
         0b0111 => {
-            let subtract_operand = rd.wrapping_add(1 - status.cpsr.c as u32);
-            let result = rs.wrapping_sub(subtract_operand);
-            (result, rs >= subtract_operand)
-        }, // rsc
+            let sent_opcode = 
+                (rs_index as u32 & 0xF) << 8 |
+                (0b0111) << 4 |   
+                rd_index as u32 & 0xF;
+            get_shifted_value(cpu_regs, sent_opcode, status)
+        }, // ror
         0b1000 => {
             undo = true; 
             (rd & rs, false)
@@ -186,7 +206,7 @@ fn alu_ops(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
         0b1100 => {
             (rd | rs, false)
         }, // orr
-        0b1101 => (rs, false), // mov
+        0b1101 => rd.overflowing_mul(rs), // mul
         0b1110 => (rd & !rs, false), // bic
         0b1111 => (!rs, false), // mvn
         _ => unreachable!()
