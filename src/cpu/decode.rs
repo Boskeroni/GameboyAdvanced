@@ -6,25 +6,25 @@ pub enum DecodedInstruction {
 
 #[derive(Debug, Clone, Copy)]
 pub enum DecodedThumb {
-    MoveShiftedReg,
-    AddSubtract, 
+    MoveShifted,
+    AddSub, 
     AluImmediate,
     AluOperation,
-    HiRegisterOperations,
+    HiRegister,
     PcRelativeLoad,
-    LoadRegOffset,
-    LoadSignExtended,
-    LoadImmOffset,
-    LoadHalfword,
-    SpRelativeLoad,
+    MemRegOffset,
+    MemSignExtended,
+    MemImmOffset,
+    MemHalfword,
+    MemSpRelative,
     LoadAddress,
-    AddOffsetSp, 
+    OffsetSp, 
     PushPop,
-    MultipleLoadStore, 
-    ConditionalBranch,
+    MemMultiple, 
+    CondBranch,
     Swi,
-    UnconditionalBranch,
-    LongBranchLink,
+    UncondBranch,
+    LongBranch,
 }
 pub fn decode_thumb(opcode: u16) -> DecodedThumb {
     let mut identifier = (opcode >> 8) as u8;
@@ -32,7 +32,7 @@ pub fn decode_thumb(opcode: u16) -> DecodedThumb {
     // these two opcodes require the first byte so easy to get out of the way
     match identifier {
         0b1101_1111 => return DecodedThumb::Swi,
-        0b1011_0000 => return DecodedThumb::AddOffsetSp,
+        0b1011_0000 => return DecodedThumb::OffsetSp,
         _ => {},
     }
     
@@ -40,8 +40,8 @@ pub fn decode_thumb(opcode: u16) -> DecodedThumb {
     // this code works i promise works
     identifier >>= 1;
     match identifier & 0b1111_001 {
-        0b0101_000 => return DecodedThumb::LoadRegOffset,
-        0b0101_001 => return DecodedThumb::LoadSignExtended,
+        0b0101_000 => return DecodedThumb::MemRegOffset,
+        0b0101_001 => return DecodedThumb::MemSignExtended,
         0b1011_000 => return DecodedThumb::PushPop,
         _ => {}
     }
@@ -49,34 +49,34 @@ pub fn decode_thumb(opcode: u16) -> DecodedThumb {
     identifier >>= 1;
     match identifier {
         0b010000 => return DecodedThumb::AluOperation,
-        0b010001 => return DecodedThumb::HiRegisterOperations,
+        0b010001 => return DecodedThumb::HiRegister,
         _ => {}
     }
 
     identifier >>= 1;
     match identifier {
-        0b00011 => return DecodedThumb::AddSubtract,
+        0b00011 => return DecodedThumb::AddSub,
         0b01001 => return DecodedThumb::PcRelativeLoad,
-        0b11100 => return DecodedThumb::UnconditionalBranch,
+        0b11100 => return DecodedThumb::UncondBranch,
         _ => {}
     }
 
     identifier >>= 1;
     match identifier {
-        0b1000 => return DecodedThumb::LoadHalfword,
-        0b1001 => return DecodedThumb::SpRelativeLoad,
+        0b1000 => return DecodedThumb::MemHalfword,
+        0b1001 => return DecodedThumb::MemSpRelative,
         0b1010 => return DecodedThumb::LoadAddress,
-        0b1100 => return DecodedThumb::MultipleLoadStore,
-        0b1101 => return DecodedThumb::ConditionalBranch,
-        0b1111 => return DecodedThumb::LongBranchLink,
+        0b1100 => return DecodedThumb::MemMultiple,
+        0b1101 => return DecodedThumb::CondBranch,
+        0b1111 => return DecodedThumb::LongBranch,
         _ => {}
     }
 
     identifier >>= 1;
     match identifier {
-        0b000 => return DecodedThumb::MoveShiftedReg,
+        0b000 => return DecodedThumb::MoveShifted,
         0b001 => return DecodedThumb::AluImmediate,
-        0b011 => return DecodedThumb::LoadImmOffset,
+        0b011 => return DecodedThumb::MemImmOffset,
         _ => {}
     }
 

@@ -14,32 +14,30 @@ pub fn execute_thumb(
     use DecodedThumb::*;
 
     match instruction {
-        MoveShiftedReg => move_shifted(opcode, cpu_regs, status),
-        AddSubtract => add_sub(opcode, cpu_regs, status),
+        MoveShifted => move_shifted(opcode, cpu_regs, status),
+        AddSub => add_sub(opcode, cpu_regs, status),
         AluImmediate => alu_imm(opcode, cpu_regs, status),
         AluOperation => alu_ops(opcode, cpu_regs, status),
-        HiRegisterOperations => hi_operations(opcode, cpu_regs, status),
+        HiRegister => hi_ops(opcode, cpu_regs, status),
         PcRelativeLoad => pc_relative_load(opcode, cpu_regs, status, memory),
-        LoadRegOffset => load_register_offset(opcode, cpu_regs, status, memory),
-        LoadSignExtended => load_sign_extended(opcode, cpu_regs, status, memory),
-        LoadImmOffset => load_imm_offset(opcode, cpu_regs, status, memory),
-        LoadHalfword => load_halfword(opcode, cpu_regs, status, memory),
-        SpRelativeLoad => sp_relative_load(opcode, cpu_regs, status, memory),
+        MemRegOffset => mem_offset(opcode, cpu_regs, status, memory, false),
+        MemSignExtended => mem_sign_extended(opcode, cpu_regs, status, memory),
+        MemImmOffset => mem_offset(opcode, cpu_regs, status, memory, true),
+        MemHalfword => mem_halfword(opcode, cpu_regs, status, memory),
+        MemSpRelative => mem_sp_relative(opcode, cpu_regs, status, memory),
         LoadAddress => load_address(opcode, cpu_regs, status),
-        AddOffsetSp => offset_sp(opcode, cpu_regs, status),
+        OffsetSp => offset_sp(opcode, cpu_regs, status),
         PushPop => push_pop(opcode, cpu_regs, status, memory),
-        MultipleLoadStore => multiple_load(opcode, cpu_regs, status, memory),
-        ConditionalBranch => conditional_branch(opcode, cpu_regs, status),
+        MemMultiple => mem_multiple(opcode, cpu_regs, status, memory),
+        CondBranch => conditional_branch(opcode, cpu_regs, status),
         Swi => todo!(),
-        UnconditionalBranch => unconditional_branch(opcode, cpu_regs, status),
-        LongBranchLink => long_branch_link(opcode, cpu_regs, status),
+        UncondBranch => unconditional_branch(opcode, cpu_regs, status),
+        LongBranch => long_branch_link(opcode, cpu_regs, status),
     }
 }
 
 fn move_shifted(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
     let rs_index = (opcode >> 3) as u8 & 0x7;
-    let rs = cpu_regs.get_register(rs_index, status.cpsr.mode);
-
     let imm = (opcode >> 6) as u32 & 0x1F;
 
     let (result, carry);
@@ -77,26 +75,33 @@ fn move_shifted(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
 fn add_sub(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
     let rd_index = opcode & 0x7;
     let rs_index = (opcode >> 3) & 0x7;
+    let rs = cpu_regs.get_register(rs_index as u8, status.cpsr.mode);
     let value = (opcode >> 6) & 0x7;
 
     let i_bit = (opcode >> 10) & 1 == 1;
-    let mut offset = match i_bit {
+    let offset = match i_bit {
         true => value as u32,
         false => cpu_regs.get_register(value as u8, status.cpsr.mode),
     };
 
     let op = (opcode >> 9) & 1 == 1;
-    if op { // this means its a subtraction
-        offset = (!offset).wrapping_add(1);
+    let result;
+    match op {
+        true => { // add
+            result = rs.wrapping_sub(offset);
+            status.cpsr.v = ((rs ^ offset) & (rs ^ result)) >> 31 == 1;
+            status.cpsr.c = rs >= offset;
+        }
+        false => { // sub
+            let (temp, carry) = rs.overflowing_add(offset);
+            status.cpsr.c = carry;
+            status.cpsr.v = ((rs ^ offset) & (rs ^ temp)) >> 31 & 1 == 1;
+            result = temp;
+        }
     }
 
-    let rs = cpu_regs.get_register(rs_index as u8, status.cpsr.mode);
-    let (result, carry) = rs.overflowing_add(offset);
-
-    status.cpsr.c = carry;
     status.cpsr.z = result == 0;
     status.cpsr.n = (result >> 31) & 1 == 1;
-    status.cpsr.v = ((rs ^ result) & (offset ^ result)) >> 31 & 1 == 1;
 
     let rd = cpu_regs.get_register_mut(rd_index as u8, status.cpsr.mode);
     *rd = result;
@@ -104,26 +109,42 @@ fn add_sub(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
 }
 
 fn alu_imm(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
-    let mut offset = (opcode as u32) & 0xFF;
+    let offset = (opcode as u32) & 0xFF;
     let rd_index = (opcode >> 8) as u8 & 0x7;
     let rd = cpu_regs.get_register(rd_index, status.cpsr.mode);
 
 
     let op = (opcode >> 11) & 0x3;
-    if op & 1 == 1 { // all the sub instructions
-        offset = (!offset).wrapping_add(1);
-    }
+    let (result, carry);
+    match op {
+        0b00 => {
+            carry = false;
+            result = offset;
+        }
+        0b01 => {
+            carry = rd >= offset;
+            result = rd.wrapping_sub(offset);
 
-    let (result, carry) = match op {
-        0b00 => (offset, false),
-        0b01..=0b11 => rd.overflowing_add(offset),
+            status.cpsr.v = ((rd ^ offset) & (rd ^ result)) >> 31 & 1 == 1;
+        }
+        0b10 => {
+            (result, carry) = rd.overflowing_add(offset);
+        }
+        0b11 => {
+            carry = rd >= offset;
+            result = rd.wrapping_sub(offset);
+
+            status.cpsr.v = ((rd ^ offset) & (rd ^ result)) >> 31 & 1 == 1; 
+        }
         _ => unreachable!(),
-    };
+    }
 
     status.cpsr.c = carry;
     status.cpsr.n = (result >> 31) & 1 == 1;
     status.cpsr.z = result == 0;
-    status.cpsr.v = ((rd ^ result) & (offset ^ result)) >> 31 & 1 == 1;
+    if op & 1 == 0 {
+        status.cpsr.v = ((rd ^ result) & (offset ^ result)) >> 31 & 1 == 1;
+    }
 
     // CMP doesnt change the value
     if op == 1 {
@@ -190,10 +211,7 @@ fn alu_ops(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
             undo = true; 
             (rd & rs, false)
         }, // tst
-        0b1001 => {
-            undo = true; 
-            (rd ^ rs, false)
-        }, // teq
+        0b1001 => (0_u32.wrapping_sub(rs), false), // teq
         0b1010 => {
             undo = true;
             let result = rd.wrapping_sub(rs);
@@ -229,7 +247,7 @@ fn alu_ops(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
     *rd = result;
 }
 
-fn hi_operations(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
+fn hi_ops(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
     let mut rs_index = (opcode >> 3) as u8 & 0b111;
     let mut rd_index = opcode as u8 & 0b111;
 
@@ -298,18 +316,32 @@ fn pc_relative_load(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, mem
     *rd = read;
 }
 
-fn load_register_offset(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mut Memory) {
-    let ro_index = (opcode >> 6) as u8 & 0b111;
+fn mem_offset(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mut Memory, uses_imm: bool) {
     let rb_index = (opcode >> 3) as u8 & 0b111;
     let rd_index = opcode as u8 & 0b111;
 
-    let ro = cpu_regs.get_register(ro_index, status.cpsr.mode);
     let rb = cpu_regs.get_register(rb_index, status.cpsr.mode);
 
-    let address = ro.wrapping_add(rb);
+    let (address, l_bit, b_bit);
+    match uses_imm {
+        true => {
+            l_bit = (opcode >> 11) & 1 == 1;
+            b_bit = (opcode >> 12) & 1 == 1;
+            let imm = (opcode >> 6) as u32 & 0b1_1111;
+            match b_bit {
+                true => address = rb.wrapping_add(imm),
+                false => address = rb.wrapping_add(imm << 2),
+            }
+        }
+        false => {
+            l_bit = (opcode >> 11) & 1 == 1;
+            b_bit = (opcode >> 10) & 1 == 1;
 
-    let l_bit = (opcode >> 11) & 1 == 1;
-    let b_bit = (opcode >> 10) & 1 == 1;
+            let ro_index = (opcode >> 6) & 0b11;
+            let ro = cpu_regs.get_register(ro_index as u8, status.cpsr.mode);
+            address = rb.wrapping_add(ro);
+        }
+    }
 
     match l_bit {
         true => {
@@ -329,7 +361,7 @@ fn load_register_offset(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus,
     }
 }
 
-fn load_sign_extended(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mut Memory) {
+fn mem_sign_extended(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mut Memory) {
     let ro_index = (opcode >> 6) as u8 & 0b111;
     let rb_index = (opcode >> 3) as u8 & 0b111;
     let rd_index = opcode as u8 & 0b111;
@@ -338,78 +370,56 @@ fn load_sign_extended(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, m
     let rb = cpu_regs.get_register(rb_index, status.cpsr.mode);
 
     let address = ro + rb;
+    let sh = (opcode >> 10) & 0b11;
 
-    let s_bit = (opcode >> 10) & 1 == 1;
-    let h_bit = (opcode >> 11) & 1 == 1;
-
-    match (s_bit, h_bit) {
-        (false, false) => {
+    match sh {
+        0b00 => { // STRH
             let rd = cpu_regs.get_register(rd_index, status.cpsr.mode);
             memory.write_u16(address, rd as u16);
         }
-        (false, true) => {
+        0b10 => { // LDRH
             let rd = cpu_regs.get_register_mut(rd_index, status.cpsr.mode);
-            *rd = memory.read_u16(address) as u32;
+            *rd = (memory.read_u16(address & !(0b1)) as u32).rotate_right((address % 2) * 8);
         }
-        (true, false) => {
-            let rd = cpu_regs.get_register_mut(rd_index, status.cpsr.mode);
-            let temp = memory.read_u8(address);
-
-            *rd = temp as u32;
-            if (temp >> 7) & 1 == 1 {
-                *rd |= 0xFFFFFF00;
-            } 
-        }
-        (true, true) => {
-            let rd = cpu_regs.get_register_mut(rd_index, status.cpsr.mode);
-            let temp = memory.read_u16(address);
-
-            *rd = temp as u32;
-            if (temp >> 15) & 1 == 1 {
-                *rd |= 0xFFFF0000;
+        0b01 => {
+            let mut raw_reading = memory.read_u8(address) as u32;
+            if (raw_reading >> 7) & 1 == 1 {
+                raw_reading |= 0xFFFFFF00;
             }
+
+            let rd = cpu_regs.get_register_mut(rd_index, status.cpsr.mode);
+            *rd = raw_reading;
         }
+        0b11 => {
+            let mut raw_reading;
+            let is_aligned = address & 1 == 1;
+            match is_aligned {
+                true => {
+                    raw_reading = memory.read_u8(address) as u32;
+                    if (raw_reading >> 7) & 1 == 1 {
+                        raw_reading |= 0xFFFFFF00;
+                    }
+                },
+                false => {
+                    raw_reading = memory.read_u16(address & !(1)) as u32;
+                    if (raw_reading >> 15) & 1 == 1 {
+                        raw_reading |= 0xFFFF0000;
+                    }
+                }
+            }
+
+            let rd = cpu_regs.get_register_mut(rd_index, status.cpsr.mode);
+            *rd = raw_reading;
+        }
+        _ => unreachable!()
     }
 }
 
-fn load_imm_offset(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mut Memory) {
-    let rd_index = opcode as u8 & 0b111;
-    let rb_index = (opcode >> 3) as u8 & 0b111;
-    let offset = (opcode >> 6) & 0b1_1111;
-
-    let rb = cpu_regs.get_register(rb_index, status.cpsr.mode);
-    let l_bit = (opcode >> 11) & 1 == 1;
-    let b_bit = (opcode >> 12) & 1 == 1;
-
-    let address;
-    match b_bit {
-        true => address = rb + offset as u32,
-        false => address = rb + ((offset as u32) << 2),
-    }
-
-    match l_bit {
-        true => {
-            let rd = cpu_regs.get_register_mut(rd_index, status.cpsr.mode);
-            match b_bit {
-                true => *rd = memory.read_u8(address) as u32,
-                false => *rd = memory.read_u32(address),
-            }
-        }
-        false => {
-            let rd = cpu_regs.get_register(rd_index, status.cpsr.mode);
-            match b_bit {
-                true => memory.write_u8(address, rd as u8),
-                false => memory.write_u32(address, rd),
-            }
-        }
-    }
-}
-
-fn load_halfword(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mut Memory) {
+fn mem_halfword(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mut Memory) {
     let rd_index = opcode as u8 & 0b111;
     let rb_index = (opcode >> 3) as u8 & 0b111;
 
-    let imm = (opcode >> 6) & 0b11111;
+    let imm = ((opcode >> 6) & 0b11111) << 1;
     let rb = cpu_regs.get_register(rb_index, status.cpsr.mode);
 
     let address = rb + imm as u32;
@@ -418,7 +428,7 @@ fn load_halfword(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory
     match l_bit {
         true => {
             let rd = cpu_regs.get_register_mut(rd_index, status.cpsr.mode);
-            *rd = memory.read_u16(address) as u32;
+            *rd = (memory.read_u16(address & !(0b1)) as u32).rotate_right((address%2) * 8);
         }
         false => {
             let rd = cpu_regs.get_register(rd_index, status.cpsr.mode);
@@ -427,7 +437,7 @@ fn load_halfword(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory
     }
 }
 
-fn sp_relative_load(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mut Memory) {
+fn mem_sp_relative(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mut Memory) {
     let rd_index = (opcode >> 8) as u8 & 0b111;
     let imm = opcode & 0xFF;
 
@@ -526,17 +536,20 @@ fn push_pop(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mu
     }
 }
 
-fn multiple_load(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mut Memory) {
+fn mem_multiple(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory: &mut Memory) {
     let mut rlist = opcode & 0xFF;
-    assert!(rlist != 0, "Register list provided cannot be 0");
+    let started_empty = rlist == 0;
 
     let rb_index = (opcode >> 8) as u8 & 0b111;
     let rb = cpu_regs.get_register(rb_index, status.cpsr.mode);
 
     let l_bit = (opcode >> 11) & 1 == 1;
+    let mut curr_address = rb;
+    let end_result = curr_address + (rlist.count_ones() * 4);
+
     match l_bit {
         true => { // load
-            let mut curr_address = rb;
+
             while rlist != 0 {
                 let next_r = rlist.trailing_zeros();
 
@@ -547,26 +560,44 @@ fn multiple_load(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus, memory
                 curr_address += 4;
                 rlist &= !(1<<next_r);
             }
-            let rb_mut = cpu_regs.get_register_mut(rb_index, status.cpsr.mode);
-            *rb_mut = curr_address;
+            if started_empty {
+                let reg = cpu_regs.get_register_mut(15, status.cpsr.mode);
+                let change = memory.read_u32(curr_address);
+                *reg = change;
+                cpu_regs.clear_pipeline = true;
+
+                curr_address += 0x40;
+            }
         }
         false => {
-            let total_increments = rlist.count_ones();
-            let mut base_address = rb - (total_increments * 4);
-            let base_address_copy = base_address;
+            let mut first_run = true;
 
             while rlist != 0 {
                 let next_r = rlist.trailing_zeros();
-                let reg = cpu_regs.get_register(next_r as u8, status.cpsr.mode);
-                memory.write_u32(base_address, reg);
-                base_address += 4;
-                rlist &= !(1<<next_r);
-            }
+                if !first_run && (next_r as u8 == rb_index) {
+                    // need to calculate the end
+                    let rb_mut = cpu_regs.get_register_mut(rb_index, status.cpsr.mode);
+                    *rb_mut = end_result;
+                }
 
-            let rb_mut = cpu_regs.get_register_mut(rb_index, status.cpsr.mode);
-            *rb_mut = base_address_copy;
+                let reg = cpu_regs.get_register(next_r as u8, status.cpsr.mode);
+                memory.write_u32(curr_address, reg);
+                curr_address += 4;
+
+                rlist &= !(1<<next_r);
+                first_run = false;
+
+            }
+            if started_empty {
+                let reg = cpu_regs.get_register(15, status.cpsr.mode) + 2;
+                memory.write_u32(curr_address, reg);
+
+                curr_address += 0x40;
+            }
         }
     }
+    let rb_mut = cpu_regs.get_register_mut(rb_index, status.cpsr.mode);
+    *rb_mut = curr_address;
 }
 
 fn unconditional_branch(opcode: u16, cpu_regs: &mut Cpu, status: &mut CpuStatus) {
