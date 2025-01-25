@@ -1,4 +1,4 @@
-use registers::{status_registers::CpuStatus, Cpu};
+use registers::Cpu;
 
 pub mod execute_arm;
 pub mod execute_thumb;
@@ -11,7 +11,7 @@ pub mod interrupt;
 /// both the shifted value and the carry flag are returned
 /// 
 /// opcode should be the 11 bits which represent the shift + register
-pub fn get_shifted_value(cpu_regs: &Cpu, opcode: u32, status: &CpuStatus) -> (u32, bool) {
+pub fn get_shifted_value(cpu: &Cpu, opcode: u32) -> (u32, bool) {
     let shift_id = (opcode >> 4) & 1 == 1;
     let shift_type = (opcode >> 5) & 0b11;
 
@@ -19,7 +19,7 @@ pub fn get_shifted_value(cpu_regs: &Cpu, opcode: u32, status: &CpuStatus) -> (u3
     match shift_id {
         true => {
             let rs_index = (opcode >> 8) as u8 & 0xF;
-            shift_amount = cpu_regs.get_register(rs_index, status.cpsr.mode) & 0xFF;
+            shift_amount = cpu.get_register(rs_index) & 0xFF;
         }
         false => {
             shift_amount = (opcode >> 7) & 0x1F;
@@ -30,14 +30,14 @@ pub fn get_shifted_value(cpu_regs: &Cpu, opcode: u32, status: &CpuStatus) -> (u3
 
     let rm;
     if shift_id && rm_index == 15 {
-        rm = cpu_regs.get_register(rm_index, status.cpsr.mode) + 4;
+        rm = cpu.get_register(rm_index) + 4;
     } else {
-        rm = cpu_regs.get_register(rm_index, status.cpsr.mode);
+        rm = cpu.get_register(rm_index);
     }
 
     // if 0 is from a register, then unchanged
     if shift_id && shift_amount == 0 {
-        return (rm, status.cpsr.c);
+        return (rm, cpu.cpsr.c);
     }
 
     match shift_type {
@@ -45,7 +45,7 @@ pub fn get_shifted_value(cpu_regs: &Cpu, opcode: u32, status: &CpuStatus) -> (u3
             match shift_amount {
                 32 => return (0, rm & 1 == 1),
                 32.. => return (0, false),
-                0 => return (rm, status.cpsr.c),
+                0 => return (rm, cpu.cpsr.c),
                 _ => {}
             }
 
@@ -79,7 +79,7 @@ pub fn get_shifted_value(cpu_regs: &Cpu, opcode: u32, status: &CpuStatus) -> (u3
         }
         0b11 => {
             if shift_amount == 0 {
-                let result = (rm >> 31) | (status.cpsr.c as u32) << 31;
+                let result = (rm >> 31) | (cpu.cpsr.c as u32) << 31;
                 return (result, rm & 1 == 1);
             }
             let result = rm.rotate_right(shift_amount);

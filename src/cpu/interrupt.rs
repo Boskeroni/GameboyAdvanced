@@ -1,6 +1,6 @@
 use crate::memory::Memory;
 
-use super::registers::{status_registers::CpuStatus, Cpu, ProcessorMode};
+use super::registers::{Cpu, ProcessorMode};
 
 
 enum CpuRegisters {
@@ -9,7 +9,7 @@ enum CpuRegisters {
     If = 0x4000202,
 }
 
-pub fn handle_interrupts(memory: &mut Memory, status: &mut CpuStatus, cpu_regs: &mut Cpu) {
+pub fn handle_interrupts(memory: &mut Memory, cpu: &mut Cpu) {
     let interrupt_allowed = memory.read_u16(CpuRegisters::Ime as u32) & 1 == 1;
     if !interrupt_allowed {
         return;
@@ -22,9 +22,9 @@ pub fn handle_interrupts(memory: &mut Memory, status: &mut CpuStatus, cpu_regs: 
         return;
     }
 
-    status.cpsr.mode = ProcessorMode::Interrupt;
-    status.cpsr.t = false;
+    cpu.cpsr.mode = ProcessorMode::Interrupt;
+    cpu.cpsr.t = false;
 
-    let pc = cpu_regs.get_register_mut(15, status.cpsr.mode);
+    let pc = cpu.get_register_mut(15);
     *pc = 0x18;
 }

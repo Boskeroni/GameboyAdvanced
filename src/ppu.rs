@@ -7,12 +7,12 @@ enum PpuRegisters {
     VCount = 0x4000006,
 }
 
-pub struct PpuState {
+pub struct Ppu {
     pub new_screen: bool,
     elapsed_time: usize, // represents the number of dots elapsed
-    pub stored_screen: Vec<u16>,
+    pub stored_screen: Vec<u32>,
 }
-impl PpuState {
+impl Ppu {
     pub fn new() -> Self {
         Self { 
             new_screen: false,
@@ -22,9 +22,7 @@ impl PpuState {
     }
 }
 const DOTS_PER_FRAME: usize = (SCREEN_WIDTH + 68) * (SCREEN_HEIGHT + 68);
-// so far this will just update the registers
-// cba making it work just yet (soon though)
-pub fn update_ppu(ppu: &mut PpuState, memory: &mut Memory) {
+pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
     let dispcnt = memory.read_u16(PpuRegisters::Dispcnt as u32);
     let forced_blank = (dispcnt >> 7) & 1 == 1;
     if forced_blank {
@@ -45,12 +43,12 @@ pub fn update_ppu(ppu: &mut PpuState, memory: &mut Memory) {
             // right now we are just displaying at end of every frame
             let bg_mode = dispcnt & 0b111;
             match bg_mode {
-                0 => {}
-                1 => {}
-                2 => {}
-                3 => {}
+                0 => mode_0_display(ppu, memory),
+                1 => mode_1_display(ppu, memory),
+                2 => mode_2_display(ppu, memory),
+                3 => mode_3_display(ppu, memory),
                 4 => mode_4_display(ppu, memory),
-                5 => {}
+                5 => mode_5_display(ppu, memory),
                 _ => panic!("you can't set the bg_mode to {bg_mode}"),
             }
             vcount = 0;
@@ -65,6 +63,10 @@ pub fn update_ppu(ppu: &mut PpuState, memory: &mut Memory) {
         }        
     }
 
+    update_registers(ppu, memory, dispstat);
+}
+
+fn update_registers(ppu: &mut Ppu, memory: &mut Memory, mut dispstat: u16) {
     // work in progress
     ppu.elapsed_time += 20;
     
@@ -97,7 +99,33 @@ pub fn update_ppu(ppu: &mut PpuState, memory: &mut Memory) {
     memory.write_io(PpuRegisters::DispStat as u32, dispstat);
 }
 
-fn mode_4_display(ppu: &mut PpuState, memory: &mut Memory) {
+fn mode_0_display(ppu: &mut Ppu, memory: &mut Memory) { }
+fn mode_1_display(ppu: &mut Ppu, memory: &mut Memory) { }
+fn mode_2_display(ppu: &mut Ppu, memory: &mut Memory) { }
+
+fn mode_3_display(ppu: &mut Ppu, memory: &mut Memory) {
+    let start = 0x6000000;
+    let mut screen = Vec::new();
+    let total_pixels = 240*160;
+
+    let mut address = start;
+    for _index in 0..total_pixels {
+        let pixel_data = memory.read_u16(address);
+
+        // all of these are values 0-31
+        let (r, g, b) = (pixel_data & 0x1F, (pixel_data >> 5) & 0x1F, (pixel_data >> 10) & 0x1F);
+        let (screen_r, screen_g, screen_b) = ((r / 31) * 0xFF, (g / 31) * 0xFF, (b / 31) * 0xFF);
+        let final_pixel = (screen_r as u32) << 16 | (screen_b as u32) << 8 | screen_g as u32;
+        screen.push(final_pixel);
+
+        address += 2;
+    }
+
+    ppu.stored_screen = screen;
+    ppu.new_screen = true;
+}
+
+fn mode_4_display(ppu: &mut Ppu, memory: &mut Memory) {
     let dispcnt = memory.read_u16(PpuRegisters::Dispcnt as u32);
     let displayed_frame = (dispcnt >> 4) & 1 == 1;
 
@@ -113,9 +141,10 @@ fn mode_4_display(ppu: &mut PpuState, memory: &mut Memory) {
     for index in 0..total_pixels {
         let palette_index = memory.read_u8(base + index);
         let pixel_value = memory.read_u16(palette_base + (palette_index as u32 * 2));
-        screen.push(pixel_value);
+        screen.push(pixel_value as u32);
     }
 
     ppu.stored_screen = screen;
     ppu.new_screen = true;
 }
+fn mode_5_display(ppu: &mut Ppu, memory: &mut Memory) { }

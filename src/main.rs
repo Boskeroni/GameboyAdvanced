@@ -2,113 +2,95 @@ mod cpu;
 mod memory;
 mod ppu;
 
+use cpu::{
+    interrupt::handle_interrupts,
+    registers::Cpu,
+    decode::{DecodedInstruction, decode_arm, decode_thumb},
+    execute_arm::execute_arm,
+    execute_thumb::execute_thumb,
+};
+use memory::{update_timer, Memory};
+use pixels::{Pixels, SurfaceTexture};
+use ppu::{tick_ppu, Ppu};
+
 use std::fs::File;
 use std::io::{stdout, Write};
+use std::thread;
+use std::time::{Duration, Instant};
 
-use cpu::interrupt::handle_interrupts;
-use cpu::registers::{Cpu, status_registers::CpuStatus};
-use cpu::decode::{decode_arm, decode_thumb};
-use cpu::execute_arm::execute_arm;
-use cpu::execute_thumb::execute_thumb;
-use cpu::decode::DecodedInstruction;
-use memory::update_timer;
-use minifb::{Key, Window, WindowOptions};
-use ppu::{update_ppu, PpuState};
-
+use winit::{dpi::LogicalSize, event::{Event, WindowEvent}};
+use winit::event_loop::{ControlFlow, EventLoop};
+use winit::window::WindowBuilder;
 
 const SCREEN_WIDTH: usize = 240;
 const SCREEN_HEIGHT: usize = 160;
+const FPS: u128 = 60;
+const FRAME_TIME: u128 = 1_000_000_000 / FPS;
 
-fn main() {
-    let mut window = Window::new(
-        "GBA emulter", 
-        SCREEN_WIDTH, 
-        SCREEN_HEIGHT, 
-        WindowOptions::default()
-    ).unwrap();
-    window.set_target_fps(60);
+#[derive(Default)]
+struct Fde {
+    fetched: Option<u32>,
+    decoded: Option<DecodedInstruction>,
+    decoded_opcode: u32,
+}
 
-    let mut cpu_regs = Cpu {
-        pc: 0x8000000,
-        unbanked_registers: [0, 0, 0, 0, 0, 0, 0 ,0],
-        double_banked_registers: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
-        many_banked_registers: [[0x03007F00, 0, 0x03007FE0, 0, 0x03007FA0, 0], [0, 0, 0, 0, 0, 0]],
-        clear_pipeline: false,
-    };
-    let mut status = CpuStatus::new();
-    let mut memory = memory::create_memory("test/thumb.gba");
-    let mut ppu = PpuState::new();
-
-    let mut fetched: Option<u32> = None;
-
-    let mut decoded: Option<DecodedInstruction> = None;
-    let mut decoded_opcode: u32 = 0;
-
-    // each loop represents FDE step
-    // since all the steps of the FDE cycle take place in one turn, 
-    // it technically doesnt matter the order and so I will do EDF for convenience
-    use DecodedInstruction::*;
-    let mut f = File::create("debug/debug.txt").expect("the file couldnt be opened");
-    let mut total_cycles = 0;
-    let mut has_booted = false;
-    while window.is_open() && !window.is_key_down(Key::Escape) {
+fn gba_frame(
+    cpu: &mut Cpu, 
+    mem: &mut Memory, 
+    ppu: &mut Ppu, 
+    fde: &mut Fde, 
+    cycles: &mut u32,
+    f: &mut File,
+) {
+    loop {
         // update the timer
         // add 1 for now, make it more accurate later
-        update_timer(&mut memory, &mut total_cycles, 1);
-        update_ppu(&mut ppu, &mut memory);
-
+        update_timer(mem, cycles, 1);
+        tick_ppu(ppu, mem);
         if ppu.new_screen {
-            let mut new_frame = Vec::new();
-            for pixel in &ppu.stored_screen {
-                new_frame.push(*pixel as u32);
-            }
-            window.update_with_buffer(&new_frame, SCREEN_WIDTH, SCREEN_HEIGHT).expect("i wonder what error this will be");
             ppu.new_screen = false;
+            return;
         }
 
         // check for any interrupts
-        handle_interrupts(&mut memory, &mut status, &mut cpu_regs);
+        handle_interrupts(mem, cpu);
 
         // Execute
-        if let Some(instruction) = decoded {
+        if let Some(instruction) = fde.decoded {
             // debug reasons
-            let old_regs = cpu_regs.clone();
-            let old_stat = status.clone();
+            let old_regs = cpu.clone();
 
+            use DecodedInstruction::*;
             match instruction {
-                Thumb(instr) => execute_thumb(decoded_opcode as u16, instr, &mut cpu_regs, &mut status, &mut memory),
-                Arm(instr) => execute_arm(decoded_opcode, instr, &mut cpu_regs, &mut status, &mut memory),
+                Thumb(instr) => execute_thumb(fde.decoded_opcode as u16, instr, cpu, mem),
+                Arm(instr) => execute_arm(fde.decoded_opcode, instr, cpu, mem),
             };
-            debug_screen(&cpu_regs, instruction, decoded_opcode, &status, &old_regs, &mut f, &old_stat);
 
-            if cpu_regs.clear_pipeline {
-                fetched = None;
-                decoded = None;
-                cpu_regs.clear_pipeline = false;
+            //debug_screen(&cpu, instruction, fde.decoded_opcode, &old_regs, f);
+
+            if cpu.clear_pipeline {
+                fde.fetched = None;
+                fde.decoded = None;
+                cpu.clear_pipeline = false;
                 continue;
             }
         }
 
         // Decode
-        if let Some(opcode) = fetched {
-            decoded = Some(match status.cpsr.t {
+        if let Some(opcode) = fde.fetched {
+            fde.decoded = Some(match cpu.cpsr.t {
                 true => DecodedInstruction::Thumb(decode_thumb(opcode as u16)),
                 false => DecodedInstruction::Arm(decode_arm(opcode)),
             });
 
-            decoded_opcode = opcode;
-        }
-
-        if has_booted && cpu_regs.pc == 0 {
-            panic!("called back to the start");
+            fde.decoded_opcode = opcode;
         }
 
         // Fetch
-        fetched = Some(match status.cpsr.t {
-            true => memory.read_u16(cpu_regs.get_pc_thumb()) as u32,
-            false => memory.read_u32(cpu_regs.get_pc_arm()),
+        fde.fetched = Some(match cpu.cpsr.t {
+            true => mem.read_u16(cpu.get_pc_thumb()) as u32,
+            false => mem.read_u32(cpu.get_pc_arm()),
         });
-        has_booted = true;
     }
 }
 
@@ -116,16 +98,14 @@ fn debug_screen(
     cpu: &Cpu, 
     instr: DecodedInstruction, 
     opcode: u32, 
-    status: &CpuStatus, 
-    old_regs: &Cpu, 
+    old_cpu: &Cpu, 
     f: &mut File,
-    old_stat: &CpuStatus
 ) {
     writeln!(f, "======== DEBUG ========").unwrap();
     let mut temp = Vec::new();
     for i in 0..=14 {
-        let old_value = old_regs.get_register(i, status.cpsr.mode);
-        let new_value = cpu.get_register(i, status.cpsr.mode);
+        let old_value = old_cpu.get_register(i);
+        let new_value = cpu.get_register(i);
         temp.push(new_value);
 
         if old_value == new_value { continue; }
@@ -134,38 +114,114 @@ fn debug_screen(
 
     writeln!(f, "").unwrap();
     writeln!(f, "{temp:X?}").unwrap();
-    writeln!(f, "pc: {:X}, from: {:X}", cpu.pc, old_regs.pc).unwrap();
-    writeln!(f, "status: {:?}", status.cpsr).unwrap();
+    writeln!(f, "pc: {:X}, from: {:X}", cpu.pc, old_cpu.pc).unwrap();
+    writeln!(f, "status: {:?}", cpu.cpsr).unwrap();
     writeln!(f, "======= {instr:?} {opcode:X} ========= ").unwrap();
     writeln!(f, "").unwrap();
 
-    // let mut temp = String::new();
-    // //std::io::stdin().read_line(&mut temp).unwrap();
-    // print!("{instr:?} | {opcode:X} | ");
+    //let mut temp = String::new();
+    //std::io::stdin().read_line(&mut temp).unwrap();
+    println!("");
+    print!("{instr:?} | {opcode:X} | ");
 
-    // for i in 0..=15 {
-    //     let old_value = old_regs.get_register(i, status.cpsr.mode);
-    //     let new_value = cpu.get_register(i, status.cpsr.mode);
+    for i in 0..=15 {
+        let old_value = old_cpu.get_register(i);
+        let new_value = cpu.get_register(i);
 
-    //     if old_value == new_value { continue; }
-    //     print!("r{i} ==> {old_value:X} = {new_value:X} ");
-    // }
-    // print!(" | ");
-    // if old_stat.cpsr.c != status.cpsr.c {
-    //     let clear = status.cpsr.c;
-    //     print!("c = {clear} ");
-    // }
-    // if old_stat.cpsr.z != status.cpsr.z {
-    //     let zero = status.cpsr.z;
-    //     print!("z = {zero} ");
-    // }
-    // if old_stat.cpsr.n != status.cpsr.n {
-    //     let negative = status.cpsr.n;
-    //     print!("n = {negative} ");
-    // }
-    // if old_stat.cpsr.v != status.cpsr.v {
-    //     let overflow = status.cpsr.v;
-    //     print!("v = {overflow} ");
-    // }
-    // stdout().flush().unwrap();
+        if old_value == new_value { continue; }
+        print!("r{i} ==> {old_value:X} = {new_value:X} ");
+    }
+    print!(" | ");
+    if old_cpu.cpsr.c != cpu.cpsr.c {
+        let clear = cpu.cpsr.c;
+        print!("c = {clear} ");
+    }
+    if old_cpu.cpsr.z != cpu.cpsr.z {
+        let zero = cpu.cpsr.z;
+        print!("z = {zero} ");
+    }
+    if old_cpu.cpsr.n != cpu.cpsr.n {
+        let negative = cpu.cpsr.n;
+        print!("n = {negative} ");
+    }
+    if old_cpu.cpsr.v != cpu.cpsr.v {
+        let overflow = cpu.cpsr.v;
+        print!("v = {overflow} ");
+    }
+    stdout().flush().unwrap();
+}
+
+fn main() {
+    // set up the window
+    let event_loop = EventLoop::new().unwrap();
+    event_loop.set_control_flow(ControlFlow::Poll);
+    
+    let window = WindowBuilder::new()
+        .with_inner_size(LogicalSize::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32))
+        .with_resizable(false)
+        .build(&event_loop)
+    .unwrap();
+    
+    let mut pixels = {
+        let window_size = window.inner_size();
+        let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
+        Pixels::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32, surface_texture).unwrap()
+    };
+
+
+    // debug purposes
+    let mut debug_file = File::create("debug/debug.txt").expect("the file couldnt be opened");
+
+    let mut cpu = Cpu::new();
+    let mut mem = memory::create_memory("test/arm.gba");
+    let mut ppu = Ppu::new();
+    let mut fde = Fde::default();
+
+    let mut last_render = Instant::now();
+    let mut cycles = 0;
+
+    event_loop.run(|event, control_flow| {
+        match event {
+            Event::WindowEvent {ref event, window_id} if window_id == window.id() => {
+                match event {
+                    WindowEvent::RedrawRequested => {
+                        println!("this happens");
+                        gba_frame(
+                            &mut cpu, 
+                            &mut mem, 
+                            &mut ppu, 
+                            &mut fde, 
+                            &mut cycles, 
+                            &mut debug_file
+                        );
+
+                        // keep it running at 60fps
+                        if last_render.elapsed().as_nanos() <= FRAME_TIME {
+                            last_render = std::time::Instant::now();
+                            // the amount it should wait for 60fps
+                            let difference = FRAME_TIME - last_render.elapsed().as_nanos();
+                            thread::sleep(Duration::from_nanos(difference as u64));
+                        }
+
+                        let screen = pixels.frame_mut();
+                        for (i, c) in ppu.stored_screen.iter().enumerate() {
+                            let r = (*c >> 16) & 0xFF;
+                            let g = (*c >> 8) & 0xFF;
+                            let b = *c & 0xFF;
+
+                            screen[(i as usize * 4) + 1] = r as u8;
+                            screen[(i as usize * 4) + 2] = g as u8;
+                            screen[(i as usize * 4) + 3] = b as u8;
+                        }
+                        pixels.render().unwrap();
+                        window.request_redraw();
+                    }
+                    WindowEvent::CloseRequested => control_flow.exit(),
+                    _ => {}
+                }
+            }
+            _ => {
+            }
+        }
+    }).unwrap();
 }
