@@ -180,12 +180,11 @@ fn main() {
     let mut last_render = Instant::now();
     let mut cycles = 0;
 
-    event_loop.run(|event, control_flow| {
+    event_loop.run(|event, control_flow|
         match event {
             Event::WindowEvent {ref event, window_id} if window_id == window.id() => {
                 match event {
                     WindowEvent::RedrawRequested => {
-                        println!("this happens");
                         gba_frame(
                             &mut cpu, 
                             &mut mem, 
@@ -194,7 +193,7 @@ fn main() {
                             &mut cycles, 
                             &mut debug_file
                         );
-
+                        
                         // keep it running at 60fps
                         if last_render.elapsed().as_nanos() <= FRAME_TIME {
                             last_render = std::time::Instant::now();
@@ -223,5 +222,5 @@ fn main() {
             _ => {
             }
         }
-    }).unwrap();
+    ).unwrap();
 }

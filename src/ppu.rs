@@ -1,3 +1,5 @@
+use pixels::wgpu::core::resource::BufferAccessResult;
+
 use crate::{memory::Memory, SCREEN_HEIGHT, SCREEN_WIDTH};
 
 enum PpuRegisters {
@@ -31,7 +33,6 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
 
     // the line count we had last time, doesnt match the one this time
     let mut dispstat = memory.read_u16(PpuRegisters::DispStat as u32);
-    let vcount_lyc = (dispstat >> 8) & 0xFF;
     let mut vcount = memory.read_u16(PpuRegisters::VCount as u32) as usize;
 
     let new_line = ppu.elapsed_time / (SCREEN_WIDTH + 68) != vcount;
@@ -56,6 +57,7 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
         }
         memory.write_io(PpuRegisters::VCount as u32, vcount as u16);
         
+        let vcount_lyc = (dispstat >> 8) & 0xFF;
         let vcounter_match = vcount == vcount_lyc as usize;
         match vcounter_match {
             true => dispstat |= 1<<2,
@@ -99,15 +101,22 @@ fn update_registers(ppu: &mut Ppu, memory: &mut Memory, mut dispstat: u16) {
     memory.write_io(PpuRegisters::DispStat as u32, dispstat);
 }
 
-fn mode_0_display(ppu: &mut Ppu, memory: &mut Memory) { }
-fn mode_1_display(ppu: &mut Ppu, memory: &mut Memory) { }
-fn mode_2_display(ppu: &mut Ppu, memory: &mut Memory) { }
 
+// all of the different displaying functions
+fn mode_0_display(ppu: &mut Ppu, memory: &mut Memory) { 
+
+}
+fn mode_1_display(ppu: &mut Ppu, memory: &mut Memory) { 
+
+}
+fn mode_2_display(ppu: &mut Ppu, memory: &mut Memory) { 
+
+}
 fn mode_3_display(ppu: &mut Ppu, memory: &mut Memory) {
-    let start = 0x6000000;
-    let mut screen = Vec::new();
     let total_pixels = 240*160;
+    let mut screen = vec![0; total_pixels];
 
+    let start = 0x6000000;
     let mut address = start;
     for _index in 0..total_pixels {
         let pixel_data = memory.read_u16(address);
@@ -124,7 +133,6 @@ fn mode_3_display(ppu: &mut Ppu, memory: &mut Memory) {
     ppu.stored_screen = screen;
     ppu.new_screen = true;
 }
-
 fn mode_4_display(ppu: &mut Ppu, memory: &mut Memory) {
     let dispcnt = memory.read_u16(PpuRegisters::Dispcnt as u32);
     let displayed_frame = (dispcnt >> 4) & 1 == 1;
@@ -147,4 +155,37 @@ fn mode_4_display(ppu: &mut Ppu, memory: &mut Memory) {
     ppu.stored_screen = screen;
     ppu.new_screen = true;
 }
-fn mode_5_display(ppu: &mut Ppu, memory: &mut Memory) { }
+fn mode_5_display(ppu: &mut Ppu, memory: &mut Memory) {
+    let width = 160;
+    let height = 128;
+
+    let dispcnt = memory.read_u16(PpuRegisters::Dispcnt as u32);
+    let displayed_frame = (dispcnt >> 4) & 1 == 1;
+
+    let base;
+    match displayed_frame {
+        true => base = 0x600A000,
+        false => base = 0x6000000,
+    }
+
+    let mut screen = Vec::new();
+    let total_pixels = width * height;
+    for index in 0..total_pixels {
+        let color = memory.read_u16(base + index*2);
+
+        // all of these are values 0-31
+        let (r, g, b) = (color & 0x1F, (color >> 5) & 0x1F, (color >> 10) & 0x1F);
+        let (screen_r, screen_g, screen_b) = ((r / 31) * 0xFF, (g / 31) * 0xFF, (b / 31) * 0xFF);
+        let final_pixel = (screen_r as u32) << 16 | (screen_b as u32) << 8 | screen_g as u32;
+        screen.push(final_pixel);
+
+        // accounting for the fact its only 160 pixels wide
+        // the screen expects it to be 240
+        if index % width == 0{
+            screen.extend(vec![0_u32; 80]);
+        }
+    }
+
+    ppu.stored_screen = screen;
+    ppu.new_screen = true;
+}
