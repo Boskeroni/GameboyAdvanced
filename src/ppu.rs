@@ -7,6 +7,7 @@ enum PpuRegisters {
     //GreenSwap = 0x4000002,
     DispStat = 0x4000004,
     VCount = 0x4000006,
+    BGCnt = 0x4000008,
 }
 
 pub struct Ppu {
@@ -44,12 +45,12 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
             // right now we are just displaying at end of every frame
             let bg_mode = dispcnt & 0b111;
             match bg_mode {
-                0 => mode_0_display(ppu, memory),
-                1 => mode_1_display(ppu, memory),
-                2 => mode_2_display(ppu, memory),
-                3 => mode_3_display(ppu, memory),
-                4 => mode_4_display(ppu, memory),
-                5 => mode_5_display(ppu, memory),
+                0 => bg_mode_0(ppu, memory),
+                1 => bg_mode_1(ppu, memory),
+                2 => bg_mode_2(ppu, memory),
+                3 => bg_mode_3(ppu, memory),
+                4 => bg_mode_4(ppu, memory),
+                5 => bg_mode_5(ppu, memory),
                 _ => panic!("you can't set the bg_mode to {bg_mode}"),
             }
             vcount = 0;
@@ -103,16 +104,64 @@ fn update_registers(ppu: &mut Ppu, memory: &mut Memory, mut dispstat: u16) {
 
 
 // all of the different displaying functions
-fn mode_0_display(ppu: &mut Ppu, memory: &mut Memory) { 
+fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory) { 
+    let dispcnt = memory.read_u16(PpuRegisters::Dispcnt as u32);
+
+    let mut priorities = Vec::new();
+    let mut screen_order = Vec::new();
+
+    // decide the order of the screens to draw
+    let screens = (dispcnt >> 8) & 0xF;
+    for i in 0..4 {
+        let screen = (screens >> i) & 1 == 1;
+        if !screen {
+            continue;
+        }
+
+        let bg_cnt = memory.read_u16(PpuRegisters::BGCnt as u32 + i*2);
+        let priority = bg_cnt & 0b11;
+
+        let mut j = 0;
+        while j < priorities.len() {
+            if priorities[j] < priority {
+                break;
+            }
+            j += 1;
+        }
+
+        priorities.insert(j, priority);
+        screen_order.insert(j, i);
+    }
+
+    // now we go in order
+    let mut inner_screen = vec![0; 512*512];
+
+    let vram_base = 0x6000000;
+    for screen in screen_order {
+        let bg_cnt = memory.read_u16(PpuRegisters::BGCnt as u32 + screen*2);
+
+        let screen_base_block = (bg_cnt >> 8) & 0x1F;
+        let char_base_block = (bg_cnt >> 2) & 0x3;
+
+        let screen_address = (screen_base_block as u32 * 0x800) + vram_base;
+        let charac_address = (char_base_block as u32 * 0x4000) + vram_base + 0x10000;
+
+        let size = (dispcnt >> 14) & 0x3;
+        for address in 0..(64*64) {
+            let tile_info = memory.read_u16(screen_address + address*2);
+            let tile = tile_info & 0x1FF;
+
+            
+        }
+    }
+}
+fn bg_mode_1(ppu: &mut Ppu, memory: &mut Memory) { 
 
 }
-fn mode_1_display(ppu: &mut Ppu, memory: &mut Memory) { 
+fn bg_mode_2(ppu: &mut Ppu, memory: &mut Memory) { 
 
 }
-fn mode_2_display(ppu: &mut Ppu, memory: &mut Memory) { 
-
-}
-fn mode_3_display(ppu: &mut Ppu, memory: &mut Memory) {
+fn bg_mode_3(ppu: &mut Ppu, memory: &mut Memory) {
     let total_pixels = 240*160;
     let mut screen = vec![0; total_pixels];
 
@@ -123,7 +172,7 @@ fn mode_3_display(ppu: &mut Ppu, memory: &mut Memory) {
 
         // all of these are values 0-31
         let (r, g, b) = (pixel_data & 0x1F, (pixel_data >> 5) & 0x1F, (pixel_data >> 10) & 0x1F);
-        let (screen_r, screen_g, screen_b) = ((r / 31) * 0xFF, (g / 31) * 0xFF, (b / 31) * 0xFF);
+        let (screen_r, screen_g, screen_b) = (r * 8, g * 8, b * 8);
         let final_pixel = (screen_r as u32) << 16 | (screen_b as u32) << 8 | screen_g as u32;
         screen.push(final_pixel);
 
@@ -133,7 +182,7 @@ fn mode_3_display(ppu: &mut Ppu, memory: &mut Memory) {
     ppu.stored_screen = screen;
     ppu.new_screen = true;
 }
-fn mode_4_display(ppu: &mut Ppu, memory: &mut Memory) {
+fn bg_mode_4(ppu: &mut Ppu, memory: &mut Memory) {
     let dispcnt = memory.read_u16(PpuRegisters::Dispcnt as u32);
     let displayed_frame = (dispcnt >> 4) & 1 == 1;
 
@@ -149,13 +198,20 @@ fn mode_4_display(ppu: &mut Ppu, memory: &mut Memory) {
     for index in 0..total_pixels {
         let palette_index = memory.read_u8(base + index);
         let pixel_value = memory.read_u16(palette_base + (palette_index as u32 * 2));
-        screen.push(pixel_value as u32);
+
+        let (mut r, mut g, mut b) = ((pixel_value & 0x1F), (pixel_value >> 5) & 0x1F, (pixel_value >> 10) & 0x1F);
+        r = r * 8;
+        g = g * 8;
+        b = b * 8;
+
+        let pixel = (r as u32) << 16 | (g as u32) << 8 | b as u32;
+        screen.push(pixel);
     }
 
     ppu.stored_screen = screen;
     ppu.new_screen = true;
 }
-fn mode_5_display(ppu: &mut Ppu, memory: &mut Memory) {
+fn bg_mode_5(ppu: &mut Ppu, memory: &mut Memory) {
     let width = 160;
     let height = 128;
 

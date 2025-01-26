@@ -1,6 +1,7 @@
 mod cpu;
 mod memory;
 mod ppu;
+mod joypad;
 
 use cpu::{
     interrupt::handle_interrupts,
@@ -9,6 +10,7 @@ use cpu::{
     execute_arm::execute_arm,
     execute_thumb::execute_thumb,
 };
+use joypad::setup_joypad;
 use memory::{update_timer, Memory};
 use pixels::{Pixels, SurfaceTexture};
 use ppu::{tick_ppu, Ppu};
@@ -18,7 +20,7 @@ use std::io::{stdout, Write};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use winit::{dpi::LogicalSize, event::{Event, WindowEvent}};
+use winit::{dpi::LogicalSize, event::{Event, WindowEvent}, keyboard::PhysicalKey};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
 
@@ -168,14 +170,14 @@ fn main() {
         Pixels::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32, surface_texture).unwrap()
     };
 
-
     // debug purposes
     let mut debug_file = File::create("debug/debug.txt").expect("the file couldnt be opened");
 
     let mut cpu = Cpu::new();
-    let mut mem = memory::create_memory("test/arm.gba");
+    let mut mem = memory::create_memory("test/armwrestler.gba");
     let mut ppu = Ppu::new();
     let mut fde = Fde::default();
+    setup_joypad(&mut mem);
 
     let mut last_render = Instant::now();
     let mut cycles = 0;
@@ -184,7 +186,18 @@ fn main() {
         match event {
             Event::WindowEvent {ref event, window_id} if window_id == window.id() => {
                 match event {
+                    WindowEvent::KeyboardInput { event, .. } => {
+                        if let PhysicalKey::Code(code) = event.physical_key {
+                            if event.state.is_pressed() {
+                                joypad::joypad_press(code, &mut mem);
+                            } else {
+                                joypad::joypad_release(code, &mut mem);
+                            }
+                        }
+                    }
                     WindowEvent::RedrawRequested => {
+                        let start = Instant::now();
+
                         gba_frame(
                             &mut cpu, 
                             &mut mem, 
@@ -193,7 +206,10 @@ fn main() {
                             &mut cycles, 
                             &mut debug_file
                         );
-                        
+
+                        let end = start.elapsed();
+                        println!("{}", end.as_nanos());
+
                         // keep it running at 60fps
                         if last_render.elapsed().as_nanos() <= FRAME_TIME {
                             last_render = std::time::Instant::now();
@@ -219,8 +235,7 @@ fn main() {
                     _ => {}
                 }
             }
-            _ => {
-            }
+            _ => {}
         }
     ).unwrap();
 }
