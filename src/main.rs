@@ -188,16 +188,14 @@ fn main() {
                 match event {
                     WindowEvent::KeyboardInput { event, .. } => {
                         if let PhysicalKey::Code(code) = event.physical_key {
-                            if event.state.is_pressed() {
-                                joypad::joypad_press(code, &mut mem);
-                            } else {
-                                joypad::joypad_release(code, &mut mem);
+                            match event.state.is_pressed() {
+                                true => joypad::joypad_press(code, &mut mem),
+                                false => joypad::joypad_release(code, &mut mem),
                             }
                         }
                     }
                     WindowEvent::RedrawRequested => {
                         let start = Instant::now();
-
                         gba_frame(
                             &mut cpu, 
                             &mut mem, 
@@ -206,9 +204,7 @@ fn main() {
                             &mut cycles, 
                             &mut debug_file
                         );
-
-                        let end = start.elapsed();
-                        println!("{}", end.as_nanos());
+                        let _end = start.elapsed();
 
                         // keep it running at 60fps
                         if last_render.elapsed().as_nanos() <= FRAME_TIME {

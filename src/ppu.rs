@@ -1,6 +1,11 @@
-use pixels::wgpu::core::resource::BufferAccessResult;
-
 use crate::{memory::Memory, SCREEN_HEIGHT, SCREEN_WIDTH};
+
+fn convert_palette_winit(palette: u16) -> u32 {
+    let (r, g, b) = (palette & 0x1F, (palette >> 5) & 0x1F, (palette >> 10) & 0x1F);
+    let color = ((r as u32) << 3) << 16 | ((g as u32) << 3) << 8 | ((b as u32) << 3);
+    return color 
+}
+
 
 enum PpuRegisters {
     Dispcnt = 0x4000000,
@@ -8,6 +13,8 @@ enum PpuRegisters {
     DispStat = 0x4000004,
     VCount = 0x4000006,
     BGCnt = 0x4000008,
+    BgHOffset = 0x4000010,
+    BgVOffset = 0x4000012,
 }
 
 pub struct Ppu {
@@ -68,7 +75,6 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
 
     update_registers(ppu, memory, dispstat);
 }
-
 fn update_registers(ppu: &mut Ppu, memory: &mut Memory, mut dispstat: u16) {
     // work in progress
     ppu.elapsed_time += 20;
@@ -134,27 +140,121 @@ fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory) {
     }
 
     // now we go in order
-    let mut inner_screen = vec![0; 512*512];
+    let mut overall_screen = vec![0; 240*160];
 
-    let vram_base = 0x6000000;
     for screen in screen_order {
+        let mut inner_screens = Vec::new();
+
         let bg_cnt = memory.read_u16(PpuRegisters::BGCnt as u32 + screen*2);
+        let size = (bg_cnt >> 14) & 0x3;
 
-        let screen_base_block = (bg_cnt >> 8) & 0x1F;
-        let char_base_block = (bg_cnt >> 2) & 0x3;
+        let num_screens = match size {
+            0 => 1,
+            1 => 2,
+            2 => 2,
+            3 => 4,
+            _ => unreachable!(),
+        };
+        for _ in 0..num_screens {
+            inner_screens.push(read_screen(bg_cnt, memory));
+        }
 
-        let screen_address = (screen_base_block as u32 * 0x800) + vram_base;
-        let charac_address = (char_base_block as u32 * 0x4000) + vram_base + 0x10000;
+        let x_offset = memory.read_u16(PpuRegisters::BgHOffset as u32 + screen*4) as usize;
+        let y_offset = memory.read_u16(PpuRegisters::BgVOffset as u32 + screen*4) as usize;
 
-        let size = (dispcnt >> 14) & 0x3;
-        for address in 0..(64*64) {
-            let tile_info = memory.read_u16(screen_address + address*2);
-            let tile = tile_info & 0x1FF;
+        for i in 0..140 {
+            for j in 0..260 {
+                let screens_y = (i + y_offset) % 256;
+                let screens_x = (j + x_offset) % 256;
 
-            
+                let used_screen;
+                match (size, i, j) {
+                    (3, 256..=512, 256..=512) => used_screen = 3,
+                    (3, 256..=512, _) => used_screen = 2,
+                    (3, _, 256..=512) => used_screen = 1,
+                    (2, 256..=512, _) => used_screen = 1,
+                    (1, _, 256..=512) => used_screen = 1,
+                    _ => used_screen = 0,
+                }
+
+                overall_screen[i * 240 + j] = inner_screens[used_screen][screens_y][screens_x];  
+            }
         }
     }
+
+    ppu.stored_screen = overall_screen;
+    ppu.new_screen = true;
 }
+
+// index will be the number 0-3
+fn read_screen(bg_cnt: u16, memory: &Memory) -> Vec<Vec<u32>> {
+    let vram_base = 0x6000000;
+    let mut screen = vec![vec![0; 256]; 256];
+
+    // all the base registers and whatnot
+    let screen_base_block = (bg_cnt >> 8) & 0x1F;
+    let char_base_block = (bg_cnt >> 2) & 0x3;
+    let bit_depth = (bg_cnt >> 7) & 1 == 1;
+
+    let screen_address = (screen_base_block as u32 * 0x800) + vram_base;
+    let charac_address = (char_base_block as u32 * 0x4000) + vram_base + 0x10000;
+
+    // start getting all of the dots for the screen
+    for drawn_index in 0..(32*32) {
+        let tile_info = memory.read_u16(screen_address + drawn_index*2);
+        let tile_index = tile_info & 0x1FF;
+
+        let palette_base = 0x5000000;
+
+        match bit_depth {
+            true => {
+                // 8-bit color depth
+                let mut tile_address = charac_address + (tile_index as u32 * 0x40);
+
+                for i in 0..8 {
+                    for j in 0..8 {
+                        let row = memory.read_u16(tile_address) as u32;
+                        let palette = memory.read_u16(palette_base + row);
+                        let color = convert_palette_winit(palette);
+
+                        let screen_row = (i * 256) + (drawn_index / 32) * 256*8;
+                        let screen_col = j + (drawn_index % 32) * 8;
+
+                        screen[screen_row as usize][screen_col as usize] = color as u32;
+                        tile_address += 2;
+                    }
+                }
+            }
+            false => {
+                // 4-bit color depth
+                let mut tile_address = charac_address + (tile_index as u32 * 0x20);
+                let palette_number = (tile_info >> 12) & 0xF;
+                let palette_start_entry = palette_base + (palette_number as u32 * 0x20);
+
+                for i in 0..8 {
+                    for j in 0..4 {
+                        let row = memory.read_u16(tile_address) as u32;
+                        let (right_pal, left_pal) = ((row >> 4) & 0xF, row & 0xF);
+                        let right = memory.read_u16(palette_start_entry + right_pal * 2);
+                        let left = memory.read_u16(palette_start_entry + left_pal * 2);
+                        
+                
+                        let screen_row = ((i * 256) + (drawn_index / 32) * 256*8) as usize;
+                        let screen_col = (j + (drawn_index % 32) * 8) as usize;
+
+                        screen[screen_row % 256][(screen_col + 0) % 256] = convert_palette_winit(left);
+                        screen[screen_row % 256][(screen_col + 1) % 256] = convert_palette_winit(right);
+
+                        tile_address += 1;
+                    }
+                }
+            }
+        }
+    }
+    screen
+}
+
+
 fn bg_mode_1(ppu: &mut Ppu, memory: &mut Memory) { 
 
 }

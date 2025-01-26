@@ -27,6 +27,27 @@ pub fn joypad_press(input: winit::keyboard::KeyCode, mem: &mut Memory) {
         _ => {}
     }
     mem.write_io(JPRegisters::KeyInput as u32, joypad);
+
+    let control = mem.read_u16(JPRegisters::KeyCnt as u32);
+    if (control >> 14) & 1 == 1 {
+        let mask = control & 0x3FF;
+        let keys = joypad & mask;
+
+        let call_interrupt;
+        let interrupt_condition = (control >> 15) & 1 == 1;
+        match interrupt_condition {
+            true => call_interrupt = mask == keys,
+            false => call_interrupt = keys != 0,
+        }
+
+        let mut i_flag = mem.read_u16(0x4000202);
+        i_flag &= !(1 << 12);
+        i_flag |= (call_interrupt as u16) << 12;
+
+        mem.write_io(0x4000202, i_flag); 
+    }
+
+    mem.write_io(JPRegisters::KeyCnt as u32, control);
 }
 
 pub fn joypad_release(input: winit::keyboard::KeyCode, mem: &mut Memory) {
