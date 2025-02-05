@@ -44,6 +44,8 @@ fn gba_frame(
     cycles: &mut u32,
     f: &mut File,
 ) {
+    ppu.acknowledge_frame();
+
     loop {
         // update the timer
         // add 1 for now, make it more accurate later
@@ -174,7 +176,7 @@ fn main() {
     let mut debug_file = File::create("debug/debug.txt").expect("the file couldnt be opened");
 
     let mut cpu = Cpu::new();
-    let mut mem = memory::create_memory("test/armwrestler.gba");
+    let mut mem = memory::create_memory("test/arm.gba");
     let mut ppu = Ppu::new();
     let mut fde = Fde::default();
     setup_joypad(&mut mem);

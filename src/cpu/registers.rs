@@ -95,7 +95,7 @@ impl Cpu {
             unbanked_registers: [0, 0, 0, 0, 0, 0, 0, 0],
             double_banked_registers: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
             many_banked_registers: [[0x03007F00, 0, 0x03007FE0, 0, 0x03007FE0, 0], [0, 0, 0, 0, 0, 0]],
-            pc: 0x000000,
+            pc: 0x8000000,
             cpsr: Cpsr::default(),
             spsr: [Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default()],
 
