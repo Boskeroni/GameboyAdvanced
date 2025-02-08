@@ -34,6 +34,10 @@ fn split_memory_address(address: u32) -> (u32, usize) {
     ((address >> 24) & 0xF, (address & 0xFFFFF) as usize)
 }
 
+const DMA_SAD: u32 = 0x40000B0;
+const DMA_DAD: u32 = 0x40000B4;
+const DMA_COUNT: u32 = 0x40000B8;
+const DMA_CNT: u32 = 0x40000BA;
 
 const EWRAM_LENGTH: usize = 0x40000;
 const IWRAM_LENGTH: usize = 0x8000;
@@ -56,6 +60,27 @@ pub struct Memory {
     timer_resets: [u16; 4],
 }
 impl Memory {
+    // since DMA takes several cycles, its best to just have it be its own thing
+    pub fn dma_tick(&mut self) {
+        let mut dma_transfer = None;
+        for i in 0..=3 {
+            let cnt = self.read_u16(DMA_CNT + i*8);
+            let is_on = (cnt >> 15) & 1 == 1;
+            if is_on {
+                dma_transfer = Some((i, cnt));
+                break;
+            }
+        }
+
+        // no dma transfer active rn
+        if let None = dma_transfer {
+            return;
+        }
+
+        let (dma, cnt) = dma_transfer.unwrap();
+
+    }
+
     pub fn read_u8(&self, address: u32) -> u8 {
         let (upp_add, low_add) = split_memory_address(address);
 
@@ -146,7 +171,7 @@ impl Memory {
         self.write_u8(address + 3, split.3);
     }
 
-    /// this should only be used by the 
+    /// avoids all of the checks, used just by the other sub-systems
     pub fn write_io(&mut self, address: u32, data: u16) {
         let address = address as usize - 0x4000000;
         let split = lil_end_split_u16(data);

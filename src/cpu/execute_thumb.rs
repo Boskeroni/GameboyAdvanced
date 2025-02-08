@@ -1,4 +1,4 @@
-use crate::cpu::registers::*;
+use crate::cpu::*;
 use crate::cpu::decode::DecodedThumb;
 use crate::memory::Memory;
 

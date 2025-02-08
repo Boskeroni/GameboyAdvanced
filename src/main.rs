@@ -4,8 +4,8 @@ mod ppu;
 mod joypad;
 
 use cpu::{
-    interrupt::handle_interrupts,
-    registers::Cpu,
+    handle_interrupts,
+    Cpu,
     decode::{DecodedInstruction, decode_arm, decode_thumb},
     execute_arm::execute_arm,
     execute_thumb::execute_thumb,
@@ -28,6 +28,10 @@ const SCREEN_WIDTH: usize = 240;
 const SCREEN_HEIGHT: usize = 160;
 const FPS: u128 = 60;
 const FRAME_TIME: u128 = 1_000_000_000 / FPS;
+
+const BIOS: bool = false;
+const DEBUG: bool = true;
+const STEP: bool = true;
 
 #[derive(Default)]
 struct Fde {
@@ -55,8 +59,6 @@ fn gba_frame(
             ppu.new_screen = false;
             return;
         }
-
-        // check for any interrupts
         handle_interrupts(mem, cpu);
 
         // Execute
@@ -70,7 +72,9 @@ fn gba_frame(
                 Arm(instr) => execute_arm(fde.decoded_opcode, instr, cpu, mem),
             };
 
-            //debug_screen(&cpu, instruction, fde.decoded_opcode, &old_regs, f);
+            if DEBUG {
+                debug_screen(&cpu, instruction, fde.decoded_opcode, &old_regs, f);
+            }
 
             if cpu.clear_pipeline {
                 fde.fetched = None;
@@ -123,9 +127,13 @@ fn debug_screen(
     writeln!(f, "======= {instr:?} {opcode:X} ========= ").unwrap();
     writeln!(f, "").unwrap();
 
-    //let mut temp = String::new();
-    //std::io::stdin().read_line(&mut temp).unwrap();
-    println!("");
+    if STEP {
+        let mut temp = String::new();
+        std::io::stdin().read_line(&mut temp).unwrap();
+    } else {
+        println!("");
+    }
+
     print!("{instr:?} | {opcode:X} | ");
 
     for i in 0..=15 {
@@ -175,8 +183,13 @@ fn main() {
     // debug purposes
     let mut debug_file = File::create("debug/debug.txt").expect("the file couldnt be opened");
 
-    let mut cpu = Cpu::new();
-    let mut mem = memory::create_memory("test/arm.gba");
+    let mut cpu;
+    if BIOS {
+        cpu = Cpu::from_bios();
+    } else {
+        cpu = Cpu::new();
+    }
+    let mut mem = memory::create_memory("test/suite.gba");
     let mut ppu = Ppu::new();
     let mut fde = Fde::default();
     setup_joypad(&mut mem);
@@ -197,7 +210,6 @@ fn main() {
                         }
                     }
                     WindowEvent::RedrawRequested => {
-                        let start = Instant::now();
                         gba_frame(
                             &mut cpu, 
                             &mut mem, 
@@ -206,7 +218,6 @@ fn main() {
                             &mut cycles, 
                             &mut debug_file
                         );
-                        let _end = start.elapsed();
 
                         // keep it running at 60fps
                         if last_render.elapsed().as_nanos() <= FRAME_TIME {

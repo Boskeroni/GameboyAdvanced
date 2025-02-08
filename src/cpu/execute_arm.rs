@@ -1,6 +1,6 @@
 use crate::memory::Memory;
 
-use super::registers::*;
+use super::*;
 use super::decode::DecodedArm;
 use super::get_shifted_value;
 
