@@ -197,6 +197,7 @@ fn alu_ops(opcode: u16, cpu: &mut Cpu) {
         0b0110 => {
             let subtract_operand = rs.wrapping_add(1 - cpu.cpsr.c as u32);
             let result = rd.wrapping_sub(subtract_operand);
+            cpu.cpsr.v = ((rd ^ subtract_operand) & (rd ^ result)) >> 31 == 1;
             (result, rd >= subtract_operand)
         }, // sbc,
         0b0111 => {
@@ -214,6 +215,7 @@ fn alu_ops(opcode: u16, cpu: &mut Cpu) {
         0b1010 => {
             undo = true;
             let result = rd.wrapping_sub(rs);
+            cpu.cpsr.v = ((rd ^ rs) & (rd ^ result)) >> 31 == 1;
             (result, rd >= rs)
         }, // cmp
         0b1011 => {
@@ -234,7 +236,8 @@ fn alu_ops(opcode: u16, cpu: &mut Cpu) {
     cpu.cpsr.n = (result >> 31) & 1 == 1;
     
     // only mathematical instructions change the V flag
-    if [0b0010, 0b0011, 0b0100, 0b0101, 0b0110, 0b0111, 0b1010, 0b1011].contains(&op) {
+    // all of the subtracts have already been handled
+    if [0b0101, 0b1011].contains(&op) {
         cpu.cpsr.v = (result >= (1 << 31)) | (result as i32 <= (-1 << 31));
     }
 

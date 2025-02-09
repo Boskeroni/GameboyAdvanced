@@ -110,6 +110,7 @@ fn data_processing(opcode: u32, cpu: &mut Cpu) {
     }
 
     let mut undo = false;
+    let v_backup = cpu.cpsr.v;
     let (result, alu_carry) = match operation {
         0b0000 => (op1 & op2, op2_carry), // and
         0b0001 => (op1 ^ op2, op2_carry), // eor
@@ -133,13 +134,13 @@ fn data_processing(opcode: u32, cpu: &mut Cpu) {
             let subtract_operand = op2.wrapping_add(1 - cpu.cpsr.c as u32);
             let result = op1.wrapping_sub(subtract_operand);
             cpu.cpsr.v = ((op1 ^ subtract_operand) & (op1 ^ result)) >> 31 == 1;
-            (result, op1 >= subtract_operand)
+            (result, op1 > op2)
         }, // sbc,
         0b0111 => {
             let subtract_operand = op1.wrapping_add(1 - cpu.cpsr.c as u32);
             let result = op2.wrapping_sub(subtract_operand);
             cpu.cpsr.v = ((subtract_operand ^ op2) & (op2 ^ result)) >> 31 == 1;
-            (result, op2 >= subtract_operand)
+            (result, op2 > op1)
         }, // rsc
         0b1000 => {
             undo = true; 
@@ -159,14 +160,15 @@ fn data_processing(opcode: u32, cpu: &mut Cpu) {
             undo = true; 
             op1.overflowing_add(op2)
         }, // cmn
-        0b1100 => {
-            (op1 | op2, op2_carry)
-        }, // orr
+        0b1100 => (op1 | op2, op2_carry), // orr
         0b1101 => (op2, op2_carry), // mov
         0b1110 => (op1 & !op2, op2_carry), // bic
         0b1111 => (!op2, op2_carry), // mvn
         _ => unreachable!()
     };
+    if !s_bit {
+        cpu.cpsr.v = v_backup;
+    }
 
     if rd_index == 15 && s_bit {
         if let ProcessorMode::User = cpu.cpsr.mode {
@@ -187,6 +189,7 @@ fn data_processing(opcode: u32, cpu: &mut Cpu) {
         cpu.cpsr.z = result == 0;
         cpu.cpsr.n = (result >> 31) & 1 == 1;
         cpu.cpsr.c = alu_carry;
+        
         // the v flag is only affected when the instruction is arithmetic
         // all of the subtractions are handled inside the match statement for simplicity
         if [0b0100, 0b0101, 0b1011].contains(&operation) {
@@ -267,17 +270,17 @@ fn multiply(opcode: u32, cpu: &mut Cpu) {
     let rs = cpu.get_register(rs_index);
     let rm = cpu.get_register(rm_index);
 
-    let result = rm.wrapping_mul(rs);
-    if (opcode >> 20) & 1 == 1 {
-        cpu.cpsr.z = result == 0;
-        cpu.cpsr.n = (result >> 31) != 0;
+    let mut result = rm.wrapping_mul(rs);
+    let acc_bit = (opcode >> 21) & 1 == 1;
+    if acc_bit {
+        result = result.wrapping_add(rn);
     }
-
     let rd = cpu.get_register_mut(rd_index);
     *rd = result;
 
-    if (opcode >> 21) & 1 == 1 {
-        *rd = rd.wrapping_add(rn);
+    if (opcode >> 20) & 1 == 1 {
+        cpu.cpsr.z = result == 0;
+        cpu.cpsr.n = (result >> 31) == 1;
     }
 }
 
