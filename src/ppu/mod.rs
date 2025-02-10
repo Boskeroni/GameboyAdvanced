@@ -11,7 +11,9 @@ const PALETTE_BASE: u32 = 0x5000000;
 
 fn convert_palette_winit(palette: u16) -> u32 {
     let (r, g, b) = (palette & 0x1F, (palette >> 5) & 0x1F, (palette >> 10) & 0x1F);
-    let color = ((r as u32) << 3) << 16 | ((g as u32) << 3) << 8 | ((b as u32) << 3);
+    let (float_r, float_g, float_b) = (r as f32 / 31., g as f32 / 31., b as f32 / 31.);
+    let (pixel_r, pixel_g, pixel_b) = (float_r * 255., float_g * 255., float_b * 255.);
+    let color = (pixel_r as u32) << 16 | (pixel_g as u32) << 8 | (pixel_b as u32);
     return color 
 }
 enum PpuRegisters {

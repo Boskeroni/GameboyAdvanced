@@ -14,16 +14,16 @@ pub fn joypad_press(input: winit::keyboard::KeyCode, mem: &mut Memory) {
 
     use winit::keyboard::KeyCode::*;
     match input {
-        KeyK => joypad &= !(1 << 0),
-        KeyL => joypad &= !(1 << 1),
-        KeyN => joypad &= !(1 << 2),
-        KeyM => joypad &= !(1 << 3),
-        KeyD => joypad &= !(1 << 4),
-        KeyA => joypad &= !(1 << 5),
-        KeyW => joypad &= !(1 << 6),
-        KeyS => joypad &= !(1 << 7),
-        KeyP => joypad &= !(1 << 8),
-        KeyQ => joypad &= !(1 << 9),
+        KeyK => joypad &= !(1 << 0), // BUTTON A
+        KeyL => joypad &= !(1 << 1), // BUTTON B
+        KeyN => joypad &= !(1 << 2), // SELECT
+        KeyM => joypad &= !(1 << 3), // START
+        KeyD => joypad &= !(1 << 4), // RIGHT
+        KeyA => joypad &= !(1 << 5), // LEFT
+        KeyW => joypad &= !(1 << 6), // UP
+        KeyS => joypad &= !(1 << 7), // DOWN
+        KeyP => joypad &= !(1 << 8), // BUTTON R
+        KeyQ => joypad &= !(1 << 9), // BUTTON L
         _ => {}
     }
     mem.write_io(JPRegisters::KeyInput as u32, joypad);

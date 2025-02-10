@@ -237,9 +237,10 @@ fn main() {
                             let g = (*c >> 8) & 0xFF;
                             let b = *c & 0xFF;
 
-                            screen[(i as usize * 4) + 1] = r as u8;
-                            screen[(i as usize * 4) + 2] = g as u8;
-                            screen[(i as usize * 4) + 3] = b as u8;
+                            screen[(i * 4) + 0] = r as u8;
+                            screen[(i * 4) + 1] = g as u8;
+                            screen[(i * 4) + 2] = b as u8;
+                            screen[(i * 4) + 3] = 0xFF;
                         }
                         pixels.render().unwrap();
                         window.request_redraw();
