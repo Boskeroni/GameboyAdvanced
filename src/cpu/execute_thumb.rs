@@ -1,5 +1,3 @@
-use core::panic;
-
 use crate::cpu::*;
 use crate::cpu::decode::DecodedThumb;
 use crate::memory::Memory;
@@ -31,7 +29,7 @@ pub fn execute_thumb(
         PushPop => push_pop(opcode, cpu, memory),
         MemMultiple => mem_multiple(opcode, cpu, memory),
         CondBranch => conditional_branch(opcode, cpu),
-        Swi => software_interrupt(opcode, cpu),
+        Swi => software_interrupt(cpu),
         UncondBranch => unconditional_branch(opcode, cpu),
         LongBranch => long_branch_link(opcode, cpu),
     }
@@ -659,7 +657,7 @@ fn long_branch_link(opcode: u16, cpu: &mut Cpu) {
     };
 }
 
-fn software_interrupt(opcode: u16, cpu: &mut Cpu) {
+fn software_interrupt(cpu: &mut Cpu) {
     let pc = cpu.get_register(15);
     let lr = cpu.get_register_mut(14);
 
