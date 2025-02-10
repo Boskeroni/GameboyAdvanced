@@ -7,7 +7,14 @@ pub mod decode;
 /// both the shifted value and the carry flag are returned
 /// 
 /// opcode should be the 11 bits which represent the shift + register
-pub fn get_shifted_value(cpu: &Cpu, opcode: u32) -> (u32, bool) {
+pub fn get_shifted_value(cpu: &mut Cpu, opcode: u32) -> (u32, bool) {
+    let (result, carry) = _get_shifted_value(cpu, opcode);
+
+    cpu.barrel_shifter = carry;
+    return (result, carry);
+}
+
+fn _get_shifted_value(cpu: &Cpu, opcode: u32) -> (u32, bool) {
     let shift_id = (opcode >> 4) & 1 == 1;
     let shift_type = (opcode >> 5) & 0b11;
 
@@ -175,6 +182,8 @@ pub struct Cpu {
 
     pub cpsr: Cpsr,
     pub spsr: [Cpsr; 6],
+
+    barrel_shifter: bool,
 }
 impl Cpu {
     pub fn new() -> Self {
@@ -185,6 +194,7 @@ impl Cpu {
             pc: 0x8000000,
             cpsr: Cpsr::default(),
             spsr: [Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default()],
+            barrel_shifter: false,
 
             clear_pipeline: false,
         }
@@ -197,6 +207,7 @@ impl Cpu {
             pc: 0,
             cpsr: Cpsr::default(),
             spsr: [Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default()],
+            barrel_shifter: false,
 
             clear_pipeline: false,
         }
@@ -347,6 +358,10 @@ impl Cpu {
             Undefined => &mut self.spsr[4],
             _ => &mut self.cpsr,
         }
+    }
+
+    pub fn get_barrel_shift(&self) -> bool {
+        self.barrel_shifter
     }
 }
 

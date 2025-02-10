@@ -1,3 +1,5 @@
+use core::panic;
+
 use crate::cpu::*;
 use crate::cpu::decode::DecodedThumb;
 use crate::memory::Memory;
@@ -86,15 +88,15 @@ fn add_sub(opcode: u16, cpu: &mut Cpu) {
     let op = (opcode >> 9) & 1 == 1;
     let result;
     match op {
-        true => { // add
+        true => { // sub
             result = rs.wrapping_sub(offset);
-            cpu.cpsr.v = ((rs ^ offset) & (rs ^ result)) >> 31 == 1;
+            cpu.cpsr.v = ((rs ^ offset) & (rs ^ result)) >> 31 & 1 == 1;
             cpu.cpsr.c = rs >= offset;
         }
-        false => { // sub
+        false => { // add
             let (temp, carry) = rs.overflowing_add(offset);
             cpu.cpsr.c = carry;
-            cpu.cpsr.v = ((rs ^ offset) & (rs ^ temp)) >> 31 & 1 == 1;
+            cpu.cpsr.v = ((rs ^ temp) & (offset ^ temp)) >> 31 & 1 == 1;
             result = temp;
         }
     }
@@ -128,6 +130,7 @@ fn alu_imm(opcode: u16, cpu: &mut Cpu) {
         }
         0b10 => {
             (result, carry) = rd.overflowing_add(offset);
+            cpu.cpsr.v = ((rd ^ result) & (offset ^ result)) >> 31 & 1 == 1;
         }
         0b11 => {
             carry = rd >= offset;
@@ -141,9 +144,6 @@ fn alu_imm(opcode: u16, cpu: &mut Cpu) {
     cpu.cpsr.c = carry;
     cpu.cpsr.n = (result >> 31) & 1 == 1;
     cpu.cpsr.z = result == 0;
-    if op & 1 == 0 {
-        cpu.cpsr.v = ((rd ^ result) & (offset ^ result)) >> 31 & 1 == 1;
-    }
 
     // CMP doesnt change the value
     if op == 1 {
@@ -161,10 +161,11 @@ fn alu_ops(opcode: u16, cpu: &mut Cpu) {
 
     let op = (opcode >> 6) & 0xF;
     let mut undo = false;
-
     let (result, alu_carry) = match op {
-        0b0000 => (rd & rs, false), // and
-        0b0001 => (rd ^ rs, false), // eor
+        0b0000 => (rd & rs, cpu.cpsr.c), // and
+        0b0001 => {
+            (rd ^ rs, cpu.cpsr.c)
+        }, // eor
         0b0010 => {
             let sent_opcode = 
                 (rs_index as u32 & 0xF) << 8 |
@@ -198,7 +199,7 @@ fn alu_ops(opcode: u16, cpu: &mut Cpu) {
             let subtract_operand = rs.wrapping_add(1 - cpu.cpsr.c as u32);
             let result = rd.wrapping_sub(subtract_operand);
             cpu.cpsr.v = ((rd ^ subtract_operand) & (rd ^ result)) >> 31 == 1;
-            (result, rd >= subtract_operand)
+            (result, rd > rs)
         }, // sbc,
         0b0111 => {
             let sent_opcode = 
@@ -209,9 +210,9 @@ fn alu_ops(opcode: u16, cpu: &mut Cpu) {
         }, // ror
         0b1000 => {
             undo = true; 
-            (rd & rs, false)
+            (rd & rs, cpu.cpsr.c)
         }, // tst
-        0b1001 => (0_u32.wrapping_sub(rs), false), // teq
+        0b1001 => (0_u32.wrapping_sub(rs), cpu.get_barrel_shift()), // teq
         0b1010 => {
             undo = true;
             let result = rd.wrapping_sub(rs);
@@ -223,11 +224,11 @@ fn alu_ops(opcode: u16, cpu: &mut Cpu) {
             rd.overflowing_add(rs)
         }, // cmn
         0b1100 => {
-            (rd | rs, false)
+            (rd | rs, cpu.cpsr.c)
         }, // orr
         0b1101 => rd.overflowing_mul(rs), // mul
-        0b1110 => (rd & !rs, false), // bic
-        0b1111 => (!rs, false), // mvn
+        0b1110 => (rd & !rs, cpu.cpsr.c), // bic
+        0b1111 => (!rs, cpu.cpsr.c), // mvn
         _ => unreachable!()
     };
 
@@ -238,7 +239,7 @@ fn alu_ops(opcode: u16, cpu: &mut Cpu) {
     // only mathematical instructions change the V flag
     // all of the subtracts have already been handled
     if [0b0101, 0b1011].contains(&op) {
-        cpu.cpsr.v = (result >= (1 << 31)) | (result as i32 <= (-1 << 31));
+        cpu.cpsr.v = ((rs ^ result) & (rd ^ result)) >> 31 & 1 == 1;
     }
 
     if undo {

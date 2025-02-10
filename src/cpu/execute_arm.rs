@@ -113,7 +113,9 @@ fn data_processing(opcode: u32, cpu: &mut Cpu) {
     let v_backup = cpu.cpsr.v;
     let (result, alu_carry) = match operation {
         0b0000 => (op1 & op2, op2_carry), // and
-        0b0001 => (op1 ^ op2, op2_carry), // eor
+        0b0001 => {
+            (op1 ^ op2, op2_carry)
+        }, // eor
         0b0010 => {
             let result = op1.wrapping_sub(op2);
             cpu.cpsr.v = ((op1 ^ op2) & (op1 ^ result)) >> 31 == 1;

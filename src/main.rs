@@ -29,8 +29,9 @@ const SCREEN_HEIGHT: usize = 160;
 const FPS: u128 = 60;
 const FRAME_TIME: u128 = 1_000_000_000 / FPS;
 
-const BIOS: bool = true;
+const BIOS: bool = false;
 const DEBUG: bool = false;
+const PRINT: bool = false;
 const STEP: bool = false;
 
 #[derive(Default)]
@@ -126,6 +127,9 @@ fn debug_screen(
     writeln!(f, "status: {:?}", cpu.cpsr).unwrap();
     writeln!(f, "======= {instr:?} {opcode:X} ========= ").unwrap();
     writeln!(f, "").unwrap();
+    if !PRINT {
+        return;
+    }
 
     if STEP {
         let mut temp = String::new();
