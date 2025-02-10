@@ -139,6 +139,7 @@ impl Memory {
         let (upp_add, low_add) = split_memory_address(address);
         
         if !self.check_valid_address(upp_add, low_add) {
+            println!("attempted write of {data:X} at {address:X}");
             return;
         }
         match upp_add {
@@ -189,7 +190,7 @@ impl Memory {
             0x6 => lower < VRAM_LENGTH,
             0x7 => lower < OAM_LENGTH,
             0x8 => lower < self.gp_rom.len(),
-            _ => panic!("{upper:X}"),
+            _ => false,
         }
     }
 }

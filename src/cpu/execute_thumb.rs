@@ -31,7 +31,7 @@ pub fn execute_thumb(
         PushPop => push_pop(opcode, cpu, memory),
         MemMultiple => mem_multiple(opcode, cpu, memory),
         CondBranch => conditional_branch(opcode, cpu),
-        Swi => todo!(),
+        Swi => software_interrupt(opcode, cpu),
         UncondBranch => unconditional_branch(opcode, cpu),
         LongBranch => long_branch_link(opcode, cpu),
     }
@@ -657,4 +657,18 @@ fn long_branch_link(opcode: u16, cpu: &mut Cpu) {
             cpu.clear_pipeline = true;
         },
     };
+}
+
+fn software_interrupt(opcode: u16, cpu: &mut Cpu) {
+    let pc = cpu.get_register(15);
+    let lr = cpu.get_register_mut(14);
+
+    *lr = pc - 2;
+
+    cpu.set_specific_spsr(cpu.cpsr, ProcessorMode::Supervisor);
+
+    let pc = cpu.get_register_mut(15);
+    *pc = 0x8;
+    cpu.clear_pipeline = true;
+    cpu.cpsr.t = false;
 }
