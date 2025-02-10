@@ -193,7 +193,7 @@ fn main() {
     } else {
         cpu = Cpu::new();
     }
-    let mut mem = memory::create_memory("test/FuzzARM.gba");
+    let mut mem = memory::create_memory("test/armwrestler.gba");
     let mut ppu = Ppu::new();
     let mut fde = Fde::default();
     setup_joypad(&mut mem);
