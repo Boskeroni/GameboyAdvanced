@@ -362,10 +362,10 @@ fn data_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
     let rn_index = (opcode >> 16) as u8 & 0xF;
 
     let offset;
-    if (opcode >> 25) & 1 == 1 {
+    if (opcode >> 25) & 1 == 1 {        
         offset = get_shifted_value(cpu, opcode).0;
     } else {
-        offset = opcode & 0b0111_1111_1111;
+        offset = opcode & 0xFFF;
     }
 
     let mut address = cpu.get_register(rn_index);
@@ -374,14 +374,13 @@ fn data_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
     let add_offset = (opcode >> 23) & 1 == 1;
     if pre_index {
         match add_offset {
-            true => address += offset,
-            false => address -= offset,
+            true => address = address.wrapping_add(offset),
+            false => address = address.wrapping_sub(offset),
         }
     }
 
     let l_bit = (opcode >> 20) & 1 == 1;
     let b_bit = (opcode >> 22) & 1 == 1;
-
     match l_bit {
         true => {
             let data = match b_bit {
@@ -412,8 +411,8 @@ fn data_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
     // have to post-update
     if !pre_index {
         match add_offset {
-            true => address += offset,
-            false => address -= offset,
+            true => address = address.wrapping_add(offset),
+            false => address = address.wrapping_sub(offset),
         }
     }
 

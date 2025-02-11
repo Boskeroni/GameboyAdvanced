@@ -7,6 +7,7 @@ pub mod decode;
 /// both the shifted value and the carry flag are returned
 /// 
 /// opcode should be the 11 bits which represent the shift + register
+/// 
 pub fn get_shifted_value(cpu: &mut Cpu, opcode: u32) -> (u32, bool) {
     let (result, carry) = _get_shifted_value(cpu, opcode);
 
@@ -82,7 +83,7 @@ fn _get_shifted_value(cpu: &Cpu, opcode: u32) -> (u32, bool) {
         }
         0b11 => {
             if shift_amount == 0 {
-                let result = (rm >> 31) | (cpu.cpsr.c as u32) << 31;
+                let result = (rm >> 1) | (cpu.cpsr.c as u32) << 31;
                 return (result, rm & 1 == 1);
             }
             let result = rm.rotate_right(shift_amount);
