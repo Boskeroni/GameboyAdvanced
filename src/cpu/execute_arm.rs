@@ -55,7 +55,6 @@ fn branch_link(opcode: u32, cpu: &mut Cpu) {
     *pc = pc.wrapping_add(offset);
     cpu.clear_pipeline = true;
 }
-
 fn branch_exchange(opcode: u32, cpu: &mut Cpu) {
     assert!((opcode & 0xF) != 15, "BRANCH EXCHANGE is undefined if Rn == 15");
 
@@ -68,7 +67,6 @@ fn branch_exchange(opcode: u32, cpu: &mut Cpu) {
     *pc = rn & 0xFFFFFFFE;
     cpu.clear_pipeline = true;
 }
-
 fn data_processing(opcode: u32, cpu: &mut Cpu) {
     let s_bit = (opcode >> 20) & 1 == 1;
     let operation = (opcode >> 21) & 0xF;
@@ -207,7 +205,6 @@ fn data_processing(opcode: u32, cpu: &mut Cpu) {
     let dst = cpu.get_register_mut(rd_index);
     *dst = result;
 }
-
 fn psr_transfer(opcode: u32, cpu: &mut Cpu) {
     let psr_bit = (opcode >> 22) & 1 == 1;
     let op = (opcode >> 21) & 1 == 1;
@@ -257,7 +254,6 @@ fn psr_transfer(opcode: u32, cpu: &mut Cpu) {
         }
     }
 }
-
 fn multiply(opcode: u32, cpu: &mut Cpu) {
     let rn_index = (opcode >> 12) as u8 & 0xF;
     let rd_index = (opcode >> 16) as u8 & 0xF;
@@ -285,7 +281,6 @@ fn multiply(opcode: u32, cpu: &mut Cpu) {
         cpu.cpsr.n = (result >> 31) == 1;
     }
 }
-
 fn multiply_long(opcode: u32, cpu: &mut Cpu) {
     let rm_index = opcode          as u8 & 0xF;
     let rs_index = (opcode >> 8)   as u8 & 0xF;
@@ -341,7 +336,6 @@ fn multiply_long(opcode: u32, cpu: &mut Cpu) {
         cpu.cpsr.n = (result >> 63) & 1 == 1;
     }
 }
-
 /// this instruction shouldnt change any of the CPSR flags
 fn software_interrupt(cpu: &mut Cpu) {
     // spsr_svc gets the old cpsr transferred into it
@@ -356,7 +350,6 @@ fn software_interrupt(cpu: &mut Cpu) {
     *change_pc = 0x08;
     cpu.clear_pipeline = true;
 }
-
 fn data_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
     let rd_index = (opcode >> 12) as u8 & 0xF;
     let rn_index = (opcode >> 16) as u8 & 0xF;
@@ -423,7 +416,6 @@ fn data_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
         *rn = address;
     }
 }
-
 /// this function handles both the immediate and register offsets
 /// Both pretty much have identical implementation besides for data acquisition
 fn halfword_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
@@ -535,7 +527,6 @@ fn halfword_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
         *rn = address;
     }
 }
-
 fn block_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
     let mut rlist = opcode & 0xFFFF;
     let started_empty = rlist == 0;
@@ -651,7 +642,6 @@ fn block_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
         }
     }
 }
-
 fn single_swap(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
     // for now just have them happen at the same time
     let rn_index = (opcode >> 16) as u8 & 0xF;
