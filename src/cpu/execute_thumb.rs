@@ -309,8 +309,8 @@ fn pc_relative_load(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
     let rd_index = (opcode >> 8) as u8 & 0b111;
     let imm = (opcode & 0xFF) << 2;
 
-    let pc = cpu.get_register(15) & 0xFFFFFFFD;
-    let address = pc + imm as u32;
+    let pc = cpu.get_register(15) & 0xFFFFFFFC;
+    let address = pc.wrapping_add(imm as u32);
     let read = memory.read_u32(address);
 
     let rd = cpu.get_register_mut(rd_index);
@@ -338,7 +338,7 @@ fn mem_offset(opcode: u16, cpu: &mut Cpu, memory: &mut Memory, uses_imm: bool) {
             l_bit = (opcode >> 11) & 1 == 1;
             b_bit = (opcode >> 10) & 1 == 1;
 
-            let ro_index = (opcode >> 6) & 0b11;
+            let ro_index = (opcode >> 6) & 0x7;
             let ro = cpu.get_register(ro_index as u8);
             address = rb.wrapping_add(ro);
         }
