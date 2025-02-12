@@ -78,7 +78,7 @@ impl Memory {
         }
 
         let (dma, cnt) = dma_transfer.unwrap();
-
+        println!("{dma}. {cnt}");
     }
 
     pub fn read_u8(&self, address: u32) -> u8 {
@@ -139,7 +139,7 @@ impl Memory {
         let (upp_add, low_add) = split_memory_address(address);
         
         if !self.check_valid_address(upp_add, low_add) {
-            println!("attempted write of {data:X} at {address:X}");
+            //println!("attempted write of {data:X} at {address:X}");
             return;
         }
         match upp_add {

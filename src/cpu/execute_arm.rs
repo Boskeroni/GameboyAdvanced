@@ -131,16 +131,16 @@ fn data_processing(opcode: u32, cpu: &mut Cpu) {
             (end_res, inter_of | end_of)
         }, // adc
         0b0110 => {
-            let subtract_operand = op2.wrapping_add(1 - cpu.cpsr.c as u32);
-            let result = op1.wrapping_sub(subtract_operand);
-            cpu.cpsr.v = ((op1 ^ subtract_operand) & (op1 ^ result)) >> 31 == 1;
-            (result, op1 > op2)
+            let (result, carry) = op1.overflowing_add(cpu.cpsr.c as u32);
+            let (result2, carry2) = result.overflowing_add(!op2);
+            cpu.cpsr.v = ((result ^ !op2) & (result2 ^ result)) >> 31 == 1;
+            (result2, carry | carry2)
         }, // sbc,
         0b0111 => {
-            let subtract_operand = op1.wrapping_add(1 - cpu.cpsr.c as u32);
-            let result = op2.wrapping_sub(subtract_operand);
-            cpu.cpsr.v = ((subtract_operand ^ op2) & (op2 ^ result)) >> 31 == 1;
-            (result, op2 > op1)
+            let (result, carry) = op2.overflowing_add(cpu.cpsr.c as u32);
+            let (result2, carry2) = result.overflowing_add(!op1);
+            cpu.cpsr.v = ((result ^ !op1) & (result2 ^ result)) >> 31 == 1;
+            (result2, carry | carry2)
         }, // rsc
         0b1000 => {
             undo = true; 

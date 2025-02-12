@@ -191,10 +191,10 @@ fn alu_ops(opcode: u16, cpu: &mut Cpu) {
             (end_res, inter_of | end_of)
         }, // adc
         0b0110 => {
-            let subtract_operand = rs.wrapping_add(1 - cpu.cpsr.c as u32);
-            let result = rd.wrapping_sub(subtract_operand);
-            cpu.cpsr.v = ((rd ^ subtract_operand) & (rd ^ result)) >> 31 == 1;
-            (result, rd > rs)
+            let (result, carry) = rd.overflowing_add(cpu.cpsr.c as u32);
+            let (result2, carry2) = result.overflowing_add(!rs);
+            cpu.cpsr.v = ((result ^ !rs) & (result2 ^ result)) >> 31 == 1;
+            (result2, carry | carry2)
         }, // sbc,
         0b0111 => {
             let sent_opcode = 
@@ -473,7 +473,6 @@ fn offset_sp(opcode: u16, cpu: &mut Cpu) {
         false => *sp = sp.wrapping_add(offset),
     }
 }
-
 fn push_pop(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
     let mut rlist = opcode & 0xFF;
     let l_bit = (opcode >> 11) & 1 == 1;
@@ -586,7 +585,6 @@ fn mem_multiple(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
     let rb_mut = cpu.get_register_mut(rb_index);
     *rb_mut = curr_address;
 }
-
 fn unconditional_branch(opcode: u16, cpu: &mut Cpu) {
     let mut offset = (opcode as u32 & 0x3FF) << 1;
     if (opcode >> 10) & 1 == 1 {
