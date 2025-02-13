@@ -115,14 +115,18 @@ fn data_processing(opcode: u32, cpu: &mut Cpu) {
             (op1 ^ op2, op2_carry)
         }, // eor
         0b0010 => {
-            let result = op1.wrapping_sub(op2);
-            cpu.cpsr.v = ((op1 ^ op2) & (op1 ^ result)) >> 31 == 1;
-            (result, op1 >= op2)
+            let (result1, carry1) = (!op2).overflowing_add(1);
+            let (result2, carry2) = op1.overflowing_add(result1);
+
+            cpu.cpsr.v = (op1 ^ result1) >> 31 == 0 && (op1 ^ result2) >> 31 == 1;
+            (result2, carry1 | carry2)
         }, // sub
         0b0011 => {
-            let result = op2.wrapping_sub(op1);
-            cpu.cpsr.v = ((op1 ^ op2) & (op2 ^ result)) >> 31 == 1;
-            (result, op2 >= op1)
+            let (result1, carry1) = (!op1).overflowing_add(1);
+            let (result2, carry2) = op2.overflowing_add(result1);
+
+            cpu.cpsr.v = (op2 ^ result1) >> 31 == 0 && (op2 ^ result2) >> 31 == 1;
+            (result2, carry1 | carry2)
         }, // rsb
         0b0100 => op1.overflowing_add(op2), // add
         0b0101 => {
@@ -131,16 +135,18 @@ fn data_processing(opcode: u32, cpu: &mut Cpu) {
             (end_res, inter_of | end_of)
         }, // adc
         0b0110 => {
-            let (result, carry) = op1.overflowing_add(cpu.cpsr.c as u32);
-            let (result2, carry2) = result.overflowing_add(!op2);
-            cpu.cpsr.v = ((result ^ !op2) & (result2 ^ result)) >> 31 == 1;
-            (result2, carry | carry2)
+            let (result1, carry1) = (!op2).overflowing_add(cpu.cpsr.c as u32);
+            let (result2, carry2) = op1.overflowing_add(result1);
+
+            cpu.cpsr.v = (op1 ^ result1) >> 31 == 0 && (op1 ^ result2) >> 31 == 1;
+            (result2, carry1 | carry2)
         }, // sbc,
         0b0111 => {
-            let (result, carry) = op2.overflowing_add(cpu.cpsr.c as u32);
-            let (result2, carry2) = result.overflowing_add(!op1);
-            cpu.cpsr.v = ((result ^ !op1) & (result2 ^ result)) >> 31 == 1;
-            (result2, carry | carry2)
+            let (result1, carry1) = (!op1).overflowing_add(cpu.cpsr.c as u32);
+            let (result2, carry2) = op2.overflowing_add(result1);
+
+            cpu.cpsr.v = (op2 ^ result1) >> 31 == 0 && (op2 ^ result2) >> 31 == 1;
+            (result2, carry1 | carry2)
         }, // rsc
         0b1000 => {
             undo = true; 
@@ -152,9 +158,11 @@ fn data_processing(opcode: u32, cpu: &mut Cpu) {
         }, // teq
         0b1010 => {
             undo = true;
-            let result = op1.wrapping_sub(op2);
-            cpu.cpsr.v = ((op1 ^ op2) & (op1 ^ result)) >> 31 == 1;
-            (result, op1 >= op2)
+            let (result1, carry1) = (!op2).overflowing_add(1);
+            let (result2, carry2) = op1.overflowing_add(result1);
+
+            cpu.cpsr.v = (op1 ^ result1) >> 31 == 0 && (op1 ^ result2) >> 31 == 1;
+            (result2, carry1 | carry2)
         }, // cmp
         0b1011 => {
             undo = true; 

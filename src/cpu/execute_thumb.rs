@@ -86,9 +86,12 @@ fn add_sub(opcode: u16, cpu: &mut Cpu) {
     let result;
     match op {
         true => { // sub
-            result = rs.wrapping_sub(offset);
-            cpu.cpsr.v = ((rs ^ offset) & (rs ^ result)) >> 31 & 1 == 1;
-            cpu.cpsr.c = rs >= offset;
+            let (result1, carry1) = (!offset).overflowing_add(1);
+            let (result2, carry2) = rs.overflowing_add(result1);
+
+            cpu.cpsr.v = (rs ^ result1) >> 31 == 0 && (rs ^ result2) >> 31 == 1;
+            cpu.cpsr.c = carry1 | carry2;
+            result = result2;
         }
         false => { // add
             let (temp, carry) = rs.overflowing_add(offset);
@@ -119,20 +122,24 @@ fn alu_imm(opcode: u16, cpu: &mut Cpu) {
             result = offset;
         }
         0b01 => {
-            carry = rd >= offset;
-            result = rd.wrapping_sub(offset);
+            let (result1, carry1) = (!offset).overflowing_add(1);
+            let (result2, carry2) = rd.overflowing_add(result1);
 
-            cpu.cpsr.v = ((rd ^ offset) & (rd ^ result)) >> 31 & 1 == 1;
+            cpu.cpsr.v = (rd ^ result1) >> 31 == 0 && (rd ^ result2) >> 31 == 1;
+            result = result2;
+            carry = carry1 | carry2;
         }
         0b10 => {
             (result, carry) = rd.overflowing_add(offset);
             cpu.cpsr.v = ((rd ^ result) & (offset ^ result)) >> 31 & 1 == 1;
         }
         0b11 => {
-            carry = rd >= offset;
-            result = rd.wrapping_sub(offset);
+            let (result1, carry1) = (!offset).overflowing_add(1);
+            let (result2, carry2) = rd.overflowing_add(result1);
 
-            cpu.cpsr.v = ((rd ^ offset) & (rd ^ result)) >> 31 & 1 == 1; 
+            cpu.cpsr.v = (rd ^ result1) >> 31 == 0 && (rd ^ result2) >> 31 == 1;
+            carry = carry1 | carry2;
+            result = result2;
         }
         _ => unreachable!(),
     }
@@ -191,10 +198,11 @@ fn alu_ops(opcode: u16, cpu: &mut Cpu) {
             (end_res, inter_of | end_of)
         }, // adc
         0b0110 => {
-            let (result, carry) = rd.overflowing_add(cpu.cpsr.c as u32);
-            let (result2, carry2) = result.overflowing_add(!rs);
-            cpu.cpsr.v = ((result ^ !rs) & (result2 ^ result)) >> 31 == 1;
-            (result2, carry | carry2)
+            let (result1, carry1) = (!rs).overflowing_add(1);
+            let (result2, carry2) = rd.overflowing_add(result1);
+
+            cpu.cpsr.v = (rd ^ result1) >> 31 == 0 && (rd ^ result2) >> 31 == 1;
+            (result2, carry1 | carry2)
         }, // sbc,
         0b0111 => {
             let sent_opcode = 
@@ -210,9 +218,11 @@ fn alu_ops(opcode: u16, cpu: &mut Cpu) {
         0b1001 => (0_u32.wrapping_sub(rs), cpu.get_barrel_shift()), // teq
         0b1010 => {
             undo = true;
-            let result = rd.wrapping_sub(rs);
-            cpu.cpsr.v = ((rd ^ rs) & (rd ^ result)) >> 31 == 1;
-            (result, rd >= rs)
+            let (result1, carry1) = (!rs).overflowing_add(1);
+            let (result2, carry2) = rd.overflowing_add(result1);
+
+            cpu.cpsr.v = (rd ^ result1) >> 31 == 0 && (rd ^ result2) >> 31 == 1;
+            (result2, carry1 | carry2)
         }, // cmp
         0b1011 => {
             undo = true; 
@@ -271,11 +281,13 @@ fn hi_ops(opcode: u16, cpu: &mut Cpu) {
         0b00 => result = rd.wrapping_add(rs),
         0b01 => {
             // this is the only instruction that sets the codes
-            let result = rd.wrapping_sub(rs);
-            cpu.cpsr.c = (result >> 31) & 1 == 1;
-            cpu.cpsr.n = (result >> 31) & 1 == 1;
-            cpu.cpsr.z = result == 0;
-            cpu.cpsr.v = ((rs ^ result) & (rd ^ result)) >> 31 & 1 == 1;
+            let (result1, carry1) = (!rs).overflowing_add(1);
+            let (result2, carry2) = rd.overflowing_add(result1);
+
+            cpu.cpsr.v = (rd ^ result1) >> 31 == 0 && (rd ^ result2) >> 31 == 1;
+            cpu.cpsr.c = carry1 | carry2;
+            cpu.cpsr.n = (result2 >> 31) & 1 == 1;
+            cpu.cpsr.z = result2 == 0;
             return;
         },
         0b10 => result = rs,
