@@ -89,7 +89,7 @@ fn add_sub(opcode: u16, cpu: &mut Cpu) {
             let (result1, carry1) = (!offset).overflowing_add(1);
             let (result2, carry2) = rs.overflowing_add(result1);
 
-            cpu.cpsr.v = (rs ^ result1) >> 31 == 0 && (rs ^ result2) >> 31 == 1;
+            cpu.cpsr.v = (!(rs ^ !offset) & (rs ^ result2)) >> 31 & 1 == 1;
             cpu.cpsr.c = carry1 | carry2;
             result = result2;
         }
@@ -198,10 +198,10 @@ fn alu_ops(opcode: u16, cpu: &mut Cpu) {
             (end_res, inter_of | end_of)
         }, // adc
         0b0110 => {
-            let (result1, carry1) = (!rs).overflowing_add(1);
+            let (result1, carry1) = (!rs).overflowing_add(cpu.cpsr.c as u32);
             let (result2, carry2) = rd.overflowing_add(result1);
 
-            cpu.cpsr.v = (rd ^ result1) >> 31 == 0 && (rd ^ result2) >> 31 == 1;
+            cpu.cpsr.v = (!(rd ^ !rs) & (rd ^ result2)) >> 31 & 1 == 1;
             (result2, carry1 | carry2)
         }, // sbc,
         0b0111 => {
@@ -221,7 +221,7 @@ fn alu_ops(opcode: u16, cpu: &mut Cpu) {
             let (result1, carry1) = (!rs).overflowing_add(1);
             let (result2, carry2) = rd.overflowing_add(result1);
 
-            cpu.cpsr.v = (rd ^ result1) >> 31 == 0 && (rd ^ result2) >> 31 == 1;
+            cpu.cpsr.v = (!(rd ^ !rs) & (rd ^ result2)) >> 31 & 1 == 1;
             (result2, carry1 | carry2)
         }, // cmp
         0b1011 => {
@@ -244,7 +244,7 @@ fn alu_ops(opcode: u16, cpu: &mut Cpu) {
     // only mathematical instructions change the V flag
     // all of the subtracts have already been handled
     if [0b0101, 0b1011].contains(&op) {
-        cpu.cpsr.v = ((rs ^ result) & (rd ^ result)) >> 31 & 1 == 1;
+        cpu.cpsr.v = (!(rs ^ rd) & (rd ^ result)) >> 31 & 1 == 1;
     }
 
     if undo {
@@ -284,7 +284,7 @@ fn hi_ops(opcode: u16, cpu: &mut Cpu) {
             let (result1, carry1) = (!rs).overflowing_add(1);
             let (result2, carry2) = rd.overflowing_add(result1);
 
-            cpu.cpsr.v = (rd ^ result1) >> 31 == 0 && (rd ^ result2) >> 31 == 1;
+            cpu.cpsr.v = ((rd ^ rs) & (rd ^ result2)) >> 31 & 1 == 1;
             cpu.cpsr.c = carry1 | carry2;
             cpu.cpsr.n = (result2 >> 31) & 1 == 1;
             cpu.cpsr.z = result2 == 0;
