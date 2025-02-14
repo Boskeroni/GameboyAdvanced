@@ -30,7 +30,7 @@ const FPS: u128 = 60;
 const FRAME_TIME: u128 = 1_000_000_000 / FPS;
 
 const BIOS: bool = false;
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 const PRINT: bool = false;
 const STEP: bool = false;
 
@@ -61,6 +61,11 @@ fn gba_frame(
             return;
         }
         handle_interrupts(mem, cpu);
+        if cpu.clear_pipeline {
+            fde.fetched = None;
+            fde.decoded = None;
+            cpu.clear_pipeline = false;
+        }
 
         // Execute
         if let Some(instruction) = fde.decoded {

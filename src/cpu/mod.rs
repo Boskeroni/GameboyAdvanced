@@ -387,9 +387,15 @@ pub fn handle_interrupts(memory: &mut Memory, cpu: &mut Cpu) {
         return;
     }
 
+    let interrupt_called = called_interrupts.trailing_zeros();
+    let new_if = interrupts_called & !(1 << interrupt_called);
+    memory.write_u16(CpuRegisters::If as u32, new_if);
+
     cpu.cpsr.mode = ProcessorMode::Interrupt;
     cpu.cpsr.t = false;
-
-    let pc = cpu.get_register_mut(15);
+ 
+    println!("interrupt!!! {called_interrupts:X}");
+    let pc = cpu.get_register_mut(15); 
     *pc = 0x18;
+    cpu.clear_pipeline = true;
 }

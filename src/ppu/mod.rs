@@ -31,6 +31,8 @@ pub struct Ppu {
     pub new_screen: bool,
     elapsed_time: usize, // represents the number of dots elapsed
     pub stored_screen: Vec<u32>,
+    in_hblank: bool,
+    in_vblank: bool,
 }
 impl Ppu {
     pub fn new() -> Self {
@@ -38,6 +40,8 @@ impl Ppu {
             new_screen: false,
             elapsed_time: 0,
             stored_screen: Vec::new(),
+            in_hblank: false,
+            in_vblank: false,
         }
     }
     pub fn acknowledge_frame(&mut self) {
@@ -75,16 +79,14 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
             }
         }
 
-
         if vcount as usize >= (SCREEN_HEIGHT + 68) {
             vcount = 0;
             ppu.new_screen = true;
         }
-        memory.write_io(PpuRegisters::VCount as u32, vcount as u16);
-          
-    }
 
-    update_registers(ppu, memory, dispstat, vcount);
+        update_registers(ppu, memory, dispstat, vcount);
+        memory.write_io(PpuRegisters::VCount as u32, vcount as u16);
+    }
 }
 fn update_registers(ppu: &mut Ppu, memory: &mut Memory, mut dispstat: u16, vcount: u16) {
     // work in progress
@@ -98,16 +100,22 @@ fn update_registers(ppu: &mut Ppu, memory: &mut Memory, mut dispstat: u16, vcoun
 
     // V-blank flag
     let in_vblank = ppu.elapsed_time / (SCREEN_WIDTH + 68) >= SCREEN_HEIGHT;
-    match in_vblank {
-        true => dispstat |= 1<<0,
-        false => dispstat &= !(1<<0),
+    if in_vblank != ppu.in_vblank {
+        match in_vblank {
+            true => dispstat |= 1<<0,
+            false => dispstat &= !(1<<0),
+        }  
+        ppu.in_vblank = in_vblank
     }
 
     // H-blank flag
     let in_hblank = ppu.elapsed_time % (SCREEN_WIDTH + 68) >= SCREEN_WIDTH;
-    match in_hblank {
-        true => dispstat |= 1<<1,
-        false => dispstat &= !(1<<1),
+    if in_hblank != ppu.in_hblank {
+        match in_hblank {
+            true => dispstat |= 1<<1,
+            false => dispstat &= !(1<<1),
+        }
+        ppu.in_hblank = in_hblank;
     }
 
     let vcount_lyc = (dispstat >> 8) & 0xFF;
@@ -116,7 +124,6 @@ fn update_registers(ppu: &mut Ppu, memory: &mut Memory, mut dispstat: u16, vcoun
         true => dispstat |= 1<<2,
         false => dispstat &= !(1<<2),
     }  
-
 
     let mut ie = memory.read_u16(0x4000202);
     ie &= !0b111;
