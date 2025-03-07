@@ -40,7 +40,7 @@ pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory, line: u32) {
         let line = read_scanline(line, bg, memory);
         for i in 0..240 {
             // something has already been displayed to the scanline
-            if scanline[i] != 0 { continue; }
+            //if scanline[i] != 0 { continue; }
             scanline[i] = line[i];
         }
     }
@@ -71,7 +71,7 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u32> {
 
     // all the needed knowledge of positions that we are rendering to
     // x_tile and y_tile are 0->32, offsets are 0->8
-    let (mut x_tile, x_tile_offset, tile_row, tile_row_offset);
+    let (mut x_tile, x_tile_offset, y_tile, y_tile_offset);
     {
         let x_offset = memory.read_u16(PpuRegisters::BgHOffset as u32 + (bg * 4)) as u32;
         let y_offset = memory.read_u16(PpuRegisters::BgVOffset as u32 + (bg * 4)) as u32;
@@ -79,24 +79,23 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u32> {
         x_tile = x_offset / 8;
         x_tile_offset = x_offset % 8;
 
-        tile_row = (y_offset + line) / 8;
-        tile_row_offset = (y_offset + line) % 8;
+        y_tile = (y_offset + line) / 8;
+        y_tile_offset = (y_offset + line) % 8;
     }
 
-    // I reserve 248 as it is the minimum amount that we will store
-    // on any given run. Could do more, but the performance gain would
-    // be so incredibly minimal that it would be counter-acted by the
-    // times it doesnt need it
+    // I reserve 256 as I want the list to have two tiles width
+    // extra on each side, so that it accounts for scrolling
+    // so 240 + (8 * 2) = 256
     let mut scanline = Vec::<u32>::new();
-    scanline.reserve(248);
+    scanline.reserve(256);
 
     while scanline.len() <= 248 {
         // first figure out which screen it is rendering to
         let used_screen = match (width, height) {
             (256, 256) => 0,
             (512, 256) => (x_tile >= 32) as u32,
-            (256, 512) => (tile_row >= 32) as u32,
-            (512, 512) => (x_tile >= 32) as u32 + ((tile_row >= 32) as u32) * 2,
+            (256, 512) => (y_tile >= 32) as u32,
+            (512, 512) => (x_tile >= 32) as u32 + ((y_tile >= 32) as u32) * 2,
             _ => unreachable!(),
         };
 
@@ -104,7 +103,8 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u32> {
         let tile_address = sc0_address + // baseline address all others work off
             (used_screen * 0x800) + // the screen we need to read from
             ((x_tile % 32) * 2) +  // the x_row of the tile (doubled as u16 -> u32)
-            ((tile_row % 32) * 0x40); // the row being used
+            ((y_tile % 32) * 0x40); // the row being used
+
         let tile = memory.read_u16(tile_address);
 
         // all the information stored in the tile
@@ -116,18 +116,17 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u32> {
         match is_8_bit {
             true => {
                 let needed_row = match ver_flip {
-                    true => 7 - tile_row_offset,
-                    false => tile_row_offset,
+                    true => 7 - y_tile_offset,
+                    false => y_tile_offset,
                 };
-                let line_address = char_address + // base? im not sure if its this or 0x60... flat
-                    (tile_number * 0x40) + // 
+                let line_address = char_address +
+                    (tile_number * 0x40) + 
                     (needed_row * 0x8);
 
                 for mut pixel in 0..8 {
                     if hor_flip {
                         pixel = 7 - pixel;
                     }
-
                     let palette_index = memory.read_u8(line_address + pixel);
                     let palette = memory.read_u16(PALETTE_BASE + (palette_index as u32 * 2));
                     let screen_value = convert_palette_winit(palette);
@@ -136,8 +135,8 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u32> {
             }
             false => {
                 let needed_row = match ver_flip {
-                    true => 7 - tile_row_offset,
-                    false => tile_row_offset,
+                    true => 7 - y_tile_offset,
+                    false => y_tile_offset,
                 };
                 let line_address = char_address + 
                     (tile_number * 0x20) + 
