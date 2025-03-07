@@ -36,11 +36,11 @@ pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory, line: u32) {
 
     // now have a list of the order of the backgrounds
     let mut scanline = vec![0; 240];
-    for bg in backgrounds {
-        let line = read_scanline(line, bg, memory);
+    for bg in backgrounds.iter().rev() {
+        let line = read_scanline(line, *bg, memory);
         for i in 0..240 {
             // something has already been displayed to the scanline
-            //if scanline[i] != 0 { continue; }
+            if scanline[i] != 0 { continue; }
             scanline[i] = line[i];
         }
     }
