@@ -9,7 +9,6 @@ pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory, line: u32) {
     // sorted lowest to highest priority.
     let mut backgrounds = Vec::new();
     let mut priorities = Vec::new();
-
     for i in 0..=3 {
         if dispcnt >> (8 + i) & 1 == 1 {
             continue;
@@ -30,6 +29,7 @@ pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory, line: u32) {
         priorities.insert(curr, priority);
     }
 
+    // can't display anything to any background
     if backgrounds.is_empty() {
         return;
     }
@@ -39,6 +39,7 @@ pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory, line: u32) {
     for bg in backgrounds {
         let line = read_scanline(line, bg, memory);
         for i in 0..240 {
+            // something has already been displayed to the scanline
             if scanline[i] != 0 { continue; }
             scanline[i] = line[i];
         }
@@ -48,6 +49,8 @@ pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory, line: u32) {
 fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u32> {
     let bg_cnt = memory.read_u16(PpuRegisters::BGCnt as u32 + bg * 2);
 
+    // all the variables stored within the bg_cnt register
+    // (not all of their functionality have been implemented yet)
     let char_block = (bg_cnt >> 2) & 0x3;
     let mosaic = (bg_cnt >> 6) & 1 == 1;
     let is_8_bit = (bg_cnt >> 7) & 1 == 1;
@@ -66,6 +69,8 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u32> {
     let sc0_address = VRAM_BASE + (screen_base as u32 * 0x800);
     let char_address = VRAM_BASE + (char_block as u32 * 0x4000);
 
+    // all the needed knowledge of positions that we are rendering to
+    // x_tile and y_tile are 0->32, offsets are 0->8
     let (mut x_tile, x_tile_offset, tile_row, tile_row_offset);
     {
         let x_offset = memory.read_u16(PpuRegisters::BgHOffset as u32 + (bg * 4)) as u32;
@@ -78,11 +83,15 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u32> {
         tile_row_offset = (y_offset + line) % 8;
     }
 
+    // I reserve 248 as it is the minimum amount that we will store
+    // on any given run. Could do more, but the performance gain would
+    // be so incredibly minimal that it would be counter-acted by the
+    // times it doesnt need it
     let mut scanline = Vec::<u32>::new();
-    scanline.reserve(240);
+    scanline.reserve(248);
 
     while scanline.len() <= 248 {
-        // first figure out where the tile we need is
+        // first figure out which screen it is rendering to
         let used_screen = match (width, height) {
             (256, 256) => 0,
             (512, 256) => (x_tile >= 32) as u32,
@@ -91,12 +100,18 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u32> {
             _ => unreachable!(),
         };
 
-        let tile_address = sc0_address + ((x_tile % 32) * 2) + ((tile_row % 32) * 0x40) + (used_screen * 0x800);
+        // the memory address of the tile we need to get
+        let tile_address = sc0_address + // baseline address all others work off
+            (used_screen * 0x800) + // the screen we need to read from
+            ((x_tile % 32) * 2) +  // the x_row of the tile (doubled as u16 -> u32)
+            ((tile_row % 32) * 0x40); // the row being used
         let tile = memory.read_u16(tile_address);
 
+        // all the information stored in the tile
         let tile_number = tile as u32 & 0x1FF;
         let hor_flip = (tile >> 10) & 1 == 1;
         let ver_flip = (tile >> 11) & 1 == 1;
+        let palette_number = (tile >> 12) as u32 & 0xF;
 
         match is_8_bit {
             true => {
@@ -104,13 +119,15 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u32> {
                     true => 7 - tile_row_offset,
                     false => tile_row_offset,
                 };
-                let line_address = char_address + (tile_number * 0x40) + (needed_row * 0x8);
+                let line_address = char_address + // base? im not sure if its this or 0x60... flat
+                    (tile_number * 0x40) + // 
+                    (needed_row * 0x8);
 
                 for mut pixel in 0..8 {
                     if hor_flip {
                         pixel = 7 - pixel;
                     }
-                    
+
                     let palette_index = memory.read_u8(line_address + pixel);
                     let palette = memory.read_u16(PALETTE_BASE + (palette_index as u32 * 2));
                     let screen_value = convert_palette_winit(palette);
@@ -118,12 +135,13 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u32> {
                 }
             }
             false => {
-                let palette_number = (tile >> 12) as u32 & 0xF;
                 let needed_row = match ver_flip {
                     true => 7 - tile_row_offset,
                     false => tile_row_offset,
                 };
-                let line_address = char_address + (tile_number * 0x20) + (needed_row * 0x4);
+                let line_address = char_address + 
+                    (tile_number * 0x20) + 
+                    (needed_row * 0x4);
 
                 for mut pixel in 0..4 {
                     if hor_flip {
@@ -152,8 +170,8 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u32> {
     return scanline
 }
 pub fn bg_mode_1(ppu: &mut Ppu, memory: &mut Memory, line: u16) { 
-    todo!();
+    todo!()
 }
 pub fn bg_mode_2(ppu: &mut Ppu, memory: &mut Memory, line: u16) { 
-    todo!();
+    todo!()
 }

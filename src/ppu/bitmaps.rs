@@ -5,12 +5,10 @@ pub fn bg_mode_3(ppu: &mut Ppu, memory: &mut Memory, line: u16) {
     let mut scanline = vec![0; 240];
 
     let start = 0x6000000 + (line as u32 * 480); // screen width * 2
-    let mut address = start;
-    for _ in 0..240 {
-        let pixel_data = memory.read_u16(address);
+    for i in 0..240 {
+        let pixel_data = memory.read_u16(start + i*2);
         let pixel = convert_palette_winit(pixel_data);
-        scanline.push(pixel);
-        address += 2;
+        scanline[i as usize] = pixel;
     }
 
     ppu.stored_screen.extend(scanline);
