@@ -31,7 +31,7 @@ const FRAME_TIME: u128 = 1_000_000_000 / FPS;
 
 const BIOS: bool = false;
 const DEBUG: bool = false;
-const PRINT: bool = false;
+const PRINT: bool = true;
 const STEP: bool = false;
 
 #[derive(Default)]
@@ -193,7 +193,7 @@ fn main() {
     } else {
         cpu = Cpu::new();
     }
-    let mut mem = memory::create_memory("test/FuzzArmDP.gba");
+    let mut mem = memory::create_memory("test/ppu/stripes.gba");
     let mut ppu = Ppu::new();
     let mut fde = Fde::default();
     setup_joypad(&mut mem);

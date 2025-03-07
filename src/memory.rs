@@ -96,7 +96,12 @@ impl Memory {
             0x5 => self.obj_pall[low_add],
             0x6 => self.vram[low_add],
             0x7 => self.oam[low_add],
-            _ => self.gp_rom[low_add],
+            _ => {
+                if low_add >= self.gp_rom.len() {
+                    return 0x00;
+                }
+                self.gp_rom[low_add]
+            },
         }
     }
 
@@ -189,7 +194,7 @@ impl Memory {
             0x5 => lower < OBJ_PALL_LENGTH,
             0x6 => lower < VRAM_LENGTH,
             0x7 => lower < OAM_LENGTH,
-            0x8 => lower < self.gp_rom.len(),
+            0x8 => true,
             _ => false,
         }
     }
