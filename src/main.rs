@@ -193,7 +193,7 @@ fn main() {
     } else {
         cpu = Cpu::new();
     }
-    let mut mem = memory::create_memory("test/bin/hello.gba");
+    let mut mem = memory::create_memory("test/bin/bm_modes.gba");
     let mut ppu = Ppu::new();
     let mut fde = Fde::default();
     setup_joypad(&mut mem);

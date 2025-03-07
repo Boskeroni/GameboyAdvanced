@@ -88,7 +88,7 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
 }
 fn update_registers(ppu: &mut Ppu, memory: &mut Memory, mut dispstat: u16, vcount: u16) {
     // work in progress
-    ppu.elapsed_time += 1;
+    ppu.elapsed_time += 5;
     
     // new frame
     if ppu.elapsed_time >= DOTS_PER_FRAME {

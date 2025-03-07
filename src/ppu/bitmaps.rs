@@ -35,10 +35,9 @@ pub fn bg_mode_4(ppu: &mut Ppu, memory: &mut Memory, line: u16) {
     ppu.stored_screen.extend(screen);
 }
 pub fn bg_mode_5(ppu: &mut Ppu, memory: &mut Memory, line: u16) {
-    let width = 160;
-    let height = 128;
-
+    let (width, height) = (160, 128);
     if line >= height {
+        ppu.stored_screen.extend([0; 240]);
         return;
     }
 
@@ -54,7 +53,7 @@ pub fn bg_mode_5(ppu: &mut Ppu, memory: &mut Memory, line: u16) {
 
     let mut scanline = vec![0; 240];
     for index in 0..width {
-        let color = memory.read_u16(address);
+        let color = memory.read_u16(address + index*2);
         let pixel = convert_palette_winit(color);
         scanline[index as usize] = pixel;
     }
