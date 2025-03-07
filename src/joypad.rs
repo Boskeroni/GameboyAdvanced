@@ -14,8 +14,8 @@ pub fn joypad_press(input: winit::keyboard::KeyCode, mem: &mut Memory) {
 
     use winit::keyboard::KeyCode::*;
     match input {
-        KeyK => joypad &= !(1 << 0), // BUTTON A
-        KeyL => joypad &= !(1 << 1), // BUTTON B
+        KeyL => joypad &= !(1 << 0), // BUTTON A
+        KeyK => joypad &= !(1 << 1), // BUTTON B
         KeyN => joypad &= !(1 << 2), // SELECT
         KeyM => joypad &= !(1 << 3), // START
         KeyD => joypad &= !(1 << 4), // RIGHT
@@ -36,8 +36,8 @@ pub fn joypad_release(input: winit::keyboard::KeyCode, mem: &mut Memory) {
 
     use winit::keyboard::KeyCode::*;
     match input {
-        KeyK => joypad |= 1 << 0,
-        KeyL => joypad |= 1 << 1,
+        KeyL => joypad |= 1 << 0,
+        KeyK => joypad |= 1 << 1,
         KeyN => joypad |= 1 << 2,
         KeyM => joypad |= 1 << 3,
         KeyD => joypad |= 1 << 4,
