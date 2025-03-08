@@ -10,6 +10,7 @@ pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory, line: u32) {
     let mut backgrounds = Vec::new();
     let mut priorities = Vec::new();
     for i in 0..=3 {
+        // the background is turned off
         if dispcnt >> (8 + i) & 1 == 1 {
             continue;
         }
@@ -19,8 +20,8 @@ pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory, line: u32) {
 
         // cheeky little insertions
         let mut curr = 0;
-        while curr < backgrounds.len()  {
-            if backgrounds[curr] <= priority as u32  {
+        while curr < priorities.len()  {
+            if priorities[curr] <= priority  {
                 break;
             }
             curr += 1;
@@ -36,15 +37,23 @@ pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory, line: u32) {
 
     // now have a list of the order of the backgrounds
     let mut scanline = vec![0; 240];
-    for bg in backgrounds.iter().rev() {
-        let line = read_scanline(line, *bg, memory);
+    let mut pixel_priorities = vec![0; 240];
+    let num_backgrounds = backgrounds.len();
+    for j in 0..num_backgrounds {
+        let bg = backgrounds[num_backgrounds - j - 1];
+        let priority = priorities[num_backgrounds - j - 1];
+
+        let line = read_scanline(line, bg, memory);
         for i in 0..240 {
             // something has already been displayed to the scanline
             if scanline[i] != 0 { continue; }
+            pixel_priorities[i] = priority;
             scanline[i] = line[i];
         }
     }
-    ppu.stored_screen.extend(scanline);
+    
+    ppu.pixel_priorities = pixel_priorities;
+    ppu.worked_on_line = scanline;
 }
 fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u32> {
     let bg_cnt = memory.read_u16(PpuRegisters::BGCnt as u32 + bg * 2);

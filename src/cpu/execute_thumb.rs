@@ -650,16 +650,19 @@ fn long_branch_link(opcode: u16, cpu: &mut Cpu) {
         },
     };
 }
-fn software_interrupt(cpu: &mut Cpu) {
-    let pc = cpu.get_register(15);
-    let lr = cpu.get_register_mut(14);
 
-    *lr = pc - 2;
+fn software_interrupt(cpu: &mut Cpu) {
+    println!("PREPARE FOR CRASH");
 
     cpu.set_specific_spsr(cpu.cpsr, ProcessorMode::Supervisor);
+    cpu.cpsr.mode = ProcessorMode::Supervisor;
+
+    let pc = cpu.get_register(15);
+    let lr = cpu.get_register_mut(14);
+    *lr = pc - 2;
 
     let pc = cpu.get_register_mut(15);
-    *pc = 0x8;
+    *pc = 0x08;
     cpu.clear_pipeline = true;
     cpu.cpsr.t = false;
 }

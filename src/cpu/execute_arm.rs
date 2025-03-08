@@ -179,9 +179,20 @@ fn data_processing(opcode: u32, cpu: &mut Cpu) {
     }
 
     if rd_index == 15 && s_bit {
-        if let ProcessorMode::User = cpu.cpsr.mode {
-            panic!("this instruction shouldn't be used in user mode");
+        if operation == 0b1101 && !i_bit && opcode & 0xF == 14 {
+            // returning from an SWI
+            if let ProcessorMode::Supervisor = cpu.cpsr.mode {
+                let lr = cpu.get_register(14);
+                let pc = cpu.get_register_mut(15);
+                *pc = lr;
+
+                cpu.cpsr = *cpu.get_spsr();
+                cpu.clear_pipeline = true;
+
+                return;
+            }
         }
+
         cpu.cpsr = *cpu.get_spsr();
 
         if undo {
@@ -346,13 +357,15 @@ fn multiply_long(opcode: u32, cpu: &mut Cpu) {
 }
 /// this instruction shouldnt change any of the CPSR flags
 fn software_interrupt(cpu: &mut Cpu) {
+    println!("PREPARE FOR CRASH");
+
     // spsr_svc gets the old cpsr transferred into it
     cpu.set_specific_spsr(cpu.cpsr, ProcessorMode::Supervisor);
 
     cpu.cpsr.mode = ProcessorMode::Supervisor;
     let pc = cpu.get_register(15);
     let save_pc = cpu.get_register_mut(14);
-    *save_pc = pc - 8;
+    *save_pc = pc - 4;
 
     let change_pc = cpu.get_register_mut(15);
     *change_pc = 0x08;

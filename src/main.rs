@@ -29,9 +29,9 @@ const SCREEN_HEIGHT: usize = 160;
 const FPS: u128 = 60;
 const FRAME_TIME: u128 = 1_000_000_000 / FPS;
 
-const BIOS: bool = false;
+const BIOS: bool = true;
 const DEBUG: bool = false;
-const PRINT: bool = true;
+const PRINT: bool = false;
 const STEP: bool = false;
 
 #[derive(Default)]
@@ -187,13 +187,11 @@ fn main() {
     // debug purposes
     let mut debug_file = File::create("debug/debug.txt").expect("the file couldnt be opened");
 
-    let mut cpu;
-    if BIOS {
-        cpu = Cpu::from_bios();
-    } else {
-        cpu = Cpu::new();
-    }
-    let mut mem = memory::create_memory("test/bin/cbb_demo.gba");
+    let mut cpu = match BIOS {
+        true => Cpu::from_bios(),
+        false => Cpu::new(),
+    };
+    let mut mem = memory::create_memory("test/bin/swi_demo.gba");
     let mut ppu = Ppu::new();
     let mut fde = Fde::default();
     setup_joypad(&mut mem);

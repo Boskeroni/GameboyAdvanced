@@ -2,8 +2,10 @@ use crate::{memory::Memory, SCREEN_HEIGHT, SCREEN_WIDTH};
 
 mod bitmaps;
 mod tiles;
+mod obj;
 
 use bitmaps::*;
+use obj::oam_scan;
 use tiles::*;
 
 const VRAM_BASE: u32 = 0x6000000;
@@ -31,6 +33,10 @@ pub struct Ppu {
     pub new_screen: bool,
     elapsed_time: usize, // represents the number of dots elapsed
     pub stored_screen: Vec<u32>,
+
+    pixel_priorities: Vec<u16>, // the priorities of all the pixels on the screen
+    worked_on_line: Vec<u32>,
+
 }
 impl Ppu {
     pub fn new() -> Self {
@@ -38,12 +44,16 @@ impl Ppu {
             new_screen: false,
             elapsed_time: 0,
             stored_screen: Vec::new(),
+
+            pixel_priorities: Vec::new(),
+            worked_on_line: Vec::new(),
         }
     }
     pub fn acknowledge_frame(&mut self) {
         self.new_screen = false;
         self.elapsed_time = 0;
-        self.stored_screen = Vec::new();
+        self.pixel_priorities.clear();
+        self.stored_screen.clear();
     }
 }
 const DOTS_PER_FRAME: usize = (SCREEN_WIDTH + 68) * (SCREEN_HEIGHT + 68);
@@ -73,6 +83,10 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
                 5 => bg_mode_5(ppu, memory, vcount),
                 _ => panic!("you can't set the bg_mode to {bg_mode}"),
             }
+
+            oam_scan(ppu, memory, vcount, dispcnt);
+            ppu.stored_screen.extend(ppu.worked_on_line.clone());
+            ppu.worked_on_line.clear();
         }
 
 
@@ -85,6 +99,7 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
     }
 
     update_registers(ppu, memory, dispstat, vcount);
+    ppu.worked_on_line.clear();
 }
 fn update_registers(ppu: &mut Ppu, memory: &mut Memory, mut dispstat: u16, vcount: u16) {
     // work in progress
