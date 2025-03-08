@@ -56,8 +56,6 @@ fn branch_link(opcode: u32, cpu: &mut Cpu) {
     cpu.clear_pipeline = true;
 }
 fn branch_exchange(opcode: u32, cpu: &mut Cpu) {
-    assert!((opcode & 0xF) != 15, "BRANCH EXCHANGE is undefined if Rn == 15");
-
     let rn_index = opcode as u8 & 0xF;
 
     let rn = cpu.get_register(rn_index);
