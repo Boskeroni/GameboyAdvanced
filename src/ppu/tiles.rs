@@ -3,15 +3,16 @@ use crate::memory::Memory;
 use super::{convert_palette_winit, Ppu, PpuRegisters, PALETTE_BASE, VRAM_BASE};
 
 pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory, line: u32) {
-    let dispcnt = memory.read_u16(PpuRegisters::DispStat as u32);
+    let dispcnt = memory.read_u16(PpuRegisters::DispCnt as u32);
 
     // the index of the background and its priority.
-    // sorted lowest to highest priority.
+    // highest priority to lowest priority
+    // 3 = lowest, 0 = highest
     let mut backgrounds = Vec::new();
     let mut priorities = Vec::new();
     for i in 0..=3 {
         // the background is turned off
-        if dispcnt >> (8 + i) & 1 == 1 {
+        if dispcnt >> (8 + i) & 1 == 0 {
             continue;
         }
 
@@ -21,7 +22,7 @@ pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory, line: u32) {
         // cheeky little insertions
         let mut curr = 0;
         while curr < priorities.len()  {
-            if priorities[curr] <= priority  {
+            if priorities[curr] > priority  {
                 break;
             }
             curr += 1;
@@ -38,24 +39,26 @@ pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory, line: u32) {
     // now have a list of the order of the backgrounds
     let mut scanline = vec![0; 240];
     let mut pixel_priorities = vec![0; 240];
-    let num_backgrounds = backgrounds.len();
-    for j in 0..num_backgrounds {
-        let bg = backgrounds[num_backgrounds - j - 1];
-        let priority = priorities[num_backgrounds - j - 1];
+    for j in 0..backgrounds.len() {
+        if j != 0 { continue; }
+        let bg = backgrounds[j];
+        let priority = priorities[j];
 
-        let line = read_scanline(line, bg, memory);
+        let read_line = read_scanline(line, bg, memory);
         for i in 0..240 {
             // something has already been displayed to the scanline
             if scanline[i] != 0 { continue; }
             pixel_priorities[i] = priority;
-            scanline[i] = line[i];
+            scanline[i] = read_line[i];
         }
     }
     
     ppu.pixel_priorities = pixel_priorities;
-    ppu.worked_on_line = scanline;
+    ppu.worked_on_line = scanline.iter().map(|&palette_index| 
+        convert_palette_winit(memory.read_u16(PALETTE_BASE + (palette_index as u32 * 2)))
+    ).collect();
 }
-fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u32> {
+fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u8> {
     let bg_cnt = memory.read_u16(PpuRegisters::BGCnt as u32 + bg * 2);
 
     // all the variables stored within the bg_cnt register
@@ -82,31 +85,45 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u32> {
     // x_tile and y_tile are 0->32, offsets are 0->8
     let (mut x_tile, x_tile_offset, y_tile, y_tile_offset);
     {
-        let x_offset = memory.read_u16(PpuRegisters::BgHOffset as u32 + (bg * 4)) as u32;
-        let y_offset = memory.read_u16(PpuRegisters::BgVOffset as u32 + (bg * 4)) as u32;
+        let x_offset = memory.read_u16(PpuRegisters::BgHOffset as u32 + (bg * 4)) as u32 & 0xFF;
+        let y_offset = memory.read_u16(PpuRegisters::BgVOffset as u32 + (bg * 4)) as u32 & 0xFF;
 
         x_tile = x_offset / 8;
         x_tile_offset = x_offset % 8;
 
-        y_tile = (y_offset + line) / 8;
+        match wrap_around {
+            true => y_tile = ((y_offset + line) / 8) % (height / 8),
+            false => y_tile = (y_offset + line) / 8,
+        }
         y_tile_offset = (y_offset + line) % 8;
     }
 
     // I reserve 256 as I want the list to have two tiles width
     // extra on each side, so that it accounts for scrolling
     // so 240 + (8 * 2) = 256
-    let mut scanline = Vec::<u32>::new();
+    let mut scanline = Vec::new();
     scanline.reserve(256);
 
     while scanline.len() <= 248 {
         // first figure out which screen it is rendering to
         let used_screen = match (width, height) {
-            (256, 256) => 0,
-            (512, 256) => (x_tile >= 32) as u32,
-            (256, 512) => (y_tile >= 32) as u32,
-            (512, 512) => (x_tile >= 32) as u32 + ((y_tile >= 32) as u32) * 2,
+            (256, 256) => 0, // it can only be SC0
+            (512, 256) => (x_tile >= 32) as u32, // if its wide
+            (256, 512) => (y_tile >= 32) as u32, // if its tall
+            (512, 512) => (x_tile >= 32) as u32 + ((y_tile >= 32) as u32) * 2, //  if its wide or tall
             _ => unreachable!(),
         };
+
+        // make sure it isn't just rendering nothing
+        if !wrap_around {
+            // we are off screen, just pad the rest with 0's and move on
+            if x_tile > (width / 8) || y_tile > (height / 8) {
+                for _ in scanline.len()..256 {
+                    scanline.push(0);
+                }
+                break;
+            }
+        }
 
         // the memory address of the tile we need to get
         let tile_address = sc0_address + // baseline address all others work off
@@ -120,7 +137,7 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u32> {
         let tile_number = tile as u32 & 0x1FF;
         let hor_flip = (tile >> 10) & 1 == 1;
         let ver_flip = (tile >> 11) & 1 == 1;
-        let palette_number = (tile >> 12) as u32 & 0xF;
+        let palette_number = (tile >> 12) as u8 & 0xF;
 
         match is_8_bit {
             true => {
@@ -137,9 +154,7 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u32> {
                         pixel = 7 - pixel;
                     }
                     let palette_index = memory.read_u8(line_address + pixel);
-                    let palette = memory.read_u16(PALETTE_BASE + (palette_index as u32 * 2));
-                    let screen_value = convert_palette_winit(palette);
-                    scanline.push(screen_value);
+                    scanline.push(palette_index);
                 }
             }
             false => {
@@ -158,20 +173,20 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u32> {
                     let formatted_data = memory.read_u8(line_address + pixel);
 
                     let left = formatted_data & 0xF;
-                    let left_palette = memory.read_u16(PALETTE_BASE + (palette_number * 0x20) + (left as u32 * 2));
-                    let left_screen_value = convert_palette_winit(left_palette);
-                    scanline.push(left_screen_value);
+                    let left_palette_index = (palette_number * 0x10) + left;
+                    scanline.push(left_palette_index);
 
                     let right = (formatted_data >> 4) & 0xF;
-                    let right_palette = memory.read_u16(PALETTE_BASE + (palette_number * 0x20) + (right as u32 * 2));
-                    let right_screen_value = convert_palette_winit(right_palette);
-                    scanline.push(right_screen_value);
+                    let right_palette_index = (palette_number * 0x10) + right;
+                    scanline.push(right_palette_index);
                 }
             }
         }
 
         x_tile += 1;
-        x_tile %= 64;
+        if wrap_around {
+            x_tile %= 64;
+        }
     }
 
     scanline = scanline[(x_tile_offset as usize)..(x_tile_offset as usize + 240)].to_vec();

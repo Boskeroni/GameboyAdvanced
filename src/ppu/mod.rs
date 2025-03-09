@@ -19,7 +19,7 @@ fn convert_palette_winit(palette: u16) -> u32 {
     return color 
 }
 enum PpuRegisters {
-    Dispcnt = 0x4000000,
+    DispCnt = 0x4000000,
     _GreenSwap = 0x4000002,
     DispStat = 0x4000004,
     VCount = 0x4000006,
@@ -58,7 +58,7 @@ impl Ppu {
 }
 const DOTS_PER_FRAME: usize = (SCREEN_WIDTH + 68) * (SCREEN_HEIGHT + 68);
 pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
-    let dispcnt = memory.read_u16(PpuRegisters::Dispcnt as u32);
+    let dispcnt = memory.read_u16(PpuRegisters::DispCnt as u32);
     let forced_blank = (dispcnt >> 7) & 1 == 1;
     if forced_blank {
         return;
@@ -86,7 +86,6 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
 
             oam_scan(ppu, memory, vcount, dispcnt);
             ppu.stored_screen.extend(ppu.worked_on_line.clone());
-            ppu.worked_on_line.clear();
         }
 
 

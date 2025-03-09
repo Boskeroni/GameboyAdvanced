@@ -29,7 +29,7 @@ const SCREEN_HEIGHT: usize = 160;
 const FPS: u128 = 60;
 const FRAME_TIME: u128 = 1_000_000_000 / FPS;
 
-const BIOS: bool = true;
+const BIOS: bool = false;
 const DEBUG: bool = false;
 const PRINT: bool = false;
 const STEP: bool = false;
@@ -191,7 +191,7 @@ fn main() {
         true => Cpu::from_bios(),
         false => Cpu::new(),
     };
-    let mut mem = memory::create_memory("games/kirby.gba");
+    let mut mem = memory::create_memory("test/passed/sbb_reg.gba");
     let mut ppu = Ppu::new();
     let mut fde = Fde::default();
     setup_joypad(&mut mem);

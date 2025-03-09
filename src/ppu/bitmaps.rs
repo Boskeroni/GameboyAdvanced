@@ -14,7 +14,7 @@ pub fn bg_mode_3(ppu: &mut Ppu, memory: &mut Memory, line: u16) {
     ppu.worked_on_line = scanline;
 }
 pub fn bg_mode_4(ppu: &mut Ppu, memory: &mut Memory, line: u16) {
-    let dispcnt = memory.read_u16(PpuRegisters::Dispcnt as u32);
+    let dispcnt = memory.read_u16(PpuRegisters::DispCnt as u32);
     let displayed_frame = (dispcnt >> 4) & 1 == 1;
 
     let mut address;
@@ -42,7 +42,7 @@ pub fn bg_mode_5(ppu: &mut Ppu, memory: &mut Memory, line: u16) {
         return;
     }
 
-    let dispcnt = memory.read_u16(PpuRegisters::Dispcnt as u32);
+    let dispcnt = memory.read_u16(PpuRegisters::DispCnt as u32);
     let displayed_frame = (dispcnt >> 4) & 1 == 1;
 
     let mut address;
