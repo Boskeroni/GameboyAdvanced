@@ -84,14 +84,10 @@ impl Memory {
     pub fn read_u8(&self, address: u32) -> u8 {
         let (upp_add, low_add) = split_memory_address(address);
 
-        if !self.check_valid_address(upp_add, low_add) {
-            panic!("out of bounds memory read {address:X}");
-        }
-
         match upp_add {
-            0x0 => BIOS[low_add],
+            0x0 => BIOS[low_add % BIOS.len()],
             0x2 => self.ewram[low_add],
-            0x3 => self.iwram[low_add],
+            0x3 => self.iwram[low_add % self.iwram.len()],
             0x4 => self.io_reg[low_add],
             0x5 => self.obj_pall[low_add],
             0x6 => self.vram[low_add],

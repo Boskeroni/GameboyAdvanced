@@ -1,26 +1,26 @@
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DecodedInstruction {
     Thumb(DecodedThumb),
     Arm(DecodedArm),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DecodedThumb {
-    MoveShifted,
+    MoveShiftedRegister,
     AddSub, 
     AluImmediate,
-    AluOperation,
-    HiRegister,
+    AluOperations,
+    HiRegisterOperations,
     PcRelativeLoad,
-    MemRegOffset,
-    MemSignExtended,
-    MemImmOffset,
-    MemHalfword,
-    MemSpRelative,
+    LoadStoreRegOffset,
+    LoadStoreSignExtended,
+    LoadStoreImmOffset,
+    LoadStoreHalfword,
+    SpRelativeLoadStore,
     LoadAddress,
     OffsetSp, 
     PushPop,
-    MemMultiple, 
+    LoadStoreMultiple, 
     CondBranch,
     Swi,
     UncondBranch,
@@ -40,16 +40,16 @@ pub fn decode_thumb(opcode: u16) -> DecodedThumb {
     // this code works i promise works
     identifier >>= 1;
     match identifier & 0b1111_001 {
-        0b0101_000 => return DecodedThumb::MemRegOffset,
-        0b0101_001 => return DecodedThumb::MemSignExtended,
+        0b0101_000 => return DecodedThumb::LoadStoreRegOffset,
+        0b0101_001 => return DecodedThumb::LoadStoreSignExtended,
         0b1011_000 => return DecodedThumb::PushPop,
         _ => {}
     }
 
     identifier >>= 1;
     match identifier {
-        0b010000 => return DecodedThumb::AluOperation,
-        0b010001 => return DecodedThumb::HiRegister,
+        0b010000 => return DecodedThumb::AluOperations,
+        0b010001 => return DecodedThumb::HiRegisterOperations,
         _ => {}
     }
 
@@ -63,10 +63,10 @@ pub fn decode_thumb(opcode: u16) -> DecodedThumb {
 
     identifier >>= 1;
     match identifier {
-        0b1000 => return DecodedThumb::MemHalfword,
-        0b1001 => return DecodedThumb::MemSpRelative,
+        0b1000 => return DecodedThumb::LoadStoreHalfword,
+        0b1001 => return DecodedThumb::SpRelativeLoadStore,
         0b1010 => return DecodedThumb::LoadAddress,
-        0b1100 => return DecodedThumb::MemMultiple,
+        0b1100 => return DecodedThumb::LoadStoreMultiple,
         0b1101 => return DecodedThumb::CondBranch,
         0b1111 => return DecodedThumb::LongBranch,
         _ => {}
@@ -74,9 +74,9 @@ pub fn decode_thumb(opcode: u16) -> DecodedThumb {
 
     identifier >>= 1;
     match identifier {
-        0b000 => return DecodedThumb::MoveShifted,
+        0b000 => return DecodedThumb::MoveShiftedRegister,
         0b001 => return DecodedThumb::AluImmediate,
-        0b011 => return DecodedThumb::MemImmOffset,
+        0b011 => return DecodedThumb::LoadStoreImmOffset,
         _ => {}
     }
 
@@ -90,7 +90,7 @@ const UNDEFINED_VALUE: u32 = 0b0000_0110_0000_0000_0000_0000_0001_0000;
 
 const REMOVE_CONDITION_MASK: u32 = 0b0000_1111_1111_1111_1111_1111_1111_1111;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DecodedArm {
     DataProcessing,
     Multiply,

@@ -40,7 +40,6 @@ pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory, line: u32) {
     let mut scanline = vec![0; 240];
     let mut pixel_priorities = vec![0; 240];
     for j in 0..backgrounds.len() {
-        if j != 0 { continue; }
         let bg = backgrounds[j];
         let priority = priorities[j];
 

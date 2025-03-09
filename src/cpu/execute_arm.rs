@@ -177,27 +177,28 @@ fn data_processing(opcode: u32, cpu: &mut Cpu) {
     }
 
     if rd_index == 15 && s_bit {
-        if operation == 0b1101 && !i_bit && opcode & 0xF == 14 {
-            // returning from an SWI
-            if let ProcessorMode::Supervisor = cpu.cpsr.mode {
-                let lr = cpu.get_register(14);
-                let pc = cpu.get_register_mut(15);
-                *pc = lr;
+        // if operation == 0b1101 && !i_bit && opcode & 0xF == 14 {
+        //     // returning from an SWI
+        //     if let ProcessorMode::Supervisor = cpu.cpsr.mode {
+        //         let lr = cpu.get_register(14);
+        //         let pc = cpu.get_register_mut(15);
+        //         *pc = lr;
 
-                cpu.cpsr = *cpu.get_spsr();
-                cpu.clear_pipeline = true;
+        //         cpu.cpsr = *cpu.get_spsr();
+        //         cpu.clear_pipeline = true;
 
-                return;
-            }
-        }
+        //         return;
+        //     }
+        // }
 
-        cpu.cpsr = *cpu.get_spsr();
 
         if undo {
             return;
         }
         let rd = cpu.get_register_mut(rd_index);
         *rd = result;
+        cpu.cpsr = *cpu.get_spsr();
+        cpu.clear_pipeline = rd_index == 15;
 
         return;
     }
@@ -293,9 +294,11 @@ fn multiply(opcode: u32, cpu: &mut Cpu) {
     let rd = cpu.get_register_mut(rd_index);
     *rd = result;
 
-    if (opcode >> 20) & 1 == 1 {
+    let s_bit = (opcode >> 20) & 1 == 1;
+    if s_bit {
         cpu.cpsr.z = result == 0;
         cpu.cpsr.n = (result >> 31) == 1;
+        cpu.cpsr.c = false;
     }
 }
 fn multiply_long(opcode: u32, cpu: &mut Cpu) {
@@ -448,7 +451,7 @@ fn halfword_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
     let offset_type = (opcode >> 22) & 1 == 1;
     match offset_type {
         true => {
-            offset = (opcode & 0xF) | (opcode >> 4) & 0xF0;
+            offset = (opcode & 0xF) | ((opcode >> 4) & 0xF0);
         }
         false => {
             let rm_index = opcode as u8 & 0xF;
@@ -469,19 +472,22 @@ fn halfword_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
     let sh = (opcode >> 5) as u8 & 0b11;
     let l_bit = (opcode >> 20) & 1 == 1;
     match sh {
-        0b00 => unreachable!("unreachable due to decoding"),
+        0b00 => unreachable!("this would be a SWP instruction"),
         0b01 => {
             //Unsigned halfwords
             match l_bit {
                 true => {
                     let rd = cpu.get_register_mut(rd_index);
-                    *rd = (memory.read_u16(address & !(0b1)) as u32).rotate_right((address % 2) * 8);
+                    *rd = memory.read_u16(address & !(0b1)) as u32;
                     if rd_index == rn_index {
                         return;
                     }
                 }
                 false => {
-                    let rd = cpu.get_register(rd_index);
+                    let rd = match rd_index {
+                        15 => cpu.get_register(15) + 4,
+                        _ => cpu.get_register(rd_index),
+                    };
                     memory.write_u16(address, rd as u16);
                 }
             }
@@ -507,7 +513,7 @@ fn halfword_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
             assert!(l_bit, "L bit should not be set low");
 
             let mut raw_reading;
-            let is_aligned = address & 1 == 1;
+            let is_aligned = address & 1 == 0;
             match is_aligned {
                 true => {
                     raw_reading = memory.read_u8(address) as u32;
@@ -594,6 +600,7 @@ fn block_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
 
     match l_bit {
         true => {
+            let r15_in_list = (rlist >> 15) & 1 == 1;
             while rlist != 0 {
                 if p_bit == u_bit {
                     current_address += 4;
@@ -607,6 +614,10 @@ fn block_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
                     current_address += 4;
                 }
                 rlist &= !(1<<next_r);
+            }
+
+            if r15_in_list && s_bit {
+                cpu.cpsr = *cpu.get_spsr();
             }
         }
         false => {
