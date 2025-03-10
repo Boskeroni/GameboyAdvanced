@@ -86,19 +86,19 @@ impl Memory {
 
         match upp_add {
             0x0 => BIOS[low_add % BIOS.len()],
-            0x2 => self.ewram[low_add % self.ewram.len()],
-            0x3 => self.iwram[low_add % self.iwram.len()],
-            0x4 => self.io_reg[low_add % self.io_reg.len()],
-            0x5 => self.obj_pall[low_add % self.obj_pall.len()],
+            0x2 => self.ewram[low_add % EWRAM_LENGTH],
+            0x3 => self.iwram[low_add % IWRAM_LENGTH],
+            0x4 => self.io_reg[low_add % IO_REG_LENGTH],
+            0x5 => self.obj_pall[low_add % OBJ_PALL_LENGTH],
             0x6 => {
                 // 64k-32k (then the 32k is mirrored again) (then everything is mirrored again)
                 let base = low_add % 0x20000;
                 if base >= 0x10000 {
                     return self.vram[0x10000 + (base % 0x8000)]
                 }
-                return self.vram[low_add % 0x20000];
+                return self.vram[base];
             }
-            0x7 => self.oam[low_add % self.oam.len()],
+            0x7 => self.oam[low_add % OAM_LENGTH],
             _ => {
                 if low_add >= self.gp_rom.len() {
                     return 0x00;
@@ -128,7 +128,7 @@ impl Memory {
         )
     }
 
-    pub fn write_u8(&mut self, address: u32, data: u8) {
+    fn checked_write_u8(&mut self, address: u32, data: u8, is_8_bit: bool) {
         // writing to a timer register
         if address >= 0x4000100 && address <= 0x400010E && address % 4 < 2 {
             // this rounds down anyways which is good
@@ -145,6 +145,37 @@ impl Memory {
         }
         
         let (upp_add, low_add) = split_memory_address(address);
+        // why do the video memory buffers not allow 8-bit writes??
+        // no clue but it does
+        if is_in_video_memory(upp_add) && is_8_bit {
+            // no chance of a write happening
+            if upp_add == 7 {
+                return;
+            }
+
+            // why is this a thing
+            let bg = self.io_reg[0] & 0x7;
+            let bitmap = bg >= 4;
+            let mut write_both = false;
+            if upp_add == 0x6 {
+                match bitmap {
+                    true => write_both |= low_add <= 0xFFFF,
+                    false => write_both |= low_add <= 0x13FFF,
+                }
+            }
+            // pallete
+            write_both |= upp_add == 0x5;
+            
+            if !write_both {
+                return;
+            }
+
+            // just mirrors it up and down
+            // since should be recursive as is_8_bit will be set to false
+            self.write_u16(address & !1, (data as u16) * 0x101);
+            return;
+        }
+
         match upp_add {
             0x0 => panic!("cannot make a write to the BIOS"),
             0x2 => self.ewram[low_add % self.ewram.len()] = data,
@@ -157,22 +188,26 @@ impl Memory {
         };
     }
 
+    pub fn write_u8(&mut self, address: u32, data: u8) {
+        self.checked_write_u8(address, data, true);
+    }
+
     pub fn write_u16(&mut self, address: u32, data: u16) {
         let split = lil_end_split_u16(data);
         let address = address & !(0b1);
 
-        self.write_u8(address + 0, split.0);
-        self.write_u8(address + 1, split.1);
+        self.checked_write_u8(address + 0, split.0, false);
+        self.checked_write_u8(address + 1, split.1, false);
     }
 
     pub fn write_u32(&mut self, address: u32, data: u32) {
         let split = little_split_u32(data);
         let address = address & !(0b11);
 
-        self.write_u8(address + 0, split.0);
-        self.write_u8(address + 1, split.1);
-        self.write_u8(address + 2, split.2);
-        self.write_u8(address + 3, split.3);
+        self.checked_write_u8(address + 0, split.0, false);
+        self.checked_write_u8(address + 1, split.1, false);
+        self.checked_write_u8(address + 2, split.2, false);
+        self.checked_write_u8(address + 3, split.3, false);
     }
 
     /// avoids all of the checks, used just by the other sub-systems
@@ -183,21 +218,10 @@ impl Memory {
         self.io_reg[address + 0] = split.0;
         self.io_reg[address + 1] = split.1;
     }
-    fn check_valid_address(&self, upper: u32, lower: usize) -> bool {
-        match upper {
-            0x0 => lower < BIOS.len(),
-            0x2 => lower < EWRAM_LENGTH,
-            0x3 => lower < IWRAM_LENGTH,
-            0x4 => lower < IO_REG_LENGTH,
-            0x5 => lower < OBJ_PALL_LENGTH,
-            0x6 => lower < VRAM_LENGTH,
-            0x7 => lower < OAM_LENGTH,
-            0x8 => true,
-            _ => false,
-        }
-    }
 }
-
+fn is_in_video_memory(upp_add: u32) -> bool {
+    return (upp_add == 0x5) | (upp_add == 0x6) | (upp_add == 0x7);
+}
 
 const BASE_TIMER_ADDRESS: u32 = 0x4000100;
 pub fn update_timer(memory: &mut Memory, old_cycles: &mut u32, new_cycles: u32) {
