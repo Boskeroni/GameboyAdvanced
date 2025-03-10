@@ -177,13 +177,27 @@ fn data_processing(opcode: u32, cpu: &mut Cpu) {
     }
 
     if rd_index == 15 && s_bit {
+        if operation == 0b1101 && !i_bit && opcode & 0xF == 14 {
+            // returning from an SWI
+            if let ProcessorMode::Supervisor = cpu.cpsr.mode {
+                let lr = cpu.get_register(14);
+                let pc = cpu.get_register_mut(15);
+                *pc = lr;
+
+                cpu.cpsr = *cpu.get_spsr();
+                cpu.clear_pipeline = true;
+
+                return;
+            }
+        }
+
+        cpu.cpsr = *cpu.get_spsr();
+
         if undo {
             return;
         }
         let rd = cpu.get_register_mut(rd_index);
         *rd = result;
-        cpu.cpsr = *cpu.get_spsr();
-        cpu.clear_pipeline = rd_index == 15;
 
         return;
     }
@@ -279,11 +293,9 @@ fn multiply(opcode: u32, cpu: &mut Cpu) {
     let rd = cpu.get_register_mut(rd_index);
     *rd = result;
 
-    let s_bit = (opcode >> 20) & 1 == 1;
-    if s_bit {
+    if (opcode >> 20) & 1 == 1 {
         cpu.cpsr.z = result == 0;
         cpu.cpsr.n = (result >> 31) == 1;
-        cpu.cpsr.c = false;
     }
 }
 fn multiply_long(opcode: u32, cpu: &mut Cpu) {
@@ -385,7 +397,7 @@ fn data_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
         true => {
             let data = match b_bit {
                 true => memory.read_u8(address) as u32,
-                false => memory.read_u32(address & !0x3),
+                false => memory.read_u32(address),
             };
             let rd = cpu.get_register_mut(rd_index);
             *rd = data;
@@ -436,7 +448,7 @@ fn halfword_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
     let offset_type = (opcode >> 22) & 1 == 1;
     match offset_type {
         true => {
-            offset = (opcode & 0xF) | ((opcode >> 4) & 0xF0);
+            offset = (opcode & 0xF) | (opcode >> 4) & 0xF0;
         }
         false => {
             let rm_index = opcode as u8 & 0xF;
@@ -457,24 +469,19 @@ fn halfword_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
     let sh = (opcode >> 5) as u8 & 0b11;
     let l_bit = (opcode >> 20) & 1 == 1;
     match sh {
-        0b00 => unreachable!("this would be a SWP instruction"),
+        0b00 => unreachable!("unreachable due to decoding"),
         0b01 => {
             //Unsigned halfwords
             match l_bit {
                 true => {
                     let rd = cpu.get_register_mut(rd_index);
-
-                    // this is a special case where it is not fored align
-                    *rd = (memory.read_u16(address & !0x1) as u32).rotate_right((address & 1) * 8);
+                    *rd = (memory.read_u16(address & !(0b1)) as u32).rotate_right((address % 2) * 8);
                     if rd_index == rn_index {
                         return;
                     }
                 }
                 false => {
-                    let rd = match rd_index {
-                        15 => cpu.get_register(15) + 4,
-                        _ => cpu.get_register(rd_index),
-                    };
+                    let rd = cpu.get_register(rd_index);
                     memory.write_u16(address, rd as u16);
                 }
             }
@@ -491,14 +498,17 @@ fn halfword_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
 
             let rd = cpu.get_register_mut(rd_index);
             *rd = raw_reading;
+            if rd_index == rn_index {
+                return;
+            }
         }
         0b11 => {
             // signed halfword
             assert!(l_bit, "L bit should not be set low");
 
             let mut raw_reading;
-            let not_aligned = address & 1 == 1;
-            match not_aligned {
+            let is_aligned = address & 1 == 1;
+            match is_aligned {
                 true => {
                     raw_reading = memory.read_u8(address) as u32;
                     if (raw_reading >> 7) & 1 == 1 {
@@ -506,7 +516,7 @@ fn halfword_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
                     }
                 },
                 false => {
-                    raw_reading = memory.read_u16(address) as u32;
+                    raw_reading = memory.read_u16(address & !(1)) as u32;
                     if (raw_reading >> 15) & 1 == 1 {
                         raw_reading |= 0xFFFF0000;
                     }
@@ -515,6 +525,9 @@ fn halfword_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
 
             let rd = cpu.get_register_mut(rd_index);
             *rd = raw_reading;
+            if rd_index == rn_index {
+                return;
+            }
         }
         _ => unreachable!()
     }
@@ -573,7 +586,7 @@ fn block_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
         }
     }
 
-    let starting_base = current_address & !0x3;
+    let starting_base = current_address;
     let ending_base = match u_bit {
         true => starting_base + (rlist.count_ones() * 4),
         false => current_address,
@@ -581,7 +594,6 @@ fn block_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
 
     match l_bit {
         true => {
-            let r15_in_list = (rlist >> 15) & 1 == 1;
             while rlist != 0 {
                 if p_bit == u_bit {
                     current_address += 4;
@@ -595,10 +607,6 @@ fn block_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
                     current_address += 4;
                 }
                 rlist &= !(1<<next_r);
-            }
-
-            if r15_in_list && s_bit {
-                cpu.cpsr = *cpu.get_spsr();
             }
         }
         false => {
@@ -670,7 +678,7 @@ fn single_swap(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
     let data;
     match quantity_bit {
         true => data = memory.read_u8(address) as u32,
-        false => data = memory.read_u32(address & !0x3).rotate_right((address & 0x3) * 8),
+        false => data = memory.read_u32(address),
     }
     
     let rm = cpu.get_register(rm_index);

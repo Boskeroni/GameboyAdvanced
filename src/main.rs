@@ -31,7 +31,7 @@ const FRAME_TIME: u128 = 1_000_000_000 / FPS;
 
 const BIOS: bool = false;
 const DEBUG: bool = false;
-const PRINT: bool = true;
+const PRINT: bool = false;
 const STEP: bool = false;
 
 #[derive(Default)]
@@ -48,7 +48,6 @@ fn gba_frame(
     fde: &mut Fde, 
     cycles: &mut u32,
     f: &mut File,
-    used_opcodes: &mut Vec<DecodedInstruction>,
 ) {
     ppu.acknowledge_frame();
 
@@ -69,11 +68,6 @@ fn gba_frame(
             let old_regs = cpu.clone();
 
             use DecodedInstruction::*;
-            if !used_opcodes.contains(&instruction) {
-                used_opcodes.push(instruction);
-                println!("{used_opcodes:?}");
-            }
-            // println!("{:X}", cpu.get_register(15));
             match instruction {
                 Thumb(instr) => execute_thumb(fde.decoded_opcode as u16, instr, cpu, mem),
                 Arm(instr) => execute_arm(fde.decoded_opcode, instr, cpu, mem),
@@ -197,7 +191,7 @@ fn main() {
         true => Cpu::from_bios(),
         false => Cpu::new(),
     };
-    let mut mem = memory::create_memory("games/kirby-nightmare.gba");
+    let mut mem = memory::create_memory("test/passed/sbb_reg.gba");
     let mut ppu = Ppu::new();
     let mut fde = Fde::default();
     setup_joypad(&mut mem);
@@ -205,7 +199,6 @@ fn main() {
     let mut last_render = Instant::now();
     let mut cycles = 0;
 
-    let mut used_opcodes: Vec<DecodedInstruction> = Vec::new();
     event_loop.run(|event, control_flow|
         match event {
             Event::WindowEvent {ref event, window_id} if window_id == window.id() => {
@@ -225,8 +218,7 @@ fn main() {
                             &mut ppu, 
                             &mut fde, 
                             &mut cycles, 
-                            &mut debug_file,
-                            &mut used_opcodes,
+                            &mut debug_file
                         );
 
                         // keep it running at 60fps

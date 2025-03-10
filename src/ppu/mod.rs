@@ -74,8 +74,6 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
 
         if vcount < SCREEN_HEIGHT as u16 {
             let bg_mode = dispcnt & 0b111;
-            ppu.worked_on_line = vec![0; 240];
-            println!("{bg_mode}");
             match bg_mode {
                 0 => bg_mode_0(ppu, memory, vcount as u32),
                 1 => bg_mode_1(ppu, memory, vcount),
@@ -89,6 +87,7 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
             oam_scan(ppu, memory, vcount, dispcnt);
             ppu.stored_screen.extend(ppu.worked_on_line.clone());
         }
+
 
         if vcount as usize >= (SCREEN_HEIGHT + 68) {
             vcount = 0;

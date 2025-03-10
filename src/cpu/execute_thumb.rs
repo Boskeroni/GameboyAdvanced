@@ -13,21 +13,21 @@ pub fn execute_thumb(
     use DecodedThumb::*;
 
     match instruction {
-        MoveShiftedRegister => move_shifted(opcode, cpu),
+        MoveShifted => move_shifted(opcode, cpu),
         AddSub => add_sub(opcode, cpu),
         AluImmediate => alu_imm(opcode, cpu),
-        AluOperations => alu_ops(opcode, cpu),
-        HiRegisterOperations => hi_ops(opcode, cpu),
+        AluOperation => alu_ops(opcode, cpu),
+        HiRegister => hi_ops(opcode, cpu),
         PcRelativeLoad => pc_relative_load(opcode, cpu, memory),
-        LoadStoreRegOffset => mem_offset(opcode, cpu, memory, false),
-        LoadStoreSignExtended => mem_sign_extended(opcode, cpu, memory),
-        LoadStoreImmOffset => mem_offset(opcode, cpu, memory, true),
-        LoadStoreHalfword => mem_halfword(opcode, cpu, memory),
-        SpRelativeLoadStore => mem_sp_relative(opcode, cpu, memory),
+        MemRegOffset => mem_offset(opcode, cpu, memory, false),
+        MemSignExtended => mem_sign_extended(opcode, cpu, memory),
+        MemImmOffset => mem_offset(opcode, cpu, memory, true),
+        MemHalfword => mem_halfword(opcode, cpu, memory),
+        MemSpRelative => mem_sp_relative(opcode, cpu, memory),
         LoadAddress => load_address(opcode, cpu),
         OffsetSp => offset_sp(opcode, cpu),
         PushPop => push_pop(opcode, cpu, memory),
-        LoadStoreMultiple => mem_multiple(opcode, cpu, memory),
+        MemMultiple => mem_multiple(opcode, cpu, memory),
         CondBranch => conditional_branch(opcode, cpu),
         Swi => software_interrupt(cpu),
         UncondBranch => unconditional_branch(opcode, cpu),
@@ -237,9 +237,7 @@ fn alu_ops(opcode: u16, cpu: &mut Cpu) {
         _ => unreachable!()
     };
 
-    if ![0b0001, 0b1000, 0b1100, 0b1110, 0b1111].contains(&op) {
-        cpu.cpsr.c = alu_carry;
-    }
+    cpu.cpsr.c = alu_carry;
     cpu.cpsr.z = result == 0;
     cpu.cpsr.n = (result >> 31) & 1 == 1;
     
@@ -343,7 +341,7 @@ fn mem_offset(opcode: u16, cpu: &mut Cpu, memory: &mut Memory, uses_imm: bool) {
             }
         }
         false => {
-            l_bit = (opcode >> 11) & 1 == 0;
+            l_bit = (opcode >> 11) & 1 == 1;
             b_bit = (opcode >> 10) & 1 == 1;
 
             let ro_index = (opcode >> 6) & 0x7;
@@ -357,7 +355,7 @@ fn mem_offset(opcode: u16, cpu: &mut Cpu, memory: &mut Memory, uses_imm: bool) {
             let rd = cpu.get_register_mut(rd_index);
             match b_bit {
                 true => *rd = memory.read_u8(address) as u32,
-                false => *rd = memory.read_u32(address & !0x3),
+                false => *rd = memory.read_u32(address),
             }
         }
         false => {
@@ -387,9 +385,9 @@ fn mem_sign_extended(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
         }
         0b10 => { // LDRH
             let rd = cpu.get_register_mut(rd_index);
-            *rd = (memory.read_u16(address & !(0b1)) as u32).rotate_right((address & 1) * 8);
+            *rd = (memory.read_u16(address & !(0b1)) as u32).rotate_right((address % 2) * 8);
         }
-        0b01 => { // LDSB
+        0b01 => {
             let mut raw_reading = memory.read_u8(address) as u32;
             if (raw_reading >> 7) & 1 == 1 {
                 raw_reading |= 0xFFFFFF00;
@@ -400,8 +398,8 @@ fn mem_sign_extended(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
         }
         0b11 => {
             let mut raw_reading;
-            let not_aligned = address & 1 == 1;
-            match not_aligned {
+            let is_aligned = address & 1 == 1;
+            match is_aligned {
                 true => {
                     raw_reading = memory.read_u8(address) as u32;
                     if (raw_reading >> 7) & 1 == 1 {
@@ -409,7 +407,7 @@ fn mem_sign_extended(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
                     }
                 },
                 false => {
-                    raw_reading = memory.read_u16(address) as u32;
+                    raw_reading = memory.read_u16(address & !(1)) as u32;
                     if (raw_reading >> 15) & 1 == 1 {
                         raw_reading |= 0xFFFF0000;
                     }
@@ -426,15 +424,16 @@ fn mem_halfword(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
     let rd_index = opcode as u8 & 0b111;
     let rb_index = (opcode >> 3) as u8 & 0b111;
 
-    let imm = ((opcode >> 6) & 0x1F) << 1;
+    let imm = ((opcode >> 6) & 0b11111) << 1;
     let rb = cpu.get_register(rb_index);
+
     let address = rb + imm as u32;
 
     let l_bit = (opcode >> 11) & 1 == 1;
     match l_bit {
         true => {
             let rd = cpu.get_register_mut(rd_index);
-            *rd = (memory.read_u16(address & !(0b1)) as u32).rotate_right((address & 1) * 8);
+            *rd = (memory.read_u16(address & !(0b1)) as u32).rotate_right((address%2) * 8);
         }
         false => {
             let rd = cpu.get_register(rd_index);
@@ -453,7 +452,7 @@ fn mem_sp_relative(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
     match l_bit {
         true => {
             let rd = cpu.get_register_mut(rd_index);
-            *rd = memory.read_u32(address & !0x3);
+            *rd = memory.read_u32(address);
         }
         false => {
             let rd = cpu.get_register(rd_index);
@@ -462,17 +461,17 @@ fn mem_sp_relative(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
     }
 }
 fn load_address(opcode: u16, cpu: &mut Cpu) {
-    let imm = (opcode as u32 & 0xFF) << 2;
+    let imm = (opcode & 0xFF) << 2;
     let rd_index = (opcode >> 8) as u8 & 0b111;
 
     let sp_bit = (opcode >> 11) & 1 == 1;
     let src;
     match sp_bit {
         true => src = cpu.get_register(13),
-        false => src = cpu.get_register(15) & !(0b10),
+        false => src = cpu.get_register(15) & !(0b11),
     }
 
-    let address = src + imm;
+    let address = src + imm as u32;
     let rd = cpu.get_register_mut(rd_index);
     *rd = address;
 }
@@ -493,13 +492,13 @@ fn push_pop(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
 
     let sp = cpu.get_register(13);
     match l_bit {
-        true => { // pop
+        true => { // load
             let mut base_address = sp;
             while rlist != 0 {
                 let next_r = rlist.trailing_zeros();
 
                 let reg = cpu.get_register_mut(next_r as u8);
-                let change = memory.read_u32(base_address & !0x3);
+                let change = memory.read_u32(base_address);
                 *reg = change;
                 
                 base_address += 4;
@@ -507,7 +506,7 @@ fn push_pop(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
             }
             if r_bit {
                 let reg = cpu.get_register_mut(15);
-                let change = memory.read_u32(base_address & !0x3) & !0x1;
+                let change = memory.read_u32(base_address);
                 *reg = change & !(1);
                 base_address += 4;
                 cpu.clear_pipeline = true;
@@ -515,7 +514,7 @@ fn push_pop(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
             let sp_mut = cpu.get_register_mut(13);
             *sp_mut = base_address;
         }
-        false => { // push
+        false => {
             let total_increments = rlist.count_ones() + r_bit as u32;
 
             let mut base_address = sp - (total_increments * 4);
@@ -554,7 +553,7 @@ fn mem_multiple(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
                 let next_r = rlist.trailing_zeros();
 
                 let reg = cpu.get_register_mut(next_r as u8);
-                let change = memory.read_u32(curr_address & !0x3);
+                let change = memory.read_u32(curr_address);
                 *reg = change;
                 
                 curr_address += 4;
@@ -562,7 +561,7 @@ fn mem_multiple(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
             }
             if started_empty {
                 let reg = cpu.get_register_mut(15);
-                let change = memory.read_u32(curr_address & !0x3);
+                let change = memory.read_u32(curr_address);
                 *reg = change;
                 cpu.clear_pipeline = true;
 
