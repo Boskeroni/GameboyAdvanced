@@ -52,7 +52,7 @@ fn branch_link(opcode: u32, cpu: &mut Cpu) {
     }
 
     let pc = cpu.get_register_mut(15);
-    *pc = pc.wrapping_add(offset);
+    *pc = pc.wrapping_add(offset) & !0x3;
     cpu.clear_pipeline = true;
 }
 fn branch_exchange(opcode: u32, cpu: &mut Cpu) {
@@ -62,7 +62,7 @@ fn branch_exchange(opcode: u32, cpu: &mut Cpu) {
     cpu.cpsr.t = (rn & 1) == 1;
 
     let pc = cpu.get_register_mut(15);
-    *pc = rn & 0xFFFFFFFE;
+    *pc = rn & !0x3;
     cpu.clear_pipeline = true;
 }
 fn data_processing(opcode: u32, cpu: &mut Cpu) {
@@ -182,6 +182,9 @@ fn data_processing(opcode: u32, cpu: &mut Cpu) {
         }
         let rd = cpu.get_register_mut(rd_index);
         *rd = result;
+        if rd_index == 15 {
+            *rd &= !0x3;
+        }
         cpu.cpsr = *cpu.get_spsr();
         cpu.clear_pipeline = rd_index == 15;
 
@@ -207,6 +210,9 @@ fn data_processing(opcode: u32, cpu: &mut Cpu) {
     cpu.clear_pipeline = rd_index == 15;
     let dst = cpu.get_register_mut(rd_index);
     *dst = result;
+    if rd_index == 15 {
+        *dst &= !0x3;
+    }
 }
 fn psr_transfer(opcode: u32, cpu: &mut Cpu) {
     let psr_bit = (opcode >> 22) & 1 == 1;
@@ -385,12 +391,15 @@ fn data_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
         true => {
             let data = match b_bit {
                 true => memory.read_u8(address) as u32,
-                false => memory.read_u32(address & !0x3),
+                false => memory.read_u32(address & !0x3).rotate_right((address & 3) * 8),
             };
             let rd = cpu.get_register_mut(rd_index);
             *rd = data;
-
+            if rd_index == 15 {
+                *rd &= !0x3;
+            }
             cpu.clear_pipeline = rd_index == 15;
+
             if rn_index == rd_index {
                 return;
             }
@@ -590,6 +599,9 @@ fn block_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
                 let next_r = rlist.trailing_zeros();
                 let rb = cpu.get_register_mut_specific(next_r as u8, used_mode);
                 *rb = memory.read_u32(current_address & (!0b11));
+                if next_r == 15 {
+                    *rb &= !0x3;
+                }
 
                 if p_bit != u_bit {
                     current_address += 4;
