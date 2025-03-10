@@ -84,18 +84,21 @@ impl Memory {
     pub fn read_u8(&self, address: u32) -> u8 {
         let (upp_add, low_add) = split_memory_address(address);
 
-        if !self.check_valid_address(upp_add, low_add) {
-            panic!("out of bounds memory read {address:X}");
-        }
-
         match upp_add {
-            0x0 => BIOS[low_add],
-            0x2 => self.ewram[low_add],
-            0x3 => self.iwram[low_add],
-            0x4 => self.io_reg[low_add],
-            0x5 => self.obj_pall[low_add],
-            0x6 => self.vram[low_add],
-            0x7 => self.oam[low_add],
+            0x0 => BIOS[low_add % BIOS.len()],
+            0x2 => self.ewram[low_add % self.ewram.len()],
+            0x3 => self.iwram[low_add % self.iwram.len()],
+            0x4 => self.io_reg[low_add % self.io_reg.len()],
+            0x5 => self.obj_pall[low_add % self.obj_pall.len()],
+            0x6 => {
+                // 64k-32k (then the 32k is mirrored again) (then everything is mirrored again)
+                let base = low_add % 0x20000;
+                if base >= 0x10000 {
+                    return self.vram[0x10000 + (base % 0x8000)]
+                }
+                return self.vram[low_add % 0x20000];
+            }
+            0x7 => self.oam[low_add % self.oam.len()],
             _ => {
                 if low_add >= self.gp_rom.len() {
                     return 0x00;
@@ -142,19 +145,14 @@ impl Memory {
         }
         
         let (upp_add, low_add) = split_memory_address(address);
-        
-        if !self.check_valid_address(upp_add, low_add) {
-            //println!("attempted write of {data:X} at {address:X}");
-            return;
-        }
         match upp_add {
             0x0 => panic!("cannot make a write to the BIOS"),
-            0x2 => self.ewram[low_add] = data,
-            0x3 => self.iwram[low_add] = data,
-            0x4 => self.io_reg[low_add] = data,
-            0x5 => self.obj_pall[low_add] = data,
-            0x6 => self.vram[low_add] = data,
-            0x7 => self.oam[low_add] = data,
+            0x2 => self.ewram[low_add % self.ewram.len()] = data,
+            0x3 => self.iwram[low_add % self.iwram.len()] = data,
+            0x4 => self.io_reg[low_add % self.io_reg.len()] = data,
+            0x5 => self.obj_pall[low_add % self.obj_pall.len()] = data,
+            0x6 => self.vram[low_add % self.vram.len()] = data,
+            0x7 => self.oam[low_add % self.oam.len()] = data,
             _ => {},
         };
     }
