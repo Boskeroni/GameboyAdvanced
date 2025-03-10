@@ -297,12 +297,9 @@ fn hi_ops(opcode: u16, cpu: &mut Cpu) {
             assert!(!h1, "H1=1 for this instruction is undefined");
 
             let pc = cpu.get_register_mut(15);
-            match rs & 1 == 1 {
-                true => *pc = rs & !0x1,
-                false => *pc = rs & !0x3
-            }
-            cpu.cpsr.t = (rs & 1) == 1;
+            *pc = rs & !(0b1);
 
+            cpu.cpsr.t = (rs & 1) == 1;
             cpu.clear_pipeline = true;
             return;
         }
@@ -360,7 +357,7 @@ fn mem_offset(opcode: u16, cpu: &mut Cpu, memory: &mut Memory, uses_imm: bool) {
             let rd = cpu.get_register_mut(rd_index);
             match b_bit {
                 true => *rd = memory.read_u8(address) as u32,
-                false => *rd = memory.read_u32(address & !0x3).rotate_right((address & 3) * 8),
+                false => *rd = memory.read_u32(address & !0x3),
             }
         }
         false => {
@@ -437,7 +434,7 @@ fn mem_halfword(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
     match l_bit {
         true => {
             let rd = cpu.get_register_mut(rd_index);
-            *rd = (memory.read_u16(address & !1) as u32).rotate_right((address & 1) * 8);
+            *rd = (memory.read_u16(address & !(0b1)) as u32).rotate_right((address & 1) * 8);
         }
         false => {
             let rd = cpu.get_register(rd_index);
@@ -456,7 +453,7 @@ fn mem_sp_relative(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
     match l_bit {
         true => {
             let rd = cpu.get_register_mut(rd_index);
-            *rd = memory.read_u32(address & !0x3).rotate_right((address & 3) * 8);
+            *rd = memory.read_u32(address & !0x3);
         }
         false => {
             let rd = cpu.get_register(rd_index);
@@ -510,8 +507,8 @@ fn push_pop(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
             }
             if r_bit {
                 let reg = cpu.get_register_mut(15);
-                let change = memory.read_u32(base_address & !0x3);
-                *reg = change & !1;
+                let change = memory.read_u32(base_address & !0x3) & !0x1;
+                *reg = change & !(1);
                 base_address += 4;
                 cpu.clear_pipeline = true;
             }
@@ -566,7 +563,7 @@ fn mem_multiple(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
             if started_empty {
                 let reg = cpu.get_register_mut(15);
                 let change = memory.read_u32(curr_address & !0x3);
-                *reg = change & !1;
+                *reg = change;
                 cpu.clear_pipeline = true;
 
                 curr_address += 0x40;
@@ -608,7 +605,7 @@ fn unconditional_branch(opcode: u16, cpu: &mut Cpu) {
     }
 
     let pc = cpu.get_register_mut(15);
-    *pc = pc.wrapping_add(offset);
+    *pc = pc.wrapping_add_signed(offset as i32);
     cpu.clear_pipeline = true;
 }
 fn conditional_branch(opcode: u16, cpu: &mut Cpu) {
@@ -623,7 +620,7 @@ fn conditional_branch(opcode: u16, cpu: &mut Cpu) {
     if (offset >> 8) & 1 == 1 {
         offset |= 0xFFFFFF00;
     }
-    *pc = pc.wrapping_add(offset);
+    *pc = pc.wrapping_add_signed(offset as i32);
     cpu.clear_pipeline = true;
 }
 fn long_branch_link(opcode: u16, cpu: &mut Cpu) {
@@ -647,7 +644,7 @@ fn long_branch_link(opcode: u16, cpu: &mut Cpu) {
             let pc = cpu.get_register_mut(15);
 
             let temp = *pc - 2;
-            *pc = lr.wrapping_add(offset) & !1;
+            *pc = lr.wrapping_add(offset);
             let lr = cpu.get_register_mut(14);
             *lr = temp | 1;
             cpu.clear_pipeline = true;
