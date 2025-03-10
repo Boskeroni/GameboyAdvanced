@@ -357,7 +357,7 @@ fn mem_offset(opcode: u16, cpu: &mut Cpu, memory: &mut Memory, uses_imm: bool) {
             let rd = cpu.get_register_mut(rd_index);
             match b_bit {
                 true => *rd = memory.read_u8(address) as u32,
-                false => *rd = memory.read_u32(address),
+                false => *rd = memory.read_u32(address & !0x3),
             }
         }
         false => {
@@ -387,9 +387,9 @@ fn mem_sign_extended(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
         }
         0b10 => { // LDRH
             let rd = cpu.get_register_mut(rd_index);
-            *rd = memory.read_u16(address & !(0b1)) as u32;
+            *rd = (memory.read_u16(address & !(0b1)) as u32).rotate_right((address & 1) * 8);
         }
-        0b01 => {
+        0b01 => { // LDSB
             let mut raw_reading = memory.read_u8(address) as u32;
             if (raw_reading >> 7) & 1 == 1 {
                 raw_reading |= 0xFFFFFF00;
@@ -400,8 +400,8 @@ fn mem_sign_extended(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
         }
         0b11 => {
             let mut raw_reading;
-            let is_aligned = address & 1 == 1;
-            match is_aligned {
+            let not_aligned = address & 1 == 1;
+            match not_aligned {
                 true => {
                     raw_reading = memory.read_u8(address) as u32;
                     if (raw_reading >> 7) & 1 == 1 {
@@ -409,7 +409,7 @@ fn mem_sign_extended(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
                     }
                 },
                 false => {
-                    raw_reading = memory.read_u16(address & !(1)) as u32;
+                    raw_reading = memory.read_u16(address) as u32;
                     if (raw_reading >> 15) & 1 == 1 {
                         raw_reading |= 0xFFFF0000;
                     }
@@ -434,7 +434,7 @@ fn mem_halfword(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
     match l_bit {
         true => {
             let rd = cpu.get_register_mut(rd_index);
-            *rd = memory.read_u16(address & !(0b1)) as u32;
+            *rd = (memory.read_u16(address & !(0b1)) as u32).rotate_right((address & 1) * 8);
         }
         false => {
             let rd = cpu.get_register(rd_index);
@@ -453,7 +453,7 @@ fn mem_sp_relative(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
     match l_bit {
         true => {
             let rd = cpu.get_register_mut(rd_index);
-            *rd = memory.read_u32(address);
+            *rd = memory.read_u32(address & !0x3);
         }
         false => {
             let rd = cpu.get_register(rd_index);
@@ -499,7 +499,7 @@ fn push_pop(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
                 let next_r = rlist.trailing_zeros();
 
                 let reg = cpu.get_register_mut(next_r as u8);
-                let change = memory.read_u32(base_address);
+                let change = memory.read_u32(base_address & !0x3);
                 *reg = change;
                 
                 base_address += 4;
@@ -507,7 +507,7 @@ fn push_pop(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
             }
             if r_bit {
                 let reg = cpu.get_register_mut(15);
-                let change = memory.read_u32(base_address) & !(0b1);
+                let change = memory.read_u32(base_address & !0x3) & !0x1;
                 *reg = change & !(1);
                 base_address += 4;
                 cpu.clear_pipeline = true;
@@ -554,7 +554,7 @@ fn mem_multiple(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
                 let next_r = rlist.trailing_zeros();
 
                 let reg = cpu.get_register_mut(next_r as u8);
-                let change = memory.read_u32(curr_address);
+                let change = memory.read_u32(curr_address & !0x3);
                 *reg = change;
                 
                 curr_address += 4;
@@ -562,7 +562,7 @@ fn mem_multiple(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
             }
             if started_empty {
                 let reg = cpu.get_register_mut(15);
-                let change = memory.read_u32(curr_address);
+                let change = memory.read_u32(curr_address & !0x3);
                 *reg = change;
                 cpu.clear_pipeline = true;
 

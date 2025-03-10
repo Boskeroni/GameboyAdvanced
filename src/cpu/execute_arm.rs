@@ -177,21 +177,6 @@ fn data_processing(opcode: u32, cpu: &mut Cpu) {
     }
 
     if rd_index == 15 && s_bit {
-        // if operation == 0b1101 && !i_bit && opcode & 0xF == 14 {
-        //     // returning from an SWI
-        //     if let ProcessorMode::Supervisor = cpu.cpsr.mode {
-        //         let lr = cpu.get_register(14);
-        //         let pc = cpu.get_register_mut(15);
-        //         *pc = lr;
-
-        //         cpu.cpsr = *cpu.get_spsr();
-        //         cpu.clear_pipeline = true;
-
-        //         return;
-        //     }
-        // }
-
-
         if undo {
             return;
         }
@@ -400,7 +385,7 @@ fn data_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
         true => {
             let data = match b_bit {
                 true => memory.read_u8(address) as u32,
-                false => memory.read_u32(address),
+                false => memory.read_u32(address & !0x3),
             };
             let rd = cpu.get_register_mut(rd_index);
             *rd = data;
@@ -478,7 +463,9 @@ fn halfword_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
             match l_bit {
                 true => {
                     let rd = cpu.get_register_mut(rd_index);
-                    *rd = memory.read_u16(address & !(0b1)) as u32;
+
+                    // this is a special case where it is not fored align
+                    *rd = (memory.read_u16(address & !0x1) as u32).rotate_right((address & 1) * 8);
                     if rd_index == rn_index {
                         return;
                     }
@@ -504,17 +491,14 @@ fn halfword_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
 
             let rd = cpu.get_register_mut(rd_index);
             *rd = raw_reading;
-            if rd_index == rn_index {
-                return;
-            }
         }
         0b11 => {
             // signed halfword
             assert!(l_bit, "L bit should not be set low");
 
             let mut raw_reading;
-            let is_aligned = address & 1 == 0;
-            match is_aligned {
+            let not_aligned = address & 1 == 1;
+            match not_aligned {
                 true => {
                     raw_reading = memory.read_u8(address) as u32;
                     if (raw_reading >> 7) & 1 == 1 {
@@ -522,7 +506,7 @@ fn halfword_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
                     }
                 },
                 false => {
-                    raw_reading = memory.read_u16(address & !(1)) as u32;
+                    raw_reading = memory.read_u16(address) as u32;
                     if (raw_reading >> 15) & 1 == 1 {
                         raw_reading |= 0xFFFF0000;
                     }
@@ -531,9 +515,6 @@ fn halfword_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
 
             let rd = cpu.get_register_mut(rd_index);
             *rd = raw_reading;
-            if rd_index == rn_index {
-                return;
-            }
         }
         _ => unreachable!()
     }
@@ -592,7 +573,7 @@ fn block_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
         }
     }
 
-    let starting_base = current_address;
+    let starting_base = current_address & !0x3;
     let ending_base = match u_bit {
         true => starting_base + (rlist.count_ones() * 4),
         false => current_address,
@@ -689,7 +670,7 @@ fn single_swap(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
     let data;
     match quantity_bit {
         true => data = memory.read_u8(address) as u32,
-        false => data = memory.read_u32(address),
+        false => data = memory.read_u32(address & !0x3).rotate_right((address & 0x3) * 8),
     }
     
     let rm = cpu.get_register(rm_index);

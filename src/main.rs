@@ -29,7 +29,7 @@ const SCREEN_HEIGHT: usize = 160;
 const FPS: u128 = 60;
 const FRAME_TIME: u128 = 1_000_000_000 / FPS;
 
-const BIOS: bool = true;
+const BIOS: bool = false;
 const DEBUG: bool = false;
 const PRINT: bool = true;
 const STEP: bool = false;
