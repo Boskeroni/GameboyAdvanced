@@ -129,6 +129,11 @@ impl Memory {
     }
 
     fn checked_write_u8(&mut self, address: u32, data: u8, is_8_bit: bool) {
+        if address == 0x4000202 || address == 0x4000203 {
+            self.obj_pall[address as usize - 0x4000000] &= !data;
+            return;
+        }
+
         // writing to a timer register
         if address >= 0x4000100 && address <= 0x400010E && address % 4 < 2 {
             // this rounds down anyways which is good

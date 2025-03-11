@@ -60,8 +60,16 @@ fn gba_frame(
             ppu.new_screen = false;
             return;
         }
-        handle_interrupts(mem, cpu);
+        let ahead_by = if fde.fetched == None { 0 } else if fde.decoded == None { 1 } else { 2 };
+        handle_interrupts(mem, cpu, ahead_by);
+        println!("{:X}", cpu.get_register(15));
 
+        if cpu.clear_pipeline {
+            fde.fetched = None;
+            fde.decoded = None;
+            cpu.clear_pipeline = false;
+            continue;
+        }
         // Execute
         if let Some(instruction) = fde.decoded {
             // debug reasons
@@ -72,7 +80,6 @@ fn gba_frame(
                 Thumb(instr) => execute_thumb(fde.decoded_opcode as u16, instr, cpu, mem),
                 Arm(instr) => execute_arm(fde.decoded_opcode, instr, cpu, mem),
             };
-
             if DEBUG {
                 debug_screen(&cpu, instruction, fde.decoded_opcode, &old_regs, f);
             }
@@ -191,7 +198,7 @@ fn main() {
         true => Cpu::from_bios(),
         false => Cpu::new(),
     };
-    let mut mem = memory::create_memory("test/memory.gba");
+    let mut mem = memory::create_memory("test/suite.gba");
     let mut ppu = Ppu::new();
     let mut fde = Fde::default();
     setup_joypad(&mut mem);

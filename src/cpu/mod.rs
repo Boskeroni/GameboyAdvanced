@@ -369,12 +369,19 @@ impl Cpu {
 
 use crate::memory::Memory;
 enum CpuRegisters {
-    Ime = 0x4000208,
     Ie = 0x4000200,
     If = 0x4000202,
+    Ime = 0x4000208,
 }
 
-pub fn handle_interrupts(memory: &mut Memory, cpu: &mut Cpu) {
+/// the ahead_by variable represents how many instructions the pc is
+/// it is multiplied by 4 for ARM, and 2 for Thumb.
+/// Just intended for callbacks
+pub fn handle_interrupts(memory: &mut Memory, cpu: &mut Cpu, ahead_by: u32) {
+    if cpu.cpsr.i {
+        return;
+    }
+
     let interrupt_allowed = memory.read_u16(CpuRegisters::Ime as u32) & 1 == 1;
     if !interrupt_allowed {
         return;
@@ -388,8 +395,19 @@ pub fn handle_interrupts(memory: &mut Memory, cpu: &mut Cpu) {
     }
 
     cpu.cpsr.mode = ProcessorMode::Interrupt;
+    cpu.set_specific_spsr(cpu.cpsr, ProcessorMode::Interrupt);
+    let is_in_thumb = cpu.cpsr.t;
+
+    let pc = cpu.get_register(15);
+    let lr = cpu.get_register_mut(14);
+    match is_in_thumb {
+        true => *lr = pc - (ahead_by * 2),
+        false => *lr = pc - (ahead_by * 4),
+    }
     cpu.cpsr.t = false;
+    cpu.cpsr.i = true;
 
     let pc = cpu.get_register_mut(15);
     *pc = 0x18;
+    cpu.clear_pipeline = true;
 }

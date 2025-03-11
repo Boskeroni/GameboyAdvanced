@@ -1,10 +1,10 @@
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DecodedInstruction {
     Thumb(DecodedThumb),
     Arm(DecodedArm),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DecodedThumb {
     MoveShifted,
     AddSub, 
@@ -90,7 +90,7 @@ const UNDEFINED_VALUE: u32 = 0b0000_0110_0000_0000_0000_0000_0001_0000;
 
 const REMOVE_CONDITION_MASK: u32 = 0b0000_1111_1111_1111_1111_1111_1111_1111;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DecodedArm {
     DataProcessing,
     Multiply,
