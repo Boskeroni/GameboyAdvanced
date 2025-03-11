@@ -31,7 +31,7 @@ const FRAME_TIME: u128 = 1_000_000_000 / FPS;
 
 const BIOS: bool = false;
 const DEBUG: bool = false;
-const PRINT: bool = false;
+const PRINT: bool = true;
 const STEP: bool = false;
 
 #[derive(Default)]
@@ -62,7 +62,7 @@ fn gba_frame(
         }
         let ahead_by = if fde.fetched == None { 0 } else if fde.decoded == None { 1 } else { 2 };
         handle_interrupts(mem, cpu, ahead_by);
-        println!("{:X}", cpu.get_register(15));
+        //println!("{:X}", cpu.get_register(15));
 
         if cpu.clear_pipeline {
             fde.fetched = None;
@@ -198,7 +198,7 @@ fn main() {
         true => Cpu::from_bios(),
         false => Cpu::new(),
     };
-    let mut mem = memory::create_memory("test/suite.gba");
+    let mut mem = memory::create_memory("test/bin/irq_demo.gba");
     let mut ppu = Ppu::new();
     let mut fde = Fde::default();
     setup_joypad(&mut mem);

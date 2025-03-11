@@ -190,14 +190,11 @@ fn data_processing(opcode: u32, cpu: &mut Cpu) {
                 return;
             }
         }
-
-        cpu.cpsr = *cpu.get_spsr();
-
-        if undo {
-            return;
-        }
         let rd = cpu.get_register_mut(rd_index);
         *rd = result;
+        cpu.clear_pipeline = true;
+
+        cpu.cpsr = *cpu.get_spsr();
 
         return;
     }
@@ -552,6 +549,8 @@ fn block_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
     if started_empty {
         rlist |= 0x8000;
     }
+    let r15_in_list = (rlist >> 15) & 1 == 1;
+
 
     let l_bit = (opcode >> 20) & 1 == 1;
     let w_bit = (opcode >> 21) & 1 == 1;
@@ -559,16 +558,13 @@ fn block_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
     let u_bit = (opcode >> 23) & 1 == 1;
     let p_bit = (opcode >> 24) & 1 == 1;
 
-
-    // might need to clear the pipeline
-    cpu.clear_pipeline = (rlist >> 15) & 1 == 1 && l_bit;
-
     let rn_index = (opcode >> 16) & 0xF;
     let rn = cpu.get_register(rn_index as u8);
 
-    let used_mode = match s_bit {
-        true => ProcessorMode::User,
-        false => cpu.cpsr.mode,
+    let used_mode = match (s_bit, r15_in_list, l_bit) {
+        (true, true, false) => ProcessorMode::User, // STM with R15 in transfer and S bit set
+        (true, false, _) => ProcessorMode::User, // R15 not in list and S bit set
+        _ => cpu.cpsr.mode, // All others
     };
     let mut current_address;
     match started_empty {
@@ -600,6 +596,13 @@ fn block_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
                 }
 
                 let next_r = rlist.trailing_zeros();
+
+                // LDM with r15 in transfer list and s bit set (mode changes)
+                if next_r == 15 && s_bit {
+                    cpu.cpsr = *cpu.get_spsr();
+                    cpu.clear_pipeline = true;
+                }
+
                 let rb = cpu.get_register_mut_specific(next_r as u8, used_mode);
                 *rb = memory.read_u32(current_address & (!0b11));
 
@@ -615,7 +618,7 @@ fn block_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
             while rlist != 0 {
                 // why do the docs not make a mention of this???
                 if !first_run && (rlist >> rn_index) & 1 == 1 && w_bit {
-                    let rn_mut = cpu.get_register_mut(rn_index as u8);
+                    let rn_mut = cpu.get_register_mut_specific(rn_index as u8, used_mode);
                     *rn_mut = ending_base;
                 }
 
