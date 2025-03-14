@@ -35,7 +35,7 @@ pub struct Ppu {
     pub stored_screen: Vec<u32>,
 
     pixel_priorities: Vec<u16>, // the priorities of all the pixels on the screen
-    worked_on_line: Vec<u32>,
+    worked_on_line: [u32; 240],
 
 }
 impl Ppu {
@@ -46,7 +46,7 @@ impl Ppu {
             stored_screen: Vec::new(),
 
             pixel_priorities: Vec::new(),
-            worked_on_line: Vec::new(),
+            worked_on_line: [0; 240],
         }
     }
     pub fn acknowledge_frame(&mut self) {
@@ -73,6 +73,8 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
         vcount += 1;
 
         if vcount < SCREEN_HEIGHT as u16 {
+            // clear it for the new line
+            ppu.worked_on_line = [0; 240];
             let bg_mode = dispcnt & 0b111;
             match bg_mode {
                 0 => bg_mode_0(ppu, memory, vcount as u32),
@@ -98,7 +100,6 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
     }
 
     update_registers(ppu, memory, dispstat, vcount);
-    ppu.worked_on_line.clear();
 }
 fn update_registers(ppu: &mut Ppu, memory: &mut Memory, mut dispstat: u16, vcount: u16) {
     // work in progress
