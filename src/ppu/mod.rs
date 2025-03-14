@@ -3,6 +3,7 @@ use crate::{memory::Memory, SCREEN_HEIGHT, SCREEN_WIDTH};
 mod bitmaps;
 mod tiles;
 mod obj;
+mod window;
 
 use bitmaps::*;
 use obj::oam_scan;

@@ -47,7 +47,8 @@ pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory, line: u32) {
         let read_line = read_scanline(line, bg, memory);
         for i in 0..240 {
             // something has already been displayed to the scanline
-            if scanline[i] != 0 { continue; }
+            if scanline[i] != 0 || read_line[i] == 0 { continue; }
+            println!("{line}");
             pixel_priorities[i] = priority;
             scanline[i] = read_line[i];
         }
@@ -139,7 +140,7 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u8> {
         let tile = memory.read_u16(tile_address);
 
         // all the information stored in the tile
-        let tile_number = tile as u32 & 0x1FF;
+        let tile_number = tile as u32 & 0x3FF;
         let hor_flip = (tile >> 10) & 1 == 1;
         let ver_flip = (tile >> 11) & 1 == 1;
         let palette_number = (tile >> 12) as u8 & 0xF;

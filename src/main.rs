@@ -32,7 +32,7 @@ const FRAME_TIME: u128 = 1_000_000_000 / FPS;
 const BIOS: bool = false;
 const DEBUG: bool = false;
 const PRINT: bool = true;
-const STEP: bool = false;
+const STEP: bool = true;
 
 #[derive(Default)]
 struct Fde {
@@ -197,7 +197,7 @@ fn main() {
         true => Cpu::from_bios(),
         false => Cpu::new(),
     };
-    let mut mem = memory::create_memory("test/bin/obj_demo.gba");
+    let mut mem = memory::create_memory("test/bin/hello.gba");
     let mut ppu = Ppu::new();
     let mut fde = Fde::default();
     setup_joypad(&mut mem);
