@@ -130,7 +130,7 @@ impl Memory {
 
     fn checked_write_u8(&mut self, address: u32, data: u8, is_8_bit: bool) {
         if address == 0x4000202 || address == 0x4000203 {
-            self.obj_pall[address as usize - 0x4000000] &= !data;
+            self.io_reg[address as usize - 0x4000000] &= !data;
             return;
         }
 
@@ -183,12 +183,17 @@ impl Memory {
 
         match upp_add {
             0x0 => panic!("cannot make a write to the BIOS"),
-            0x2 => self.ewram[low_add % self.ewram.len()] = data,
-            0x3 => self.iwram[low_add % self.iwram.len()] = data,
-            0x4 => self.io_reg[low_add % self.io_reg.len()] = data,
-            0x5 => self.obj_pall[low_add % self.obj_pall.len()] = data,
-            0x6 => self.vram[low_add % self.vram.len()] = data,
-            0x7 => self.oam[low_add % self.oam.len()] = data,
+            0x2 => self.ewram[low_add % EWRAM_LENGTH] = data,
+            0x3 => self.iwram[low_add % IWRAM_LENGTH] = data,
+            0x4 => {
+                if low_add == 0x0 {
+                    println!("DISPCNT = {data:X}");
+                }
+                self.io_reg[low_add % IO_REG_LENGTH] = data
+            },
+            0x5 => self.obj_pall[low_add % OBJ_PALL_LENGTH] = data,
+            0x6 => self.vram[low_add % VRAM_LENGTH] = data,
+            0x7 => self.oam[low_add % OAM_LENGTH] = data,
             _ => {},
         };
     }

@@ -62,7 +62,6 @@ fn gba_frame(
         }
         let ahead_by = if fde.fetched == None { 0 } else if fde.decoded == None { 1 } else { 2 };
         handle_interrupts(mem, cpu, ahead_by);
-        //println!("{:X}", cpu.get_register(15));
 
         if cpu.clear_pipeline {
             fde.fetched = None;

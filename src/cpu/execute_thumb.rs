@@ -652,8 +652,6 @@ fn long_branch_link(opcode: u16, cpu: &mut Cpu) {
 }
 
 fn software_interrupt(cpu: &mut Cpu) {
-    println!("PREPARE FOR CRASH");
-
     cpu.set_specific_spsr(cpu.cpsr, ProcessorMode::Supervisor);
     cpu.cpsr.mode = ProcessorMode::Supervisor;
 

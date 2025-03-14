@@ -191,7 +191,7 @@ impl Cpu {
         Self {
             unbanked_registers: [0, 0, 0, 0, 0, 0, 0, 0],
             double_banked_registers: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
-            many_banked_registers: [[0x03007F00, 0, 0x03007FE0, 0, 0x03007FE0, 0], [0, 0, 0, 0, 0, 0]],
+            many_banked_registers: [[0x03007F00, 0, 0x03007FE0, 0, 0x03007FA0, 0], [0, 0, 0, 0, 0, 0]],
             pc: 0x8000000,
             cpsr: Cpsr::default(),
             spsr: [Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default()],
@@ -230,6 +230,7 @@ impl Cpu {
             13..=14 => {
                 use ProcessorMode::*;
                 
+                // [[r13, f13_fiq, r13_svc, r13_abt, r13_irq, r13_und], ...]
                 let index = register - 13;
                 let offset = match self.cpsr.mode {
                     User|System => 0,
@@ -382,7 +383,7 @@ pub fn handle_interrupts(memory: &mut Memory, cpu: &mut Cpu, ahead_by: u32) {
         return;
     }
 
-    let interrupt_allowed = memory.read_u16(CpuRegisters::Ime as u32) & 1 == 1;
+    let interrupt_allowed = memory.read_u32(CpuRegisters::Ime as u32) & 1 == 1;
     if !interrupt_allowed {
         return;
     }
@@ -394,16 +395,16 @@ pub fn handle_interrupts(memory: &mut Memory, cpu: &mut Cpu, ahead_by: u32) {
         return;
     }
 
-    cpu.cpsr.mode = ProcessorMode::Interrupt;
-    cpu.set_specific_spsr(cpu.cpsr, ProcessorMode::Interrupt);
     let is_in_thumb = cpu.cpsr.t;
-
     let pc = cpu.get_register(15);
-    let lr = cpu.get_register_mut(14);
+    let lr = cpu.get_register_mut_specific(14, ProcessorMode::Interrupt);
     match is_in_thumb {
-        true => *lr = pc - (ahead_by * 2),
-        false => *lr = pc - (ahead_by * 4),
+        true => *lr = pc - (ahead_by * 2) + 4,
+        false => *lr = pc - (ahead_by * 4) + 4,
     }
+    cpu.set_specific_spsr(cpu.cpsr, ProcessorMode::Interrupt);
+
+    cpu.cpsr.mode = ProcessorMode::Interrupt;
     cpu.cpsr.t = false;
     cpu.cpsr.i = true;
 

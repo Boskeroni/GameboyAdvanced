@@ -177,25 +177,11 @@ fn data_processing(opcode: u32, cpu: &mut Cpu) {
     }
 
     if rd_index == 15 && s_bit {
-        if operation == 0b1101 && !i_bit && opcode & 0xF == 14 {
-            // returning from an SWI
-            if let ProcessorMode::Supervisor = cpu.cpsr.mode {
-                let lr = cpu.get_register(14);
-                let pc = cpu.get_register_mut(15);
-                *pc = lr;
-
-                cpu.cpsr = *cpu.get_spsr();
-                cpu.clear_pipeline = true;
-
-                return;
-            }
-        }
-        let rd = cpu.get_register_mut(rd_index);
-        *rd = result;
+        let pc = cpu.get_register_mut(rd_index);
+        *pc = result;
         cpu.clear_pipeline = true;
 
         cpu.cpsr = *cpu.get_spsr();
-
         return;
     }
 
@@ -352,8 +338,6 @@ fn multiply_long(opcode: u32, cpu: &mut Cpu) {
 }
 /// this instruction shouldnt change any of the CPSR flags
 fn software_interrupt(cpu: &mut Cpu) {
-    println!("PREPARE FOR CRASH");
-
     // spsr_svc gets the old cpsr transferred into it
     cpu.set_specific_spsr(cpu.cpsr, ProcessorMode::Supervisor);
 
@@ -545,11 +529,11 @@ fn halfword_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
 }
 fn block_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
     let mut rlist = opcode & 0xFFFF;
+    let r15_in_list = (rlist >> 15) & 1 == 1;
     let started_empty = rlist == 0;
     if started_empty {
         rlist |= 0x8000;
     }
-    let r15_in_list = (rlist >> 15) & 1 == 1;
 
 
     let l_bit = (opcode >> 20) & 1 == 1;
@@ -592,7 +576,7 @@ fn block_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
         true => {
             while rlist != 0 {
                 if p_bit == u_bit {
-                    current_address += 4;
+                current_address += 4;
                 }
 
                 let next_r = rlist.trailing_zeros();
