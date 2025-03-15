@@ -25,7 +25,7 @@ fn lil_end_combine_u32(a: u8, b: u8, c: u8, d: u8) -> u32 {
 /// input => 0bDDDDDDDDCCCCCCCCBBBBBBBBAAAAAAAA
 /// output => (0bAAAAAAAA, 0bBBBBBBBB, 0bCCCCCCCC, 0bDDDDDDDD)
 #[inline]
-fn little_split_u32(a: u32) -> (u8, u8, u8, u8) {
+fn lil_end_split_u32(a: u32) -> (u8, u8, u8, u8) {
     return (a as u8, (a >> 8) as u8, (a >> 16) as u8, (a >> 24) as u8)
 }
 
@@ -109,22 +109,22 @@ impl Memory {
     }
 
     pub fn read_u16(&self, address: u32) -> u16 {
-        let base_address = (address / 2) * 2;
+        let base_address = address & !(0b1);
 
         lil_end_combine_u16(
-            self.read_u8(base_address + ((address + 0) % 2)), 
-            self.read_u8(base_address + ((address + 1) % 2))
+            self.read_u8(base_address + 0), 
+            self.read_u8(base_address + 1)
         )
     }
 
     pub fn read_u32(&self, address: u32) -> u32 {
-        let base_address = (address / 4) * 4;
+        let base_address = address & !(0b11);
 
         lil_end_combine_u32(
-            self.read_u8(base_address + ((address + 0) % 4)), 
-            self.read_u8(base_address + ((address + 1) % 4)), 
-            self.read_u8(base_address + ((address + 2) % 4)), 
-            self.read_u8(base_address + ((address + 3) % 4)),
+            self.read_u8(base_address + 0), 
+            self.read_u8(base_address + 1), 
+            self.read_u8(base_address + 2), 
+            self.read_u8(base_address + 3),
         )
     }
 
@@ -185,12 +185,7 @@ impl Memory {
             0x0 => panic!("cannot make a write to the BIOS"),
             0x2 => self.ewram[low_add % EWRAM_LENGTH] = data,
             0x3 => self.iwram[low_add % IWRAM_LENGTH] = data,
-            0x4 => {
-                if low_add == 0x0 {
-                    println!("DISPCNT = {data:X}");
-                }
-                self.io_reg[low_add % IO_REG_LENGTH] = data
-            },
+            0x4 => self.io_reg[low_add % IO_REG_LENGTH] = data,
             0x5 => self.obj_pall[low_add % OBJ_PALL_LENGTH] = data,
             0x6 => self.vram[low_add % VRAM_LENGTH] = data,
             0x7 => self.oam[low_add % OAM_LENGTH] = data,
@@ -211,7 +206,7 @@ impl Memory {
     }
 
     pub fn write_u32(&mut self, address: u32, data: u32) {
-        let split = little_split_u32(data);
+        let split = lil_end_split_u32(data);
         let address = address & !(0b11);
 
         self.checked_write_u8(address + 0, split.0, false);
@@ -222,7 +217,7 @@ impl Memory {
 
     /// avoids all of the checks, used just by the other sub-systems
     pub fn write_io(&mut self, address: u32, data: u16) {
-        let address = address as usize - 0x4000000;
+        let address = (address as usize - 0x4000000) & !(0b1);
         let split = lil_end_split_u16(data);
 
         self.io_reg[address + 0] = split.0;

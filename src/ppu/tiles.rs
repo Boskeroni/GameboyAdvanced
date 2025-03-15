@@ -48,7 +48,6 @@ pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory, line: u32) {
         for i in 0..240 {
             // something has already been displayed to the scanline
             if scanline[i] != 0 || read_line[i] == 0 { continue; }
-            println!("{line}");
             pixel_priorities[i] = priority;
             scanline[i] = read_line[i];
         }
@@ -93,15 +92,11 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u8> {
     {
         let x_offset = memory.read_u16(PpuRegisters::BgHOffset as u32 + (bg * 4)) as u32 & 0x1FF;
         let y_offset = memory.read_u16(PpuRegisters::BgVOffset as u32 + (bg * 4)) as u32 & 0x1FF;
-        println!("{y_offset}, {x_offset}");
 
         x_tile = x_offset / 8;
         x_tile_offset = x_offset % 8;
 
-        match wrap_around {
-            true => y_tile = ((y_offset + line) / 8) % (height / 8),
-            false => y_tile = (y_offset + line) / 8,
-        }
+        y_tile = ((y_offset + line) / 8) % (height / 8);
         y_tile_offset = (y_offset + line) % 8;
     }
 
@@ -191,9 +186,7 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u8> {
         }
 
         x_tile += 1;
-        if wrap_around {
-            x_tile %= 64;
-        }
+        x_tile %= width / 8;
     }
 
     scanline = scanline[(x_tile_offset as usize)..(x_tile_offset as usize + 240)].to_vec();

@@ -227,7 +227,6 @@ fn psr_transfer(opcode: u32, cpu: &mut Cpu) {
                     cpu.get_register(rm_index)
                 }
             };
-
             let psr = match psr_bit {
                 true => cpu.get_spsr_mut(),
                 false => &mut cpu.cpsr,
