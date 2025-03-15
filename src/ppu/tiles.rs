@@ -189,7 +189,7 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u8> {
                         true => right = formatted_data & 0xF,
                         false => right = (formatted_data >> 4) & 0xF,
                     }
-                    match left {
+                    match right {
                         0 => scanline.push(0),
                         _ => scanline.push((palette_number * 0x10) + right)
                     }

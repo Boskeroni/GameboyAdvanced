@@ -42,7 +42,9 @@ pub fn oam_scan(ppu: &mut Ppu, mem: &Memory, vcount: u16, dispcnt: u16) {
             if pixel == 0 {
                 continue
             }
-            ppu.worked_on_line[x_coord + i] = pixel;
+            let palette = mem.read_u16(OBJ_PALL + pixel as u32);
+            let color = convert_palette_winit(palette);
+            ppu.worked_on_line[x_coord + i] = color;
         }
     }
 }
@@ -62,7 +64,7 @@ fn load_obj(
     obj0: u16, obj1: u16, obj2: u16, 
     vcount: u16,
     two_dimensional: bool
-) -> Vec<u32> {
+) -> Vec<u16> {
     let rotation_flag = (obj0 >> 8) & 1 == 1;
     let obj_mosaic = (obj0 >> 12) & 1 == 1;
     let is_8_bit = (obj0 >> 13) & 1 == 1;
@@ -74,7 +76,7 @@ fn load_obj(
         tile_number &= 0x1FE;
     }
 
-    let palette = (obj2 >> 12) & 0x3;
+    let palette_number = (obj2 >> 12) & 0x3;
 
     let y_coord = obj0 & 0xFF;
 
@@ -86,9 +88,7 @@ fn load_obj(
 
     // lets get the row of pixels that we need
     // right now just assume all of the pixels are not rotated
-    let mut row_of_pixels: Vec<u32> = Vec::new();
-    row_of_pixels.reserve(256);
-
+    let mut row_of_pixels = Vec::new();
 
     match rotation_flag {
         true => {
@@ -140,9 +140,7 @@ fn load_obj(
                         
                         for pixel in 0..8 {
                             let palette_index = mem.read_u8(line_address + pixel);
-                            let palette = mem.read_u16(OBJ_PALL  + (palette_index as u32 * 2));
-                            let screen_value = convert_palette_winit(palette);
-                            row_of_pixels.push(screen_value);
+                            row_of_pixels.push(palette_index as u16);
                         }
                     }
                 }
@@ -159,15 +157,16 @@ fn load_obj(
                             let formatted_data = mem.read_u8(line_address + pixel);
 
                             let left = formatted_data & 0xF;
-                            let left_palette = mem.read_u16(OBJ_PALL + (palette as u32 * 0x20) + (left as u32 * 2));
-                            let left_screen_value = convert_palette_winit(left_palette);
-                            row_of_pixels.push(left_screen_value);
+                            match left {
+                                0 => row_of_pixels.push(0),
+                                _ => row_of_pixels.push((palette_number * 0x20) + left as u16)
+                            }
         
                             let right = (formatted_data >> 4) & 0xF;
-                            let right_palette = mem.read_u16(OBJ_PALL + (palette as u32 * 0x20) + (right as u32 * 2));
-                            let right_screen_value = convert_palette_winit(right_palette);
-                            row_of_pixels.push(right_screen_value);
-
+                            match right {
+                                0 => row_of_pixels.push(0),
+                                _ => row_of_pixels.push((palette_number * 0x20) + right as u16)
+                            }
                         }
                     }
                 }

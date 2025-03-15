@@ -91,7 +91,6 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
             ppu.stored_screen.extend(ppu.worked_on_line.clone());
         }
 
-
         if vcount as usize >= (SCREEN_HEIGHT + 68) {
             vcount = 0;
             ppu.new_screen = true;
