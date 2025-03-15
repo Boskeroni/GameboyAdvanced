@@ -1,3 +1,5 @@
+use pixels::wgpu::hal::TextureUses;
+
 use crate::memory::Memory;
 
 use super::{convert_palette_winit, Ppu, PpuRegisters, PALETTE_BASE, VRAM_BASE};
@@ -168,18 +170,26 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u8> {
 
                 for mut pixel in 0..4 {
                     if hor_flip {
-                        pixel = 7 - pixel;
+                        pixel = 3 - pixel;
                     }
                     let formatted_data = memory.read_u8(line_address + pixel);
 
-                    let left = formatted_data & 0xF;
+                    let left;
+                    match hor_flip {
+                        true => left = (formatted_data >> 4) & 0xF,
+                        false => left = formatted_data & 0xF,
+                    }
                     match left {
                         0 => scanline.push(0),
                         _ => scanline.push((palette_number * 0x10) + left)
                     }
 
-                    let right = (formatted_data >> 4) & 0xF;
-                    match right {
+                    let right;
+                    match hor_flip {
+                        true => right = formatted_data & 0xF,
+                        false => right = (formatted_data >> 4) & 0xF,
+                    }
+                    match left {
                         0 => scanline.push(0),
                         _ => scanline.push((palette_number * 0x10) + right)
                     }
