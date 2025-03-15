@@ -40,7 +40,6 @@ pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory, line: u32) {
     let mut scanline = vec![0; 240];
     let mut pixel_priorities = vec![0; 240];
     for j in 0..backgrounds.len() {
-        if j != 0 { continue; }
         let bg = backgrounds[j];
         let priority = priorities[j];
 
@@ -99,7 +98,6 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u8> {
         y_tile = ((y_offset + line) / 8) % (height / 8);
         y_tile_offset = (y_offset + line) % 8;
     }
-
     // I reserve 256 as I want the list to have two tiles width
     // extra on each side, so that it accounts for scrolling
     // so 240 + (8 * 2) = 256
@@ -175,12 +173,16 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u8> {
                     let formatted_data = memory.read_u8(line_address + pixel);
 
                     let left = formatted_data & 0xF;
-                    let left_palette_index = (palette_number * 0x10) + left;
-                    scanline.push(left_palette_index);
+                    match left {
+                        0 => scanline.push(0),
+                        _ => scanline.push((palette_number * 0x10) + left)
+                    }
 
                     let right = (formatted_data >> 4) & 0xF;
-                    let right_palette_index = (palette_number * 0x10) + right;
-                    scanline.push(right_palette_index);
+                    match right {
+                        0 => scanline.push(0),
+                        _ => scanline.push((palette_number * 0x10) + right)
+                    }
                 }
             }
         }
