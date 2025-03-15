@@ -93,6 +93,7 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u8> {
     {
         let x_offset = memory.read_u16(PpuRegisters::BgHOffset as u32 + (bg * 4)) as u32 & 0x1FF;
         let y_offset = memory.read_u16(PpuRegisters::BgVOffset as u32 + (bg * 4)) as u32 & 0x1FF;
+        println!("{y_offset}, {x_offset}");
 
         x_tile = x_offset / 8;
         x_tile_offset = x_offset % 8;
