@@ -33,7 +33,7 @@ pub fn bg_mode_4(ppu: &mut Ppu, memory: &mut Memory, line: u16) {
 pub fn bg_mode_5(ppu: &mut Ppu, memory: &mut Memory, line: u16) {
     let (width, height) = (160, 128);
     if line >= height {
-        ppu.stored_screen.extend([0; 240]);
+        ppu.worked_on_line = [0; 240];
         return;
     }
 
