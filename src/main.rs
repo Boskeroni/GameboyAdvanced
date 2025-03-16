@@ -30,7 +30,7 @@ const FPS: u128 = 60;
 const FRAME_TIME: u128 = 1_000_000_000 / FPS;
 
 const BIOS: bool = false;
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 const PRINT: bool = true;
 const STEP: bool = false;
 
@@ -197,7 +197,8 @@ fn main() {
         true => Cpu::from_bios(),
         false => Cpu::new(),
     };
-    let mut mem = memory::create_memory("test/bin/irq_demo.gba");
+
+    let mut mem = memory::create_memory("test/bin/hello.gba");
     let mut ppu = Ppu::new();
     let mut fde = Fde::default();
     setup_joypad(&mut mem);
@@ -237,6 +238,9 @@ fn main() {
 
                         let screen = pixels.frame_mut();
                         for (i, c) in ppu.stored_screen.iter().enumerate() {
+                            if *c != 0 {
+                                panic!("my work has been done");
+                            }
                             let r = (*c >> 16) & 0xFF;
                             let g = (*c >> 8) & 0xFF;
                             let b = *c & 0xFF;
