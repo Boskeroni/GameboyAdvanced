@@ -259,7 +259,7 @@ pub fn update_timer(memory: &mut Memory, old_cycles: &mut u32, new_cycles: u32) 
         let (new_timer_cycles, overflow) = match cascade_timer {
             true => old_cycles.overflowing_add(prev_cascade as u32),
             false => {
-                let cycles_to_add = (timer_cycles / frequency) - (total_cycles / frequency);
+                let cycles_to_add = (timer_cycles / frequency).wrapping_sub(total_cycles / frequency);
                 old_cycles.overflowing_add(cycles_to_add as u32)
             }
         };

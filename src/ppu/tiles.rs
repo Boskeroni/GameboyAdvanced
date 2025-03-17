@@ -1,7 +1,4 @@
-use pixels::wgpu::hal::TextureUses;
-
-use crate::memory::Memory;
-
+use crate::memory::Memory; 
 use super::{convert_palette_winit, Ppu, PpuRegisters, PALETTE_BASE, VRAM_BASE};
 
 pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory, line: u32) {

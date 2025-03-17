@@ -198,7 +198,7 @@ fn main() {
         false => Cpu::new(),
     };
 
-    let mut mem = memory::create_memory("test/bin/txt_bm.gba");
+    let mut mem = memory::create_memory("test/bin/txt_se2.gba");
     let mut ppu = Ppu::new();
     let mut fde = Fde::default();
     setup_joypad(&mut mem);
@@ -229,12 +229,12 @@ fn main() {
                         );
 
                         // keep it running at 60fps
-                        if last_render.elapsed().as_nanos() <= FRAME_TIME {
-                            last_render = std::time::Instant::now();
-                            // the amount it should wait for 60fps
-                            let difference = FRAME_TIME - last_render.elapsed().as_nanos();
-                            thread::sleep(Duration::from_nanos(difference as u64));
-                        }
+                        // if last_render.elapsed().as_nanos() <= FRAME_TIME {
+                        //     last_render = std::time::Instant::now();
+                        //     // the amount it should wait for 60fps
+                        //     let difference = FRAME_TIME - last_render.elapsed().as_nanos();
+                        //     thread::sleep(Duration::from_nanos(difference as u64));
+                        // }
 
                         let screen = pixels.frame_mut();
                         for (i, c) in ppu.stored_screen.iter().enumerate() {

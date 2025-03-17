@@ -18,10 +18,13 @@ pub fn oam_scan(ppu: &mut Ppu, mem: &Memory, vcount: u16, dispcnt: u16) {
         let obj_attr1 = mem.read_u16(OAM + (obj * 8) + 2);
         let obj_attr2 = mem.read_u16(OAM + (obj * 8) + 4);
 
+        if obj_attr0 == 0 && obj_attr1 == 0 && obj_attr2 == 0 {
+            continue;
+        }
         // these are defined here as they don't impact the reading of the tile
         // just impact if / where it is placed
         let priority = (obj_attr2 >> 10) & 0x3;
-        let x_coord = obj_attr1 as usize & 0xFF;
+        let x_coord = obj_attr1 as usize & 0x1FF;
 
         // this can be any amount of lines
         let new = load_obj(
@@ -71,7 +74,7 @@ fn load_obj(
 
     let obj_mode = (obj0 >> 10) & 0x3;
 
-    let mut tile_number = obj2 & 0x1FF;
+    let mut tile_number = obj2 & 0x3FF;
     if is_8_bit { // the lowest bit is ignored in 8-bit depth
         tile_number &= 0x1FE;
     }
