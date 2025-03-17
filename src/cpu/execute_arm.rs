@@ -59,10 +59,15 @@ fn branch_exchange(opcode: u32, cpu: &mut Cpu) {
     let rn_index = opcode as u8 & 0xF;
 
     let rn = cpu.get_register(rn_index);
-    cpu.cpsr.t = (rn & 1) == 1;
-
     let pc = cpu.get_register_mut(15);
-    *pc = rn & 0xFFFFFFFE;
+
+    match rn & 1 == 1 {
+        true => {
+            *pc = rn & !(0x1);
+            cpu.cpsr.t = true;
+        }
+        false => *pc = rn & !(0x3),
+    }
     cpu.clear_pipeline = true;
 }
 fn data_processing(opcode: u32, cpu: &mut Cpu) {

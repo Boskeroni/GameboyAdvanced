@@ -295,9 +295,14 @@ fn hi_ops(opcode: u16, cpu: &mut Cpu) {
             assert!(!h1, "H1=1 for this instruction is undefined");
 
             let pc = cpu.get_register_mut(15);
-            *pc = rs & !(0b1);
-
-            cpu.cpsr.t = (rs & 1) == 1;
+            match rs & 1 == 1 {
+                true => *pc = rs & !(0x1),
+                false => {
+                    // swapping to arm mode
+                    *pc = rs & !(0x3);
+                    cpu.cpsr.t = false;
+                },
+            }
             cpu.clear_pipeline = true;
             return;
         }
@@ -662,5 +667,5 @@ fn software_interrupt(cpu: &mut Cpu) {
     let pc = cpu.get_register_mut(15);
     *pc = 0x08;
     cpu.clear_pipeline = true;
-    cpu.cpsr.t = false;
+    // the cpu.cpsr.t is false anyways
 }
