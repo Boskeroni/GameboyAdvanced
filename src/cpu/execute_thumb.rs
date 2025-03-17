@@ -667,5 +667,5 @@ fn software_interrupt(cpu: &mut Cpu) {
     let pc = cpu.get_register_mut(15);
     *pc = 0x08;
     cpu.clear_pipeline = true;
-    // the cpu.cpsr.t is false anyways
+    cpu.cpsr.t = false;
 }

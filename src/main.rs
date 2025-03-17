@@ -30,7 +30,7 @@ const FPS: u128 = 60;
 const FRAME_TIME: u128 = 1_000_000_000 / FPS;
 
 const BIOS: bool = false;
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 const PRINT: bool = true;
 const STEP: bool = false;
 
