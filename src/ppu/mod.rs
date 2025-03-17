@@ -36,7 +36,7 @@ pub struct Ppu {
     pub stored_screen: Vec<u32>,
 
     pixel_priorities: Vec<u16>, // the priorities of all the pixels on the screen
-    worked_on_line: [u32; 240],
+    worked_on_line: [u16; 240],
 
 }
 impl Ppu {
@@ -88,7 +88,12 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
             }
 
             oam_scan(ppu, memory, vcount, dispcnt);
-            ppu.stored_screen.extend(ppu.worked_on_line.clone());
+
+            // should probably just have an accumulate step
+            let new_line: Vec<u32> = ppu.worked_on_line.iter().map(
+                |c| convert_palette_winit(*c)
+            ).collect();
+            ppu.stored_screen.extend(new_line);
         }
 
         if vcount as usize >= (SCREEN_HEIGHT + 68) {

@@ -50,14 +50,12 @@ pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory, line: u32) {
             scanline[i] = read_line[i];
         }
     }
-    
     ppu.pixel_priorities = pixel_priorities;
-
 
     for i in 0..240 {
         let palette_index = scanline[i];
-        let palette = memory.read_u16(PALETTE_BASE + (palette_index as u32 * 2));
-        ppu.worked_on_line[i] = convert_palette_winit(palette);
+        let pixel = memory.read_u16(PALETTE_BASE + (palette_index as u32 * 2));
+        ppu.worked_on_line[i] = pixel;
     }
 }
 

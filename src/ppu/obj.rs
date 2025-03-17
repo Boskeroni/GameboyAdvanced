@@ -45,9 +45,8 @@ pub fn oam_scan(ppu: &mut Ppu, mem: &Memory, vcount: u16, dispcnt: u16) {
             if pixel == 0 {
                 continue
             }
-            let palette = mem.read_u16(OBJ_PALL + pixel as u32);
-            let color = convert_palette_winit(palette);
-            ppu.worked_on_line[x_coord + i] = color;
+            let pixel = mem.read_u16(OBJ_PALL + pixel as u32);
+            ppu.worked_on_line[x_coord + i] = pixel;
         }
     }
 }
@@ -76,11 +75,10 @@ fn load_obj(
 
     let mut tile_number = obj2 & 0x3FF;
     if is_8_bit { // the lowest bit is ignored in 8-bit depth
-        tile_number &= 0x1FE;
+        tile_number &= !(0b1);
     }
 
-    let palette_number = (obj2 >> 12) & 0x3;
-
+    let palette_number = (obj2 >> 12) & 0xF;
     let y_coord = obj0 & 0xFF;
 
     let (width, height) = {
