@@ -30,7 +30,7 @@ const FPS: u128 = 60;
 const FRAME_TIME: u128 = 1_000_000_000 / FPS;
 
 const BIOS: bool = false;
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 const PRINT: bool = true;
 const STEP: bool = false;
 
@@ -55,14 +55,19 @@ fn gba_frame(
         // update the timer
         // add 1 for now, make it more accurate later
         update_timer(mem, cycles, 1);
+        let active_dma = mem.dma_tick();
+
         tick_ppu(ppu, mem);
         if ppu.new_screen {
             ppu.new_screen = false;
             return;
         }
+        if active_dma {
+            continue;
+        }
+
         let ahead_by = if fde.fetched == None { 0 } else if fde.decoded == None { 1 } else { 2 };
         handle_interrupts(mem, cpu, ahead_by);
-
         if cpu.clear_pipeline {
             fde.fetched = None;
             fde.decoded = None;
@@ -198,11 +203,11 @@ fn main() {
         false => Cpu::new(),
     };
 
-    let mut mem = memory::create_memory("test/bin/txt_bm.gba");
+    let mut mem = memory::create_memory("test/suite.gba");
     let mut ppu = Ppu::new();
     let mut fde = Fde::default();
     setup_joypad(&mut mem);
-
+ 
     let mut last_render = Instant::now();
     let mut cycles = 0;
 
@@ -228,13 +233,13 @@ fn main() {
                             &mut debug_file
                         );
 
-                        // keep it running at 60fps
-                        // if last_render.elapsed().as_nanos() <= FRAME_TIME {
-                        //     last_render = std::time::Instant::now();
-                        //     // the amount it should wait for 60fps
-                        //     let difference = FRAME_TIME - last_render.elapsed().as_nanos();
-                        //     thread::sleep(Duration::from_nanos(difference as u64));
-                        // }
+                        // keep it running at 60fps - why am i doing this, there is no way it is reaching it
+                        if last_render.elapsed().as_nanos() <= FRAME_TIME {
+                            // the amount it should wait for 60fps
+                            let difference = FRAME_TIME - last_render.elapsed().as_nanos();
+                            thread::sleep(Duration::from_nanos(difference as u64));
+                        }
+                        last_render = std::time::Instant::now();
 
                         let screen = pixels.frame_mut();
                         for (i, c) in ppu.stored_screen.iter().enumerate() {
