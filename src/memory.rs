@@ -61,122 +61,6 @@ pub struct Memory {
     dma_completions: [u32; 4],
 }
 impl Memory {
-    // since DMA takes several cycles, its best to just have it be its own thing
-    pub fn dma_tick(&mut self) -> bool {
-        let mut dma_transfer = None;
-        for i in 0..=3 {
-            let cnt = self.read_u16(DMA_CNT + i*0xC);
-            let is_on = (cnt >> 15) & 1 == 1;
-
-            // highest priority goes 0 -> 3
-            if is_on {
-                dma_transfer = Some((i, cnt));
-                break;
-            }
-        }
-
-        // no dma transfer active rn
-        if let None = dma_transfer {
-            return false;
-        }
-        let (i, cnt) = dma_transfer.unwrap();
-
-        let base_src_address = self.read_u32(DMA_SAD + i*0xC) & 0xFFFFFFF; // top bits ignored
-        let base_dst_address = self.read_u32(DMA_DAD + i*0xC) & 0xFFFFFFF; // top bits ignored
-        let cnt_l = self.read_u16(DMA_COUNT + i *0xC) as u32;
-
-        let amount = match i {
-            3 => match cnt_l {
-                0 => 0x10000,
-                _ => cnt_l,
-            }
-            _ => match cnt_l {
-                0 => 0x4000,
-                _ => cnt_l,
-            }
-        };
-
-        let dst_ctrl = (cnt >> 5) & 0x3;
-        let src_ctrl = (cnt >> 7) & 0x3;
-
-        let repeat = (cnt >> 9) & 1 == 1;
-        let quantities = (cnt >> 10) & 1 == 1;
-        let drq = (cnt >> 11) & 1 == 1;
-
-        let dma_start = (cnt >> 12) & 0x3;
-        let irq_call = (cnt >> 14) & 1 == 1;
-
-        let dispstat = self.read_u16(0x4000004);
-        match dma_start {
-            0 => {}
-            1 => if (dispstat >> 0) & 1 == 0 { return false; }
-            2 => if (dispstat >> 1) & 1 == 0 { return false; }
-            3 => {}
-            _ => unreachable!(),
-        }
-
-
-        let done_already = self.dma_completions[i as usize];
-        let src_address = match src_ctrl {
-            0 => base_src_address + done_already,
-            1 => base_src_address - done_already,
-            2 => base_src_address,
-            _ => unreachable!("invalid DMA transfer"),
-        };
-
-        let dst_address = match dst_ctrl {
-            0 => base_dst_address + done_already,
-            1 => base_dst_address - done_already,
-            2 => base_dst_address,
-            3 => base_dst_address + done_already,
-            _ => unreachable!(),
-        };
-
-        match quantities {
-            true => {
-                // 32-bit
-                let read = self.read_u32(src_address);
-                self.write_u32(dst_address, read);
-
-                self.dma_completions[i as usize] += 4;
-            }
-            false => {
-                // 16-bit
-                let read = self.read_u16(src_address);
-                self.write_u16(dst_address, read);
-
-                self.dma_completions[i as usize] += 2;
-            }
-        }
-        
-        // DMA is finished
-        let final_amount = match quantities {
-            true => amount * 4,
-            false => amount * 2,
-        };
-
-        if self.dma_completions[i as usize] >= final_amount {
-            if irq_call {
-                // todo;
-                let mut i_flag = self.read_u16(0x4000202);
-                i_flag |= 1 << (8 + i);
-
-                self.write_u16(0x4000202, i_flag);
-            }
-
-            self.dma_completions[i as usize] = 0;
-            if repeat {
-                return true;
-            }
-
-            // clear the top bit
-            self.write_io(DMA_CNT + i*0xC, cnt & 0x7FFF);
-            return false;
-        }
-
-        return true;
-    }
-
     pub fn read_u8(&self, address: u32) -> u8 {
         let (upp_add, low_add) = split_memory_address(address);
 
@@ -323,6 +207,123 @@ impl Memory {
 fn is_in_video_memory(upp_add: u32) -> bool {
     return (upp_add == 0x5) | (upp_add == 0x6) | (upp_add == 0x7);
 }
+
+// since DMA takes several cycles, its best to just have it be its own thing
+pub fn dma_tick(mem: &mut Memory) -> bool {
+    let mut dma_transfer = None;
+    for i in 0..=3 {
+        let cnt = mem.read_u16(DMA_CNT + i*0xC);
+        let is_on = (cnt >> 15) & 1 == 1;
+
+        // highest priority goes 0 -> 3
+        if is_on {
+            dma_transfer = Some((i, cnt));
+            break;
+        }
+    }
+
+    // no dma transfer active rn
+    if let None = dma_transfer {
+        return false;
+    }
+    let (i, cnt) = dma_transfer.unwrap();
+
+    let base_src_address = mem.read_u32(DMA_SAD + i*0xC) & 0xFFFFFFF; // top bits ignored
+    let base_dst_address = mem.read_u32(DMA_DAD + i*0xC) & 0xFFFFFFF; // top bits ignored
+    let cnt_l = mem.read_u16(DMA_COUNT + i *0xC) as u32;
+
+    let amount = match i {
+        3 => match cnt_l {
+            0 => 0x10000,
+            _ => cnt_l,
+        }
+        _ => match cnt_l {
+            0 => 0x4000,
+            _ => cnt_l,
+        }
+    };
+
+    let dst_ctrl = (cnt >> 5) & 0x3;
+    let src_ctrl = (cnt >> 7) & 0x3;
+
+    let repeat = (cnt >> 9) & 1 == 1;
+    let quantities = (cnt >> 10) & 1 == 1;
+    let _drq = (cnt >> 11) & 1 == 1; // this isn't possible to implement????
+
+    let dma_start = (cnt >> 12) & 0x3;
+    let irq_call = (cnt >> 14) & 1 == 1;
+
+    let dispstat = mem.read_u16(0x4000004);
+    match dma_start {
+        0 => {}
+        1 => if (dispstat >> 0) & 1 == 0 { return false; }
+        2 => if (dispstat >> 1) & 1 == 0 { return false; }
+        3 => {}
+        _ => unreachable!(),
+    }
+
+
+    let done_already = mem.dma_completions[i as usize];
+    let src_address = match src_ctrl {
+        0 => base_src_address + done_already,
+        1 => base_src_address - done_already,
+        2 => base_src_address,
+        _ => unreachable!("invalid DMA transfer"),
+    };
+
+    let dst_address = match dst_ctrl {
+        0 => base_dst_address + done_already,
+        1 => base_dst_address - done_already,
+        2 => base_dst_address,
+        3 => base_dst_address + done_already,
+        _ => unreachable!(),
+    };
+
+    match quantities {
+        true => {
+            // 32-bit
+            let read = mem.read_u32(src_address);
+            mem.write_u32(dst_address, read);
+
+            mem.dma_completions[i as usize] += 4;
+        }
+        false => {
+            // 16-bit
+            let read = mem.read_u16(src_address);
+            mem.write_u16(dst_address, read);
+
+            mem.dma_completions[i as usize] += 2;
+        }
+    }
+
+    // DMA is finished
+    let final_amount = match quantities {
+        true => amount * 4,
+        false => amount * 2,
+    };
+
+    if mem.dma_completions[i as usize] >= final_amount {
+        if irq_call {
+            // todo;
+            let mut i_flag = mem.read_u16(0x4000202);
+            i_flag |= 1 << (8 + i);
+
+            mem.write_u16(0x4000202, i_flag);
+        }
+
+        mem.dma_completions[i as usize] = 0;
+        if repeat {
+            return true;
+        }
+
+        // clear the top bit
+        mem.write_io(DMA_CNT + i*0xC, cnt & 0x7FFF);
+        return false;
+    }
+
+    return true;
+}
+
 
 const BASE_TIMER_ADDRESS: u32 = 0x4000100;
 pub fn update_timer(memory: &mut Memory, old_cycles: &mut u32, new_cycles: u32) {

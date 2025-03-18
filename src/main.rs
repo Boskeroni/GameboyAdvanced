@@ -55,7 +55,7 @@ fn gba_frame(
         // update the timer
         // add 1 for now, make it more accurate later
         update_timer(mem, cycles, 1);
-        let active_dma = mem.dma_tick();
+        dma_tick(&mut mem);
 
         tick_ppu(ppu, mem);
         if ppu.new_screen {
@@ -203,7 +203,7 @@ fn main() {
         false => Cpu::new(),
     };
 
-    let mut mem = memory::create_memory("games/kirby.gba");
+    let mut mem = memory::create_memory("games/kirby-nightmare.gba");
     let mut ppu = Ppu::new();
     let mut fde = Fde::default();
     setup_joypad(&mut mem);
