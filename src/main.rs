@@ -11,7 +11,7 @@ use cpu::{
     execute_thumb::execute_thumb,
 };
 use joypad::setup_joypad;
-use memory::{update_timer, Memory};
+use memory::{dma_tick, update_timer, Memory};
 use pixels::{Pixels, SurfaceTexture};
 use ppu::{tick_ppu, Ppu};
 
@@ -55,7 +55,7 @@ fn gba_frame(
         // update the timer
         // add 1 for now, make it more accurate later
         update_timer(mem, cycles, 1);
-        dma_tick(&mut mem);
+        let active_dma = dma_tick(mem);
 
         tick_ppu(ppu, mem);
         if ppu.new_screen {
