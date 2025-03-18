@@ -106,6 +106,15 @@ impl Memory {
         let dma_start = (cnt >> 12) & 0x3;
         let irq_call = (cnt >> 14) & 1 == 1;
 
+        let dispstat = self.read_u16(0x4000004);
+        match dma_start {
+            0 => {}
+            1 => if (dispstat >> 0) & 1 == 0 { return false; }
+            2 => if (dispstat >> 1) & 1 == 0 { return false; }
+            3 => {}
+            _ => unreachable!(),
+        }
+
 
         let done_already = self.dma_completions[i as usize];
         let src_address = match src_ctrl {

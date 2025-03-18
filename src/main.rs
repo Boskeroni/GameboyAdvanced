@@ -203,7 +203,7 @@ fn main() {
         false => Cpu::new(),
     };
 
-    let mut mem = memory::create_memory("test/suite.gba");
+    let mut mem = memory::create_memory("games/kirby.gba");
     let mut ppu = Ppu::new();
     let mut fde = Fde::default();
     setup_joypad(&mut mem);
