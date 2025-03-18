@@ -139,9 +139,14 @@ impl Memory {
                 self.dma_completions[i as usize] += 2;
             }
         }
-        println!("{}", self.dma_completions[i as usize]);
+        
         // DMA is finished
-        if self.dma_completions[i as usize] >= amount {
+        let final_amount = match quantities {
+            true => amount * 4,
+            false => amount * 2,
+        };
+
+        if self.dma_completions[i as usize] >= final_amount {
             if irq_call {
                 // todo;
                 let mut i_flag = self.read_u16(0x4000202);
