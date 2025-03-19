@@ -1,4 +1,4 @@
-const BIOS: &[u8; 0x4000] = include_bytes!("../bios/bios.bin");
+pub const BIOS: &[u8; 0x4000] = include_bytes!("../bios/bios.bin");
 
 /// output =>
 /// 0bBBBBBBBBAAAAAAAA
@@ -36,8 +36,8 @@ fn split_memory_address(address: u32) -> (u32, usize) {
 
 const DMA_SAD: u32 = 0x40000B0;
 const DMA_DAD: u32 = 0x40000B4;
-const DMA_COUNT: u32 = 0x40000B8;
-const DMA_CNT: u32 = 0x40000BA;
+const DMA_AMOUNT: u32 = 0x40000B8;
+const DMA_CONTROL: u32 = 0x40000BA;
 
 const EWRAM_LENGTH: usize = 0x40000;
 const IWRAM_LENGTH: usize = 0x8000;
@@ -45,9 +45,9 @@ const VRAM_LENGTH: usize = 0x18000;
 const IO_REG_LENGTH: usize = 0x400;
 const OBJ_PALL_LENGTH: usize = 0x400;
 const OAM_LENGTH: usize = 0x400;
-/// I guess that it is possible to store all of the stores as 
-/// their respective bus lengths, but it may mess with the little-endianness of the
-/// machine. May perform tests if it works
+// this could be wrong, just the max value is safer
+const SRAM_MAX_LENGTH: usize = 0x10000;
+
 pub struct Memory {
     ewram: [u8; EWRAM_LENGTH], // WRAM - On-board Work RAM
     iwram: [u8; IWRAM_LENGTH],  // WRAM - On-chip Work RAM
@@ -56,6 +56,7 @@ pub struct Memory {
     obj_pall: [u8; OBJ_PALL_LENGTH],
     oam: [u8; OAM_LENGTH],
     gp_rom: Vec<u8>,
+    sram: [u8; SRAM_MAX_LENGTH],
 
     timer_resets: [u16; 4],
     dma_completions: [u32; 4],
@@ -76,10 +77,16 @@ impl Memory {
                 if base >= 0x10000 {
                     return self.vram[0x10000 + (base % 0x8000)]
                 }
-                return self.vram[base];
+                self.vram[base]
             }
             0x7 => self.oam[low_add % OAM_LENGTH],
-            _ => {
+            0xE => self.sram[low_add % SRAM_MAX_LENGTH],
+            _ => { // assuming this is just ROM
+                // deals with the mirrors
+                // this will be more important once I start dealing with timings
+                // let unmirrored_address = (address % 0x2000000) + 0x8000000;
+
+                // this is just cause some games store this in prefetch but don't use it
                 if low_add >= self.gp_rom.len() {
                     return 0x00;
                 }
@@ -169,6 +176,7 @@ impl Memory {
             0x5 => self.obj_pall[low_add % OBJ_PALL_LENGTH] = data,
             0x6 => self.vram[low_add % VRAM_LENGTH] = data,
             0x7 => self.oam[low_add % OAM_LENGTH] = data,
+            0xE => self.sram[low_add % SRAM_MAX_LENGTH] = data,
             _ => {},
         };
     }
@@ -212,7 +220,7 @@ fn is_in_video_memory(upp_add: u32) -> bool {
 pub fn dma_tick(mem: &mut Memory) -> bool {
     let mut dma_transfer = None;
     for i in 0..=3 {
-        let cnt = mem.read_u16(DMA_CNT + i*0xC);
+        let cnt = mem.read_u16(DMA_CONTROL + i*0xC);
         let is_on = (cnt >> 15) & 1 == 1;
 
         // highest priority goes 0 -> 3
@@ -230,8 +238,7 @@ pub fn dma_tick(mem: &mut Memory) -> bool {
 
     let base_src_address = mem.read_u32(DMA_SAD + i*0xC) & 0xFFFFFFF; // top bits ignored
     let base_dst_address = mem.read_u32(DMA_DAD + i*0xC) & 0xFFFFFFF; // top bits ignored
-    let cnt_l = mem.read_u16(DMA_COUNT + i *0xC) as u32;
-
+    let cnt_l = mem.read_u16(DMA_AMOUNT + i *0xC) as u32;
     let amount = match i {
         3 => match cnt_l {
             0 => 0x10000,
@@ -261,7 +268,6 @@ pub fn dma_tick(mem: &mut Memory) -> bool {
         3 => {}
         _ => unreachable!(),
     }
-
 
     let done_already = mem.dma_completions[i as usize];
     let src_address = match src_ctrl {
@@ -304,7 +310,6 @@ pub fn dma_tick(mem: &mut Memory) -> bool {
 
     if mem.dma_completions[i as usize] >= final_amount {
         if irq_call {
-            // todo;
             let mut i_flag = mem.read_u16(0x4000202);
             i_flag |= 1 << (8 + i);
 
@@ -317,7 +322,7 @@ pub fn dma_tick(mem: &mut Memory) -> bool {
         }
 
         // clear the top bit
-        mem.write_io(DMA_CNT + i*0xC, cnt & 0x7FFF);
+        mem.write_io(DMA_CONTROL + i*0xC, cnt & 0x7FFF);
         return false;
     }
 
@@ -388,13 +393,14 @@ pub fn create_memory(file_name: &str) -> Memory {
     };
 
     Memory {
-        ewram: [0; 0x40000],
-        iwram: [0; 0x8000],
-        vram: [0; 0x18000],
-        io_reg: [0; 0x400],
-        obj_pall: [0; 0x400],
-        oam: [0; 0x400],
+        ewram: [0; EWRAM_LENGTH],
+        iwram: [0; IWRAM_LENGTH],
+        vram: [0; VRAM_LENGTH],
+        io_reg: [0; IO_REG_LENGTH],
+        obj_pall: [0; OBJ_PALL_LENGTH],
+        oam: [0; OAM_LENGTH],
         gp_rom: file,
+        sram: [0; SRAM_MAX_LENGTH],
 
         timer_resets: [0; 4],
         dma_completions: [0; 4],

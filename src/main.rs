@@ -3,6 +3,10 @@ mod memory;
 mod ppu;
 mod joypad;
 
+// this is so work in progress that I do not wish to track it just yet
+// it won't interact with the program at all yet.
+mod bus; 
+
 use cpu::{
     handle_interrupts,
     Cpu,
@@ -84,6 +88,7 @@ fn gba_frame(
                 Thumb(instr) => execute_thumb(fde.decoded_opcode as u16, instr, cpu, mem),
                 Arm(instr) => execute_arm(fde.decoded_opcode, instr, cpu, mem),
             };
+
             if DEBUG {
                 debug_screen(&cpu, instruction, fde.decoded_opcode, &old_regs, f);
             }
@@ -203,7 +208,7 @@ fn main() {
         false => Cpu::new(),
     };
 
-    let mut mem = memory::create_memory("games/kirby-nightmare.gba");
+    let mut mem = memory::create_memory("test/suite.gba");
     let mut ppu = Ppu::new();
     let mut fde = Fde::default();
     setup_joypad(&mut mem);
@@ -234,12 +239,14 @@ fn main() {
                         );
 
                         // keep it running at 60fps - why am i doing this, there is no way it is reaching it
-                        if last_render.elapsed().as_nanos() <= FRAME_TIME {
+                        let time_taken = last_render.elapsed().as_nanos();
+                        if time_taken <= FRAME_TIME {
                             // the amount it should wait for 60fps
-                            let difference = FRAME_TIME - last_render.elapsed().as_nanos();
+                            let difference = FRAME_TIME - time_taken;
                             thread::sleep(Duration::from_nanos(difference as u64));
                         }
                         last_render = std::time::Instant::now();
+                        //println!("{time_taken}");
 
                         let screen = pixels.frame_mut();
                         for (i, c) in ppu.stored_screen.iter().enumerate() {

@@ -283,6 +283,7 @@ fn multiply(opcode: u32, cpu: &mut Cpu) {
     if (opcode >> 20) & 1 == 1 {
         cpu.cpsr.z = result == 0;
         cpu.cpsr.n = (result >> 31) == 1;
+        cpu.cpsr.c = false;
     }
 }
 fn multiply_long(opcode: u32, cpu: &mut Cpu) {
@@ -338,6 +339,7 @@ fn multiply_long(opcode: u32, cpu: &mut Cpu) {
     if s_bit {
         cpu.cpsr.z = result == 0;
         cpu.cpsr.n = (result >> 63) & 1 == 1;
+        cpu.cpsr.v = false;
     }
 }
 /// this instruction shouldnt change any of the CPSR flags
