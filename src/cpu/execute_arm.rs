@@ -382,7 +382,7 @@ fn data_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
         true => {
             let data = match b_bit {
                 true => memory.read_u8(address) as u32,
-                false => memory.read_u32(address),
+                false => memory.read_u32(address).rotate_right((address & 0b11) * 8),
             };
             let rd = cpu.get_register_mut(rd_index);
             *rd = data;
@@ -592,7 +592,7 @@ fn block_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
                 }
 
                 let rb = cpu.get_register_mut_specific(next_r as u8, used_mode);
-                *rb = memory.read_u32(current_address & (!0b11));
+                *rb = memory.read_u32(current_address);
 
                 if p_bit != u_bit {
                     current_address += 4;
@@ -669,7 +669,7 @@ fn single_swap(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
     let data;
     match quantity_bit {
         true => data = memory.read_u8(address) as u32,
-        false => data = memory.read_u32(address),
+        false => data = memory.read_u32(address).rotate_right((address & 0b11) * 8),
     }
     
     let rm = cpu.get_register(rm_index);

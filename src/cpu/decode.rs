@@ -80,7 +80,7 @@ pub fn decode_thumb(opcode: u16) -> DecodedThumb {
         _ => {}
     }
 
-    unreachable!("THUMB opcode provided is invalid");
+    unreachable!("THUMB opcode provided is invalid: {opcode:X}");
 }
 
 const BRANCH_EXCHANGE_MASK: u32 = 0b0000_1111_1111_1111_1111_1111_1111_0000;

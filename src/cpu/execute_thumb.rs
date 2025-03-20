@@ -325,7 +325,7 @@ fn mem_offset(opcode: u16, cpu: &mut Cpu, memory: &mut Memory, uses_imm: bool) {
             let rd = cpu.get_register_mut(rd_index);
             match b_bit {
                 true => *rd = memory.read_u8(address) as u32,
-                false => *rd = memory.read_u32(address),
+                false => *rd = memory.read_u32(address).rotate_right((address & 0b11) * 8),
             }
         }
         false => {
@@ -422,7 +422,7 @@ fn mem_sp_relative(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
     match l_bit {
         true => {
             let rd = cpu.get_register_mut(rd_index);
-            *rd = memory.read_u32(address);
+            *rd = memory.read_u32(address).rotate_right((address & 0b11) * 8);
         }
         false => {
             let rd = cpu.get_register(rd_index);
