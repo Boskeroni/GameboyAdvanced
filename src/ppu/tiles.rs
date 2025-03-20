@@ -1,5 +1,5 @@
 use crate::memory::Memory; 
-use super::{convert_palette_winit, Ppu, PpuRegisters, PALETTE_BASE, VRAM_BASE};
+use super::{Ppu, PpuRegisters, PALETTE_BASE, VRAM_BASE};
 
 pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory, line: u32) {
     let dispcnt = memory.read_u16(PpuRegisters::DispCnt as u32);

@@ -5,6 +5,7 @@ mod tiles;
 mod obj;
 mod window;
 
+use window::window_line;
 use bitmaps::*;
 use obj::oam_scan;
 use tiles::*;
@@ -88,6 +89,7 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
             }
 
             oam_scan(ppu, memory, vcount, dispcnt);
+            //window_line();
 
             // should probably just have an accumulate step
             let new_line: Vec<u32> = ppu.worked_on_line.iter().map(

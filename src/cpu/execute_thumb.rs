@@ -77,76 +77,49 @@ fn add_sub(opcode: u16, cpu: &mut Cpu) {
     let value = (opcode >> 6) & 0x7;
 
     let i_bit = (opcode >> 10) & 1 == 1;
-    let offset = match i_bit {
+    let mut offset = match i_bit {
         true => value as u32,
         false => cpu.get_register(value as u8),
     };
 
     let op = (opcode >> 9) & 1 == 1;
-    let result;
     match op {
-        true => { // sub
-            let (result1, carry1) = (!offset).overflowing_add(1);
-            let (result2, carry2) = rs.overflowing_add(result1);
-
-            cpu.cpsr.v = (!(rs ^ !offset) & (rs ^ result2)) >> 31 & 1 == 1;
-            cpu.cpsr.c = carry1 | carry2;
-            result = result2;
-        }
-        false => { // add
-            let (temp, carry) = rs.overflowing_add(offset);
-            cpu.cpsr.c = carry;
-            cpu.cpsr.v = ((rs ^ temp) & (offset ^ temp)) >> 31 & 1 == 1;
-            result = temp;
-        }
+        true => offset = !offset,
+        false => {}
     }
 
-    cpu.cpsr.z = result == 0;
-    cpu.cpsr.n = (result >> 31) & 1 == 1;
+    // the op may be confusing but trust
+    // since it must be 1 for sub and 0 for add
+    let (result, n, z, c, v) = add_with_carry(rs, offset, op);
+    cpu.cpsr.n = n;
+    cpu.cpsr.z = z;
+    cpu.cpsr.c = c;
+    cpu.cpsr.v = v;
 
     let rd = cpu.get_register_mut(rd_index as u8);
     *rd = result;
 
 }
 fn alu_imm(opcode: u16, cpu: &mut Cpu) {
-    let offset = (opcode as u32) & 0xFF;
     let rd_index = (opcode >> 8) as u8 & 0x7;
-    let rd = cpu.get_register(rd_index);
 
+    let mut rd = cpu.get_register(rd_index);
+    let mut offset = (opcode as u32) & 0xFF;
 
     let op = (opcode >> 11) & 0x3;
-    let (result, carry);
     match op {
-        0b00 => {
-            carry = false;
-            result = offset;
-        }
-        0b01 => {
-            let (result1, carry1) = (!offset).overflowing_add(1);
-            let (result2, carry2) = rd.overflowing_add(result1);
-
-            cpu.cpsr.v = (rd ^ result1) >> 31 == 0 && (rd ^ result2) >> 31 == 1;
-            result = result2;
-            carry = carry1 | carry2;
-        }
-        0b10 => {
-            (result, carry) = rd.overflowing_add(offset);
-            cpu.cpsr.v = ((rd ^ result) & (offset ^ result)) >> 31 & 1 == 1;
-        }
-        0b11 => {
-            let (result1, carry1) = (!offset).overflowing_add(1);
-            let (result2, carry2) = rd.overflowing_add(result1);
-
-            cpu.cpsr.v = (rd ^ result1) >> 31 == 0 && (rd ^ result2) >> 31 == 1;
-            carry = carry1 | carry2;
-            result = result2;
-        }
+        0 => rd = 0,
+        1 => offset = !offset,
+        2 => {}
+        3 => offset = !offset,
         _ => unreachable!(),
     }
+    let (result, n, z, c, v) = add_with_carry(rd, offset, op & 1 == 1);
 
-    cpu.cpsr.c = carry;
-    cpu.cpsr.n = (result >> 31) & 1 == 1;
-    cpu.cpsr.z = result == 0;
+    cpu.cpsr.v = v;
+    cpu.cpsr.c = c;
+    cpu.cpsr.n = n;
+    cpu.cpsr.z = z;
 
     // CMP doesnt change the value
     if op == 1 {
@@ -193,16 +166,14 @@ fn alu_ops(opcode: u16, cpu: &mut Cpu) {
             get_shifted_value(cpu, sent_opcode)
         } // asr
         0b0101 => {
-            let (inter_res, inter_of) = rd.overflowing_add(rs);
-            let (end_res, end_of) = inter_res.overflowing_add(cpu.cpsr.c as u32);
-            (end_res, inter_of | end_of)
+            let (result, _, _, c, v) = add_with_carry(rs, rd, cpu.cpsr.c);
+            cpu.cpsr.v = v;
+            (result, c)
         }, // adc
         0b0110 => {
-            let (result1, carry1) = (!rs).overflowing_add(cpu.cpsr.c as u32);
-            let (result2, carry2) = rd.overflowing_add(result1);
-
-            cpu.cpsr.v = (!(rd ^ !rs) & (rd ^ result2)) >> 31 & 1 == 1;
-            (result2, carry1 | carry2)
+            let (result, _, _, c, v) = add_with_carry(rd, !rs, cpu.cpsr.c);
+            cpu.cpsr.v = v;
+            (result, c)
         }, // sbc,
         0b0111 => {
             let sent_opcode = 
@@ -218,15 +189,17 @@ fn alu_ops(opcode: u16, cpu: &mut Cpu) {
         0b1001 => (0_u32.wrapping_sub(rs), cpu.get_barrel_shift()), // teq
         0b1010 => {
             undo = true;
-            let (result1, carry1) = (!rs).overflowing_add(1);
-            let (result2, carry2) = rd.overflowing_add(result1);
+            let (result, _, _, c, v) = add_with_carry(rd, !rs, true);
+            cpu.cpsr.v = v;
 
-            cpu.cpsr.v = (!(rd ^ !rs) & (rd ^ result2)) >> 31 & 1 == 1;
-            (result2, carry1 | carry2)
+            (result, c)
         }, // cmp
         0b1011 => {
             undo = true; 
-            rd.overflowing_add(rs)
+            let (result, _, _, c, v) = add_with_carry(rd, rs, false);
+            cpu.cpsr.v = v;
+
+            (result, c)
         }, // cmn
         0b1100 => {
             (rd | rs, cpu.cpsr.c)
@@ -237,16 +210,10 @@ fn alu_ops(opcode: u16, cpu: &mut Cpu) {
         _ => unreachable!()
     };
 
+    // all of the instructions that could change `cpu.cpsr.v` already have
     cpu.cpsr.c = alu_carry;
     cpu.cpsr.z = result == 0;
     cpu.cpsr.n = (result >> 31) & 1 == 1;
-    
-    // only mathematical instructions change the V flag
-    // all of the subtracts have already been handled
-    if [0b0101, 0b1011].contains(&op) {
-        cpu.cpsr.v = (!(rs ^ rd) & (rd ^ result)) >> 31 & 1 == 1;
-    }
-
     if undo {
         return;
     }
@@ -280,14 +247,12 @@ fn hi_ops(opcode: u16, cpu: &mut Cpu) {
     match op {
         0b00 => result = rd.wrapping_add(rs),
         0b01 => {
-            // this is the only instruction that sets the codes
-            let (result1, carry1) = (!rs).overflowing_add(1);
-            let (result2, carry2) = rd.overflowing_add(result1);
+            let (_, n, z, c, v) = add_with_carry(rd, !rs, true);
 
-            cpu.cpsr.v = ((rd ^ rs) & (rd ^ result2)) >> 31 & 1 == 1;
-            cpu.cpsr.c = carry1 | carry2;
-            cpu.cpsr.n = (result2 >> 31) & 1 == 1;
-            cpu.cpsr.z = result2 == 0;
+            cpu.cpsr.n = n;
+            cpu.cpsr.z = z;
+            cpu.cpsr.c = c;
+            cpu.cpsr.v = v;
             return;
         },
         0b10 => result = rs,
@@ -380,7 +345,7 @@ fn mem_sign_extended(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
     let ro = cpu.get_register(ro_index);
     let rb = cpu.get_register(rb_index);
 
-    let address = ro + rb;
+    let address = ro.wrapping_add(rb);
     let sh = (opcode >> 10) & 0b11;
 
     match sh {

@@ -345,15 +345,14 @@ pub fn update_timer(memory: &mut Memory, old_cycles: &mut u32, new_cycles: u32) 
             continue;
         }
 
-        let frequency;
         let frequency_bits = control & 0b11;
-        match frequency_bits {
-            0b00 => frequency = 1,
-            0b01 => frequency = 64,
-            0b10 => frequency = 256,
-            0b11 => frequency = 1024,
+        let frequency = match frequency_bits {
+            0b00 => 1,
+            0b01 => 64,
+            0b10 => 256,
+            0b11 => 1024,
             _ => unreachable!()
-        }
+        };
 
         let timer_cycles = memory.read_u16(timer_address) as u32;
 

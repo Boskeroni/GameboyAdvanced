@@ -61,12 +61,11 @@ fn joypad_interrupt(mem: &mut Memory, joypad: u16) {
     let mask = control & 0x3FF;
     let keys = joypad & mask;
 
-    let call_interrupt;
     let interrupt_condition = (control >> 15) & 1 == 1;
-    match interrupt_condition {
-        true => call_interrupt = mask == keys,
-        false => call_interrupt = keys != 0,
-    }
+    let call_interrupt = match interrupt_condition {
+        true => mask == keys,
+        false => keys != 0,
+    };
 
     let mut i_flag = mem.read_u16(0x4000202);
     i_flag &= !(1 << 12);

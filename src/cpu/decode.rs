@@ -157,7 +157,6 @@ pub fn decode_arm(conditioned_opcode: u32) -> DecodedArm {
         }
     }        
 
-    // this is so incredibly dumb
     if (opcode >> 25) & 1 == 1 {
         return DecodedArm::DataProcessing;
     }

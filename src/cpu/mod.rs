@@ -412,3 +412,38 @@ pub fn handle_interrupts(memory: &mut Memory, cpu: &mut Cpu, ahead_by: u32) {
     *pc = 0x18;
     cpu.clear_pipeline = true;
 }
+
+/// now just some functions to make the thumb opcodes and arm opcodes easier
+pub fn add_with_carry(a: u32, b: u32, carry: bool)
+-> (u32, bool, bool, bool, bool) {
+    let (u_sum, sum_carry) = {
+        let first_result = a.overflowing_add(b);
+        let second_result = first_result.0.overflowing_add(carry as u32);
+        (second_result.0, first_result.1 | second_result.1)
+    };
+    let s_sum = {
+        let signed_a = match (a >> 31) & 1 == 1 {
+            true => (a as u64).wrapping_sub(1 << 32),
+            false => a as u64,
+        };
+
+        let signed_b = match (b >> 31) & 1 == 1 {
+            true => (b as u64).wrapping_sub(1 << 32),
+            false => b as u64
+        };
+
+        signed_a.wrapping_add(signed_b).wrapping_add(carry as u64)
+    };
+
+    let s_u_sum = match (u_sum >> 31) & 1 == 1 {
+        true => (u_sum as u64).wrapping_sub(1 << 32),
+        false => u_sum as u64,
+    };
+
+    let n_bit = (u_sum >> 31) & 1 == 1;
+    let z_bit = u_sum == 0;
+    let c_bit = sum_carry;
+    let v_bit = s_u_sum != s_sum;
+
+    return (u_sum, n_bit, z_bit, c_bit, v_bit)
+}

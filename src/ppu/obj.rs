@@ -1,5 +1,5 @@
 use crate::memory::Memory;
-use super::{convert_palette_winit, Ppu};
+use super::Ppu;
 
 const OAM: u32 = 0x7000000;
 const OBJ_PALL: u32 = 0x5000200;
