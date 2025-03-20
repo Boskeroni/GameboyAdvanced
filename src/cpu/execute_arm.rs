@@ -335,7 +335,6 @@ fn multiply_long(opcode: u32, cpu: &mut Cpu) {
     let s_bit = (opcode >> 20) & 1 == 1;
     if s_bit {
         cpu.cpsr.c = false;
-        cpu.cpsr.v = false;
         cpu.cpsr.z = result == 0;
         cpu.cpsr.n = (result >> 63) & 1 == 1;
     }
