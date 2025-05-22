@@ -462,7 +462,9 @@ fn push_pop(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
 
     let sp = cpu.get_register(13);
     match l_bit {
-        true => { // load
+        true => { 
+            // pop
+            // increments
             let mut base_address = sp;
             while rlist != 0 {
                 let next_r = rlist.trailing_zeros();
@@ -493,8 +495,8 @@ fn push_pop(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
                 let next_r = rlist.trailing_zeros();
                 let reg = cpu.get_register(next_r as u8);
                 memory.write_u32(base_address, reg);
-                base_address += 4;
                 rlist &= !(1<<next_r);
+                base_address += 4;
             }
             if r_bit {
                 let reg = cpu.get_register(14);
@@ -512,6 +514,8 @@ fn mem_multiple(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
 
     let rb_index = (opcode >> 8) as u8 & 0b111;
     let rb = cpu.get_register(rb_index);
+
+    let rb_in_rlist = (rlist >> rb_index) & 1 == 1;
 
     let l_bit = (opcode >> 11) & 1 == 1;
     let mut curr_address = rb;
@@ -564,6 +568,10 @@ fn mem_multiple(opcode: u16, cpu: &mut Cpu, memory: &mut Memory) {
             }
         }
     }
+    if rb_in_rlist && l_bit {
+        return;
+    }
+
     let rb_mut = cpu.get_register_mut(rb_index);
     *rb_mut = curr_address;
 }

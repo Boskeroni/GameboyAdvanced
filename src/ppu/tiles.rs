@@ -95,6 +95,7 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u8> {
         y_tile = ((y_offset + line) / 8) % (height / 8);
         y_tile_offset = (y_offset + line) % 8;
     }
+
     // I reserve 256 as I want the list to have two tiles width
     // extra on each side, so that it accounts for scrolling
     // so 240 + (8 * 2) = 256
@@ -107,7 +108,7 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u8> {
             (256, 256) => 0, // it can only be SC0
             (512, 256) => (x_tile >= 32) as u32, // if its wide
             (256, 512) => (y_tile >= 32) as u32, // if its tall
-            (512, 512) => (x_tile >= 32) as u32 + ((y_tile >= 32) as u32) * 2, //  if its wide or tall
+            (512, 512) => (x_tile >= 32) as u32 + ((y_tile >= 32) as u32 * 2), //  if its wide or tall
             _ => unreachable!(),
         };
 

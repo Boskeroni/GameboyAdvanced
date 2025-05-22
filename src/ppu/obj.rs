@@ -95,7 +95,7 @@ fn load_obj(
         true => {
             let double_size = (obj0 >> 9) & 1 == 1;
             let rotation_param = (obj1 >> 9) & 0x1F;
-            println!("AFFINE");
+            todo!("AFFINE sprites aint supported");
         }
         false => {
             // just not being drawn
