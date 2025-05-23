@@ -1,10 +1,9 @@
-use core::{gba_frame, ppu::Ppu};
+use core::{gba_frame, joypad::{joypad_press, joypad_release}, ppu::Ppu};
 
 // just contains all of the debug code
 use eframe::egui;
-use egui::{Color32, TextureHandle, TextureOptions};
-use pixels::wgpu::core::resource::Texture;
-use crate::{GbaContext, SCREEN_HEIGHT, SCREEN_WIDTH};
+use egui::{Color32, Event, TextureOptions};
+use crate::{convert_to_joypad, GbaContext, SCREEN_HEIGHT, SCREEN_WIDTH};
 
 pub fn setup_debug(context: GbaContext) {
     let options = eframe::NativeOptions::default();
@@ -21,7 +20,6 @@ struct GbaAdvanceDebug {
     show_vram_panel: bool,
     show_cpu_panel: bool,
     show_instruction_panel: bool,
-    number_of_updates: u32,
     gba_context: GbaContext,
 }
 impl GbaAdvanceDebug {
@@ -33,7 +31,6 @@ impl GbaAdvanceDebug {
             show_vram_panel: false,
             show_cpu_panel: false,
             show_instruction_panel: false,
-            number_of_updates: 0,
             gba_context: context,
         }
     }
@@ -46,9 +43,6 @@ impl eframe::App for GbaAdvanceDebug {
 
         // options panel
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.label(self.number_of_updates.to_string());
-            self.number_of_updates += 1;
-
             ui.label("Debug panel");
 
             ui.checkbox(
@@ -79,20 +73,21 @@ impl eframe::App for GbaAdvanceDebug {
     }
 }
 
-fn memory_panel(ctx: &egui::Context) {
+fn memory_panel(_ctx: &egui::Context) {
     todo!();
 }
-fn cpu_panel(ctx: &egui::Context) {
+fn cpu_panel(_ctx: &egui::Context) {
     todo!();
 }
-fn vram_panel(ctx: &egui::Context) {
+fn vram_panel(_ctx: &egui::Context) {
     todo!();
 }
-fn instruction_panel(ctx: &egui::Context) {
+fn instruction_panel(_ctx: &egui::Context) {
     todo!();
 }
 
 fn game_panel(ctx: &egui::Context, gba_context: &mut GbaContext) {
+    // run one frame worth of the gba emulator
     gba_frame(
         &mut gba_context.cpu,
         &mut gba_context.memory, 
@@ -100,8 +95,25 @@ fn game_panel(ctx: &egui::Context, gba_context: &mut GbaContext) {
         &mut gba_context.fde, 
         &mut gba_context.cycles, 
     );
+    ctx.input(|i| {
+        if !i.focused {return; }
 
-    let converted_pixels = texture_pixels(&gba_context.ppu);
+        for event in &i.events {
+            if let Event::Key {key, pressed, ..} = event {
+                let joypad_button = convert_to_joypad(key);
+                match pressed {
+                    true => joypad_press(joypad_button, &mut gba_context.memory),
+                    false => joypad_release(joypad_button, &mut gba_context.memory),
+                }
+            }
+        }
+    });
+
+    draw(&gba_context.ppu, ctx);
+
+}
+fn draw(ppu: &Ppu, ctx: &egui::Context) {
+    let converted_pixels = texture_pixels(ppu);
     let texture = ctx.load_texture(
         "game", 
         converted_pixels, 

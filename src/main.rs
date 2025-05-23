@@ -4,13 +4,11 @@ use core::memory::Memory;
 use core::ppu::Ppu;
 use core::{memory, Fde};
 use core::cpu::Cpu;
-use core::joypad::{self, Button};
-use winit::keyboard::KeyCode;
-
+use core::joypad;
+use egui::Key;
 
 const SCREEN_HEIGHT: usize = 160;
 const SCREEN_WIDTH: usize = 240;
-const FRAME_TIME: u128 = 1_000_000_000 / 60;
 const FROM_BIOS: bool = false;
 struct GbaContext {
     cpu: Cpu,
@@ -39,21 +37,21 @@ impl GbaContext {
     }
 }
 
-fn convert_to_joypad(code: KeyCode) -> joypad::Button {
-    use KeyCode::*;
-    use joypad::Button::*;
+fn convert_to_joypad(code: &Key) -> joypad::Button {
+    use joypad::Button;
+    use egui::Key;
     match code {
-        KeyZ => Button::Select,
-        KeyX => Start,
-        ArrowLeft => Left,
-        ArrowRight => Right,
-        ArrowDown => Down,
-        ArrowUp => Up,
-        KeyK => A,
-        KeyL => B,
-        KeyQ => L,
-        KeyP => R,
-        _ => Other,
+        Key::Z => Button::Select,
+        Key::X => Button::Start,
+        Key::ArrowLeft => Button::Left,
+        Key::ArrowRight => Button::Right,
+        Key::ArrowDown => Button::Down,
+        Key::ArrowUp => Button::Up,
+        Key::K => Button::A,
+        Key::L => Button::B,
+        Key::Q => Button::L,
+        Key::P => Button::R,
+        _ => Button::Other,
     }
 }
 
