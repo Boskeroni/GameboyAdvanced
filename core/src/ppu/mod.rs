@@ -1,4 +1,7 @@
-use crate::{memory::Memory, SCREEN_HEIGHT, SCREEN_WIDTH};
+use crate::memory::Memory;
+
+pub const LCD_HEIGHT: usize = 160;
+pub const LCD_WIDTH: usize = 240;
 
 mod bitmaps;
 mod tiles;
@@ -58,7 +61,7 @@ impl Ppu {
         self.stored_screen.clear();
     }
 }
-const DOTS_PER_FRAME: usize = (SCREEN_WIDTH + 68) * (SCREEN_HEIGHT + 68);
+const DOTS_PER_FRAME: usize = (LCD_WIDTH + 68) * (LCD_HEIGHT + 68);
 pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
     let dispcnt = memory.read_u16(PpuRegisters::DispCnt as u32);
     let forced_blank = (dispcnt >> 7) & 1 == 1;
@@ -70,11 +73,11 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
     let dispstat = memory.read_u16(PpuRegisters::DispStat as u32);
     let mut vcount = memory.read_u16(PpuRegisters::VCount as u32);
 
-    let new_line = ppu.elapsed_time / (SCREEN_WIDTH + 68) != vcount as usize;
+    let new_line = ppu.elapsed_time / (LCD_WIDTH + 68) != vcount as usize;
     if new_line {
         vcount += 1;
 
-        if vcount < SCREEN_HEIGHT as u16 {
+        if vcount < LCD_HEIGHT as u16 {
             // clear it for the new line
             ppu.worked_on_line = [0; 240];
             let bg_mode = dispcnt & 0b111;
@@ -98,7 +101,7 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
             ppu.stored_screen.extend(new_line);
         }
 
-        if vcount as usize >= (SCREEN_HEIGHT + 68) {
+        if vcount as usize >= (LCD_HEIGHT + 68) {
             vcount = 0;
             ppu.new_screen = true;
         }
@@ -119,14 +122,14 @@ fn update_registers(ppu: &mut Ppu, memory: &mut Memory, mut dispstat: u16, vcoun
     }
 
     // V-blank flag
-    let in_vblank = ppu.elapsed_time / (SCREEN_WIDTH + 68) >= SCREEN_HEIGHT;
+    let in_vblank = ppu.elapsed_time / (LCD_WIDTH + 68) >= LCD_HEIGHT;
     match in_vblank {
         true => dispstat |= 1<<0,
         false => dispstat &= !(1<<0),
     }
 
     // H-blank flag
-    let in_hblank = ppu.elapsed_time % (SCREEN_WIDTH + 68) >= SCREEN_WIDTH;
+    let in_hblank = ppu.elapsed_time % (LCD_WIDTH + 68) >= LCD_WIDTH;
     match in_hblank {
         true => dispstat |= 1<<1,
         false => dispstat &= !(1<<1),

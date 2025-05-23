@@ -1,4 +1,5 @@
-pub const BIOS: &[u8; 0x4000] = include_bytes!("../bios/bios.bin");
+// this has been acquired legally
+pub const BIOS: &[u8; 0x4000] = include_bytes!("../bios.bin");
 
 /// output =>
 /// 0bBBBBBBBBAAAAAAAA
@@ -385,13 +386,13 @@ pub fn update_timer(memory: &mut Memory, old_cycles: &mut u32, new_cycles: u32) 
     *old_cycles = total_cycles % 1024;
 }
 
-pub fn create_memory(file_name: &str) -> Memory {
+pub fn create_memory(file_name: &str) -> Box<Memory> {
     let file = match std::fs::read(file_name) {
         Err(e) => panic!("invalid file provided => {e:?}"),
         Ok(f) => f,
     };
 
-    Memory {
+    Box::new(Memory {
         ewram: [0; EWRAM_LENGTH],
         iwram: [0; IWRAM_LENGTH],
         vram: [0; VRAM_LENGTH],
@@ -403,5 +404,5 @@ pub fn create_memory(file_name: &str) -> Memory {
 
         timer_resets: [0; 4],
         dma_completions: [0; 4],
-    }
+    })
 }
