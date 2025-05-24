@@ -9,7 +9,5 @@ edition = "2021"
 [dependencies]
 core = { path = "core/"}
 
-pixels = "0.15.0"
-winit = "0.29.0"
 egui = "0.31.1"
 eframe = "0.31.1"
