@@ -42,6 +42,8 @@ impl GbaAdvanceDebug {
             paused: true,
             step: false,
 
+            // checks the fps
+            // its looking bleak now but it may be due to poor debug setup
             last_render: Instant::now(),
         }
     }

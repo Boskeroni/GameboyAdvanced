@@ -1,6 +1,7 @@
 pub mod execute_arm;
 pub mod execute_thumb;
 pub mod decode;
+pub mod assemblify;
 
 /// several different instructions make use of this behaviour
 /// I'm not sure if they all function the same but I have no reason to believe otherwise
