@@ -8,11 +8,7 @@ pub mod joypad;
 mod bus; 
 
 use cpu::{
-    handle_interrupts,
-    Cpu,
-    decode::{DecodedInstruction, decode_arm, decode_thumb},
-    execute_arm::execute_arm,
-    execute_thumb::execute_thumb,
+    assemblify, decode::{decode_arm, decode_thumb, DecodedInstruction}, execute_arm::execute_arm, execute_thumb::execute_thumb, handle_interrupts, Cpu
 };
 use joypad::setup_joypad;
 use memory::{dma_tick, update_timer, Memory};
@@ -72,6 +68,7 @@ pub fn gba_frame(
         // Execute
         if let Some(instruction) = fde.decoded {
             use DecodedInstruction::*;
+
             match instruction {
                 Thumb(instr) => execute_thumb(fde.decoded_opcode as u16, instr, cpu, mem),
                 Arm(instr) => execute_arm(fde.decoded_opcode, instr, cpu, mem),

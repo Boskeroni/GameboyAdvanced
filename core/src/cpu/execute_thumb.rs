@@ -12,6 +12,9 @@ pub fn execute_thumb(
 ) {
     use DecodedThumb::*;
 
+    let assembly = assemblify::to_thumb_assembly(opcode);
+    eprintln!("{assembly}");
+
     match instruction {
         MoveShifted => move_shifted(opcode, cpu),
         AddSub => add_sub(opcode, cpu),

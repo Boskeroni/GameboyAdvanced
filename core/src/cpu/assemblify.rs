@@ -5,22 +5,22 @@ use super::decode::decode_thumb;
 
 fn convert_cond_string(cond: u8) -> String {
     match cond {
-        0b0000 => "EQ",
-        0b0001 => "NE",
-        0b0010 => "CS",
-        0b0011 => "CC",
-        0b0100 => "MI",
-        0b0101 => "PL",
-        0b0110 => "VS",
-        0b0111 => "VC",
-        0b1000 => "HI",
-        0b1001 => "LS",
-        0b1010 => "GE",
-        0b1011 => "LT",
-        0b1100 => "GT",
-        0b1101 => "LE",
+        0b0000 => "eq",
+        0b0001 => "ne",
+        0b0010 => "cs",
+        0b0011 => "cc",
+        0b0100 => "mi",
+        0b0101 => "pl",
+        0b0110 => "vs",
+        0b0111 => "vc",
+        0b1000 => "hi",
+        0b1001 => "ls",
+        0b1010 => "ge",
+        0b1011 => "lt",
+        0b1100 => "gt",
+        0b1101 => "le",
         0b1110 => "", // the "AL" suffix can be omitted
-        0b1111 => "NV",
+        0b1111 => "nv",
         _ => unreachable!(),
     }.to_string()
 }
@@ -56,9 +56,16 @@ pub fn to_arm_assembly(opcode: u32) -> String {
 fn barrel_shifter_assembly(opcode: u32, is_immediate: bool) -> String {
     if is_immediate {
         let immediate_value = opcode & 0xFF;
-        let shift_amount = ((opcode >> 8) & 0xF) << 1;
+        if immediate_value == 0 {
+            return String::new();
+        }
 
-        return format!("{immediate_value} ROR {shift_amount}");
+        let shift_amount = ((opcode >> 8) & 0xF) << 1;
+        if shift_amount == 0 {
+            return format!("0x{immediate_value:X}");
+        }
+
+        return format!("{immediate_value:X} ror 0x{shift_amount:X}");
     }
 
     let shift_type = match (opcode >> 5) & 0b11 {
@@ -81,7 +88,7 @@ fn barrel_shifter_assembly(opcode: u32, is_immediate: bool) -> String {
         }
     };
 
-    return format!("r{rm} {shift_type} {shift_amount}");
+    return format!("r{rm} {shift_type} 0x{shift_amount}");
 }
 fn multiply_assembly(opcode: u32) -> (String, String) {
     let a_bit = (opcode >> 21) & 1 == 1;
@@ -183,7 +190,11 @@ fn halfword_transfer_assembly(opcode: u32) -> (String, String) {
         true => {
             //imm
             let offset = ((opcode >> 4) & 0xF0) | (opcode & 0xF);
-            format!("{offset:X}")
+            if offset == 0 {
+                "".to_string()
+            } else {
+                format!("{offset:X}")
+            }
         }
         false => {
             //reg
@@ -191,7 +202,12 @@ fn halfword_transfer_assembly(opcode: u32) -> (String, String) {
         }
     };
 
-    rest_of_line.push_str(&format!(" r{rd}, [r{rn}, {offset}]"));
+    rest_of_line.push_str(&format!(" r{rd}, [r{rn}"));
+    if !offset.is_empty() {
+        rest_of_line.push_str(&format!(", 0x{offset}"));
+    }
+    rest_of_line.push(']');
+
     return (start, rest_of_line);
 }
 fn single_data_transfer_assembly(opcode: u32) -> (String, String) {
@@ -230,7 +246,7 @@ fn single_data_transfer_assembly(opcode: u32) -> (String, String) {
 fn block_data_transfer_assembly(opcode: u32) -> (String, String) {
     let l_bit = (opcode >> 20) & 1 == 1;
     let start = match l_bit {
-        true => "ldr",
+        true => "ldm",
         false => "stm",
     }.to_string();
 
@@ -263,8 +279,11 @@ fn block_data_transfer_assembly(opcode: u32) -> (String, String) {
 
         rlist.push_str(&format!("r{i},"));
     }
+    if !rlist.is_empty() {
+        rlist.pop();
+    }
 
-    rest_of_line.push_str(&format!("r{rn}{w}, {{{rlist}}}{s}"));
+    rest_of_line.push_str(&format!(" r{rn}{w}, {{{rlist}}}{s}"));
     return (start, rest_of_line);
 }
 fn branch_assembly(opcode: u32) -> (String, String) {
@@ -275,11 +294,16 @@ fn branch_assembly(opcode: u32) -> (String, String) {
     }
 
     let mut offset = (opcode & 0xFFFFFF) << 2;
-    if opcode >> 23 & 1 == 1 {
-        offset |= 0xFC000000;
-    }
+    let s = match opcode >> 23 & 1 == 1 {
+        true => {
+            offset |= 0xFC000000;
+            offset = (!offset).wrapping_add(1);
+            "-"
+        }  
+        false => ""
+    }.to_string();
 
-    let rest_of_line = format!(" {offset:X}");
+    let rest_of_line = format!(" {s}0x{offset:X}");
     return (start, rest_of_line);
 }
 fn swi_assembly(opcode: u32) -> (String, String) {
@@ -309,19 +333,25 @@ fn data_processing_assembly(opcode: u32) -> (String, String) {
         0xE => "bic",
         0xF => "mvn",
         _ => unreachable!(),
-    };
+    }.to_string();
     let mut rest_of_line = String::new();
 
     let rn = (opcode >> 16) & 0xF;
     let rd = (opcode >> 12) & 0xF;
     let op2_assembly = barrel_shifter_assembly(opcode, (opcode >> 25) & 1 == 1);
 
+    // its a testing opcode
     if inner_opcode >= 0x8 && inner_opcode <= 0xB {
-        rest_of_line.push_str(&format!(" r{rn}, {op2_assembly}"));
+        return (name, format!(" r{rn}, {op2_assembly}"));
+    } 
+
+    if opcode >> 20 & 1 == 1 {
+        rest_of_line.push('s')
+    }
+
+    if opcode == 0xD || opcode == 0xF {
+        rest_of_line.push_str(&format!(" r{rd}, {op2_assembly}"))
     } else {
-        if opcode >> 20 & 1 == 1 {
-            rest_of_line.push('s')
-        }
         rest_of_line.push_str(&format!(" r{rd}, r{rn}, {op2_assembly}"));
     }
 
@@ -366,7 +396,7 @@ fn move_shifted_assembly(opcode: u16) -> String {
     let rs = (opcode >> 3) & 0x7;
     let offset = (opcode >> 6) & 0x1F;
 
-    return format!("{instruction} r{rd}, r{rs}, #{offset:X}");
+    return format!("{instruction} r{rd}, r{rs}, 0x{offset:X}");
 }
 fn add_sub_assembly(opcode: u16) -> String {
     let i_bit = (opcode >> 10) & 1 == 1;
@@ -379,7 +409,7 @@ fn add_sub_assembly(opcode: u16) -> String {
     }.to_string(); 
 
    let value = match i_bit {
-        true => format!("#{unformatted_value:X}"),
+        true => format!("0x{unformatted_value:X}"),
         false => format!("r{unformatted_value}"),
     };
     let rd = opcode & 0x7;
@@ -401,7 +431,7 @@ fn alu_immediate_assembly(opcode: u16) -> String {
     let rd = (opcode >> 8) & 0x7;
     let offset = opcode & 0xFF;
 
-    return format!("{instruction} r{rd}, #{offset}");
+    return format!("{instruction} r{rd}, 0x{offset:X}");
 }
 fn alu_operation_assembly(opcode: u16) -> String {
     let op = (opcode >> 6) & 0xF;
@@ -452,7 +482,7 @@ fn pc_relative_assembly(opcode: u16) -> String {
     let rd = (opcode >> 8) & 0x7;
     let offset = (opcode & 0xFF) << 2;
 
-    return format!("ldr r{rd}, [pc, #{offset}]");
+    return format!("ldr r{rd}, [pc, 0x{offset}]");
 }
 fn mem_reg_offset_assembly(opcode: u16) -> String {
     let b_bit = (opcode >> 10) & 1 == 1;
@@ -506,7 +536,7 @@ fn mem_imm_offset_assembly(opcode: u16) -> String {
         false => "str"
     }.to_string();
 
-    return format!("{instruction}{b} r{rd}, [r{rb}, #{offset}]");
+    return format!("{instruction}{b} r{rd}, [r{rb}, 0x{offset:X}]");
 }
 fn mem_halfword_assembly(opcode: u16) -> String {
     let l_bit = (opcode >> 11) & 1 == 1;
@@ -520,7 +550,10 @@ fn mem_halfword_assembly(opcode: u16) -> String {
         false => "ldrh"
     }.to_string();
 
-    return format!("{instruction} r{rd}, [r{rb}, #{offset}]");
+    if offset == 0 {
+        return format!("{instruction} r{rd}, [r{rb}]");
+    }
+    return format!("{instruction} r{rd}, [r{rb}, 0x{offset:X}]");
 }
 fn mem_sp_relative_assembly(opcode: u16) -> String {
     let l_bit = (opcode >> 11) & 1 == 1;
@@ -532,7 +565,10 @@ fn mem_sp_relative_assembly(opcode: u16) -> String {
         false => "str",
     }.to_string();
 
-    return format!("{instruction} r{rd}, [SP, #{word:X}]");
+    if word == 0 {
+        return format!("{instruction} r{rd}, [SP]");
+    }
+    return format!("{instruction} r{rd}, [SP, 0x{word:X}]");
 }
 fn load_address_assembly(opcode: u16) -> String {
     let sp_bit = (opcode >> 11) & 1 == 1;
@@ -544,7 +580,7 @@ fn load_address_assembly(opcode: u16) -> String {
     let rd = (opcode >> 8) & 0x7;
     let word = (opcode & 0xFF) << 2;
 
-    return format!("add rd{rd}, {reg}, #{word}");
+    return format!("add rd{rd}, {reg}, 0x{word:X}");
 }
 fn offset_sp_assembly(opcode: u16) -> String {
     let s_bit = (opcode >> 7) & 1 == 1;
@@ -554,7 +590,7 @@ fn offset_sp_assembly(opcode: u16) -> String {
     }.to_string();
 
     let s_word = opcode & 0x7F;
-    return format!("add sp, #{sign}{s_word:X}");
+    return format!("add sp, 0x{sign}{s_word:X}");
 }
 fn push_pop_assembly(opcode: u16) -> String {
     let l_bit = (opcode >> 11) & 1 == 1;
@@ -595,7 +631,11 @@ fn mem_multiple_assembly(opcode: u16) -> String {
         let exists = (opcode >> i) & 1 == 1;
         if !exists { continue; }
 
-        rlist.push_str(&format!("r{i}, "));
+        rlist.push_str(&format!("r{i},"));
+    }
+    // remove the final comma and space
+    if !rlist.is_empty() {
+        rlist.pop();
     }
 
     return format!("{instruction} r{rb}!, {{{rlist}}}");
@@ -604,7 +644,7 @@ fn cond_branch_assembly(opcode: u16) -> String {
     let cond = convert_cond_string((opcode >> 8) as u8 & 0xF);
     let offset = (opcode & 0xFF) << 1;
 
-    return format!("b{cond} {offset:X}");
+    return format!("b{cond} 0x{offset:X}");
 }
 fn thumb_swi_assembly(opcode: u16) -> String {
     let value = opcode & 0xFF;
