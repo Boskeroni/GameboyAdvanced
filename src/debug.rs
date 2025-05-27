@@ -1,4 +1,4 @@
-use core::{cpu::Cpu, gba_frame, joypad::{joypad_press, joypad_release}, ppu::Ppu};
+use core::{cpu::Cpu, gba_frame, joypad::{joypad_press, joypad_release}, ppu::Ppu, run_single_step};
 use std::time::Instant;
 
 // just contains all of the debug code
@@ -53,7 +53,7 @@ impl eframe::App for GbaAdvanceDebug {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // this always gets called so its chill
         if !self.paused || self.step {
-            game_panel(ctx, &mut self.gba_context);
+            game_panel(ctx, &mut self.gba_context, self.step);
             self.step = false;
         }
         draw(&self.gba_context.ppu, ctx);
@@ -102,7 +102,8 @@ fn memory_panel(ctx: &egui::Context) {
         egui::ViewportId::from_hash_of("memory panel"), 
         egui::ViewportBuilder::default()
             .with_title("memory panel")
-            .with_inner_size([400., 400.]),
+            .with_inner_size([400., 400.])
+            .with_position([600., 400.]),
         |ctx, class| {
             assert!(class == egui::ViewportClass::Immediate);
             egui::CentralPanel::default().show(ctx, |ui| {
@@ -116,7 +117,8 @@ fn cpu_panel(ctx: &egui::Context, cpu: &Cpu) {
         egui::ViewportId::from_hash_of("CPU panel"), 
         egui::ViewportBuilder::default()
             .with_title("Cpu panel")
-            .with_inner_size([200., 400.]),
+            .with_inner_size([200., 400.])
+            .with_position([600., 0.]),
         |ctx, class| {
             assert!(class == egui::ViewportClass::Immediate);
 
@@ -136,15 +138,26 @@ fn instruction_panel(_ctx: &egui::Context) {
 
 }
 
-fn game_panel(ctx: &egui::Context, gba_context: &mut GbaContext) {
+fn game_panel(ctx: &egui::Context, gba_context: &mut GbaContext, step: bool) {
     // run one frame worth of the gba emulator
-    gba_frame(
-        &mut gba_context.cpu,
-        &mut gba_context.memory, 
-        &mut gba_context.ppu, 
-        &mut gba_context.fde, 
-        &mut gba_context.cycles, 
-    );
+    if step {
+        run_single_step(
+            &mut gba_context.cpu, 
+            &mut gba_context.memory, 
+            &mut gba_context.ppu, 
+            &mut gba_context.fde, 
+            &mut gba_context.cycles,
+        );
+    } else {
+        gba_frame(
+            &mut gba_context.cpu,
+            &mut gba_context.memory, 
+            &mut gba_context.ppu, 
+            &mut gba_context.fde, 
+            &mut gba_context.cycles, 
+        );
+    }
+    
     ctx.input(|i| {
         if !i.focused {return; }
 
@@ -175,7 +188,8 @@ fn draw(ppu: &Ppu, ctx: &egui::Context) {
         egui::ViewportId::from_hash_of("game_viewport"), 
         egui::ViewportBuilder::default()
             .with_title("game viewport")
-            .with_inner_size([(SCREEN_WIDTH as f32) * SCREEN_RATIO, (SCREEN_HEIGHT as f32) * SCREEN_RATIO]),
+            .with_inner_size([(SCREEN_WIDTH as f32) * SCREEN_RATIO, (SCREEN_HEIGHT as f32) * SCREEN_RATIO])
+            .with_position([0., 0.]),
         |ctx, class| {
             assert!(class == egui::ViewportClass::Immediate);
             egui::CentralPanel::default().show(ctx, |ui| {

@@ -10,9 +10,6 @@ pub fn execute_arm(
     cpu: &mut Cpu,
     memory: &mut Memory,
 ) {
-    let assembly = assemblify::to_arm_assembly(opcode);
-    eprintln!("{assembly}");
-
     // first check if we even have to do it
     let condition = opcode >> 28;
     if !check_condition(condition, &cpu.cpsr) {
