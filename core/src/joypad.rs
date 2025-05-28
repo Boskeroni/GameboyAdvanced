@@ -19,7 +19,7 @@ enum JPRegisters {
     KeyCnt = 0x4000132,
 }
 
-pub fn setup_joypad(mem: &mut Memory) {
+pub fn init_joypad(mem: &mut Memory) {
     mem.write_io(JPRegisters::KeyInput as u32, 0xFFFF);
 }
 

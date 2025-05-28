@@ -349,7 +349,7 @@ fn data_processing_assembly(opcode: u32) -> (String, String) {
         rest_of_line.push('s')
     }
 
-    if opcode == 0xD || opcode == 0xF {
+    if inner_opcode == 0xD || inner_opcode == 0xF {
         rest_of_line.push_str(&format!(" r{rd}, {op2_assembly}"))
     } else {
         rest_of_line.push_str(&format!(" r{rd}, r{rn}, {op2_assembly}"));

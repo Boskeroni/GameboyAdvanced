@@ -1,7 +1,7 @@
 use crate::memory::Memory;
 
-pub const LCD_HEIGHT: usize = 160;
-pub const LCD_WIDTH: usize = 240;
+const LCD_HEIGHT: usize = 160;
+const LCD_WIDTH: usize = 240;
 
 mod bitmaps;
 mod tiles;

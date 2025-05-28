@@ -1,5 +1,5 @@
 // this has been acquired legally
-pub const BIOS: &[u8; 0x4000] = include_bytes!("../bios.bin");
+const BIOS: &[u8; 0x4000] = include_bytes!("../bios.bin");
 
 /// output =>
 /// 0bBBBBBBBBAAAAAAAA

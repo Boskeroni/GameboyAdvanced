@@ -2,30 +2,22 @@ pub mod cpu;
 pub mod memory;
 pub mod ppu;
 pub mod joypad;
-
-// this is so work in progress that I do not wish to track it just yet
-// it won't interact with the program at all yet.
 mod bus; 
 
 use cpu::{
-    decode::{decode_arm, decode_thumb, DecodedInstruction}, 
+    decode::*, 
     execute_arm::execute_arm, 
     execute_thumb::execute_thumb, 
     handle_interrupts, 
     Cpu,
 };
-use joypad::setup_joypad;
-use memory::{dma_tick, update_timer, Memory};
-use ppu::{tick_ppu, Ppu};
-
-pub fn prelimenary(mem: &mut Memory) {
-    setup_joypad(mem);
-}
+use memory::*;
+use ppu::*;
 
 pub struct Fde {
-    fetched: Option<u32>,
-    decoded: Option<DecodedInstruction>,
-    decoded_opcode: u32,
+    pub fetched: Option<u32>,
+    pub decoded: Option<DecodedInstruction>,
+    pub decoded_opcode: u32,
 }
 impl Fde {
     pub fn new() -> Self {

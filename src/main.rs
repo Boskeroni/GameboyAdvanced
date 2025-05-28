@@ -1,64 +1,42 @@
 mod debug;
+mod emulator;
 
-use core::memory::Memory;
-use core::ppu::Ppu;
-use core::{memory, Fde};
 use core::cpu::Cpu;
-use core::joypad;
-use egui::Key;
+use std::sync::mpsc;
+use std::thread;
+use debug::{setup_debug, DebugCommand, DebugDataBackend, DebugDataFrontend};
+use emulator::Emulator;
 
-const SCREEN_HEIGHT: usize = 160;
-const SCREEN_WIDTH: usize = 240;
-const FROM_BIOS: bool = false;
-struct GbaContext {
-    cpu: Cpu,
-    ppu: Ppu,
-    memory: Box<Memory>,
-    fde: Fde,
-    cycles: u32,
-}
-impl GbaContext {
-    pub fn new(filename: &str) -> Self {
-        let cpu = match FROM_BIOS {
-            true => Cpu::from_bios(),
-            false => Cpu::new(),
-        };
-        let ppu = Ppu::new();
-        let memory = memory::create_memory(filename);
-        let fde = Fde::new();
-
-        Self {
-            cpu,
-            ppu,
-            memory,
-            fde,
-            cycles: 0,
-        }
-    }
-}
-
-fn convert_to_joypad(code: &Key) -> joypad::Button {
-    use joypad::Button;
-    use egui::Key;
-    match code {
-        Key::Z => Button::Select,
-        Key::X => Button::Start,
-        Key::ArrowLeft => Button::Left,
-        Key::ArrowRight => Button::Right,
-        Key::ArrowDown => Button::Down,
-        Key::ArrowUp => Button::Up,
-        Key::K => Button::A,
-        Key::L => Button::B,
-        Key::Q => Button::L,
-        Key::P => Button::R,
-        _ => Button::Other,
-    }
-}
 
 fn main() {
-    // right now all it will show is the debug view.
-    // eventually this should be togglable
+    let (cpu_send, cpu_recv) = mpsc::channel::<Cpu>();
+    let (ppu_send, ppu_recv) = mpsc::channel::<Vec<u32>>();
+    let (mem_send, mem_recv) = mpsc::channel::<String>();
+    let (ins_send, ins_recv) = mpsc::channel::<String>();
+    let (cnt_send, cnt_recv) = mpsc::channel::<DebugCommand>();
+    let (inp_send, inp_recv) = mpsc::channel::<egui::Key>();
 
-    let context = GbaContext::new("roms/FuzzArmAny.gba");
-    debug::setup_debug(context);
+    let dbg_back = DebugDataBackend {
+        cpu_dbg: cpu_send,
+        ppu_dbg: ppu_send,
+        mem_dbg: mem_send,
+        ins_dbg: ins_send,
+        cnt_dbg: cnt_recv,
+    };
+    let emulator = Emulator::new("roms/FuzzArmAny.gba");
+
+    // a second thread keeps all of the emulator's stuff going
+    thread::spawn(move || {
+        emulator::run_emulator(emulator, dbg_back, inp_recv);
+    });
+
+    let dbg_front = DebugDataFrontend {
+        cpu_dbg: cpu_recv,
+        ppu_dbg: ppu_recv,
+        mem_dbg: mem_recv,
+        ins_dbg: ins_recv,
+        cnt_dbg: cnt_send,
+    };
+    setup_debug(dbg_front, inp_send);
 }
+

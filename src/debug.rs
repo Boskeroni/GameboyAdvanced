@@ -1,14 +1,32 @@
-use core::{cpu::Cpu, gba_frame, joypad::{joypad_press, joypad_release}, ppu::Ppu, run_single_step};
-use std::time::Instant;
-
-// just contains all of the debug code
+use core::cpu::Cpu;
+use std::sync::mpsc::{Receiver, Sender};
 use eframe::egui;
-use egui::{Color32, Event, TextureOptions};
-use crate::{convert_to_joypad, GbaContext, SCREEN_HEIGHT, SCREEN_WIDTH};
+use egui::{Color32, TextureOptions};
 
-pub fn setup_debug(context: GbaContext) {
+pub enum DebugCommand {
+    Run,
+    Stop,
+    Step,
+}
+
+pub struct DebugDataBackend {
+    pub cpu_dbg: Sender<Cpu>,
+    pub ppu_dbg: Sender<Vec<u32>>,
+    pub mem_dbg: Sender<String>,
+    pub ins_dbg: Sender<String>,
+    pub cnt_dbg: Receiver<DebugCommand>,
+}
+pub struct DebugDataFrontend {
+    pub cpu_dbg: Receiver<Cpu>,
+    pub ppu_dbg: Receiver<Vec<u32>>,
+    pub mem_dbg: Receiver<String>,
+    pub ins_dbg: Receiver<String>,
+    pub cnt_dbg: Sender<DebugCommand>,
+}
+
+pub fn setup_debug(debug_interface: DebugDataFrontend, sender: Sender<egui::Key>) {
     let options = eframe::NativeOptions::default();
-    let debug = GbaAdvanceDebug::new(context);
+    let debug = GbaAdvanceDebug::new(debug_interface, sender);
     eframe::run_native(
         "Debug window",
         options,
@@ -17,48 +35,57 @@ pub fn setup_debug(context: GbaContext) {
 }
 
 struct GbaAdvanceDebug {
+    debug: DebugDataFrontend,
+    screen: Vec<u32>,
+    input_send: Sender<egui::Key>,
+
     show_memory_panel: bool,
     show_vram_panel: bool,
     show_cpu_panel: bool,
     show_instruction_panel: bool,
-    gba_context: GbaContext,
-
     paused: bool,
-    step: bool,
-    last_render: Instant,
+    step: bool
 }
 impl GbaAdvanceDebug {
-    pub fn new(mut context: GbaContext) -> Self {
-        core::prelimenary(&mut context.memory);
-
+    pub fn new(debug: DebugDataFrontend, sender: Sender<egui::Key>) -> Self {
         Self {
+            debug,
+            screen: Vec::new(),
+            input_send: sender,
+
             show_memory_panel: true,
             show_vram_panel: true,
             show_cpu_panel: true,
             show_instruction_panel: true,
-            gba_context: context,
-
-            // this controls the flow of the gba
             paused: true,
             step: false,
-
-            // checks the fps
-            // its looking bleak now but it may be due to poor debug setup
-            last_render: Instant::now(),
         }
     }
-}
 
+    fn update_debug(&mut self) {
+        // cpu debug
+        if let Ok(_cpu_state) = self.debug.cpu_dbg.try_recv() {
+
+        }
+        // ppu although this happens always
+        if let Ok(new_screen) = self.debug.ppu_dbg.try_recv() {
+            self.screen = new_screen;
+        }
+        // mem debug
+        if let Ok(_mem_state) = self.debug.mem_dbg.try_recv() {
+            
+        }
+        // ins debug
+        if let Ok(_instruction) = self.debug.ins_dbg.try_recv() {
+            
+        }
+        // send command
+
+    }
+}
 impl eframe::App for GbaAdvanceDebug {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // this always gets called so its chill
-        if !self.paused || self.step {
-            game_panel(ctx, &mut self.gba_context, self.step);
-            self.step = false;
-        }
-        draw(&self.gba_context.ppu, ctx);
-
-        // options panel
+        // options menu
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.label("Debug panel");
 
@@ -75,107 +102,30 @@ impl eframe::App for GbaAdvanceDebug {
             };
             if ui.add(egui::Button::new(pause_button_text)).clicked() {
                 self.paused = !self.paused;
+                match self.paused {
+                    true => self.debug.cnt_dbg.send(DebugCommand::Stop).unwrap(),
+                    false => self.debug.cnt_dbg.send(DebugCommand::Run).unwrap(),
+                }
             }
 
             if ui.add(egui::Button::new("⏭")).clicked() {
                 self.step = true;
+                self.debug.cnt_dbg.send(DebugCommand::Step).unwrap();
             }
-
-
-            let diff = Instant::now().duration_since(self.last_render).as_nanos();
-            let fps = 1_000_000_000 / diff;
-            ui.label(format!("{fps} fps achieved"));
-            self.last_render = Instant::now();
         });
+        self.update_debug();
 
-        if self.show_memory_panel      { memory_panel(ctx)     }
-        if self.show_cpu_panel         { cpu_panel(ctx, &self.gba_context.cpu)}
-        if self.show_vram_panel        { vram_panel(ctx)       }
-        if self.show_instruction_panel { instruction_panel(ctx)}
-
+        draw(&self.screen, ctx);
         egui::Context::request_repaint(ctx);
     }
 }
 
-fn memory_panel(ctx: &egui::Context) {
-    ctx.show_viewport_immediate(
-        egui::ViewportId::from_hash_of("memory panel"), 
-        egui::ViewportBuilder::default()
-            .with_title("memory panel")
-            .with_inner_size([400., 400.])
-            .with_position([600., 400.]),
-        |ctx, class| {
-            assert!(class == egui::ViewportClass::Immediate);
-            egui::CentralPanel::default().show(ctx, |ui| {
 
-            });
-        }
-    );
-}
-fn cpu_panel(ctx: &egui::Context, cpu: &Cpu) {
-    ctx.show_viewport_immediate(
-        egui::ViewportId::from_hash_of("CPU panel"), 
-        egui::ViewportBuilder::default()
-            .with_title("Cpu panel")
-            .with_inner_size([200., 400.])
-            .with_position([600., 0.]),
-        |ctx, class| {
-            assert!(class == egui::ViewportClass::Immediate);
-
-            egui::CentralPanel::default().show(ctx, |ui| {
-                for i in 0..15 {
-                    let value = cpu.get_register(i);
-                    ui.code(format!("Reg {i}: {value:X}"));
-                }
-            });
-        } 
-    );
-}
-fn vram_panel(_ctx: &egui::Context) {
-
-}
-fn instruction_panel(_ctx: &egui::Context) {
-
-}
-
-fn game_panel(ctx: &egui::Context, gba_context: &mut GbaContext, step: bool) {
-    // run one frame worth of the gba emulator
-    if step {
-        run_single_step(
-            &mut gba_context.cpu, 
-            &mut gba_context.memory, 
-            &mut gba_context.ppu, 
-            &mut gba_context.fde, 
-            &mut gba_context.cycles,
-        );
-    } else {
-        gba_frame(
-            &mut gba_context.cpu,
-            &mut gba_context.memory, 
-            &mut gba_context.ppu, 
-            &mut gba_context.fde, 
-            &mut gba_context.cycles, 
-        );
-    }
-    
-    ctx.input(|i| {
-        if !i.focused {return; }
-
-        for event in &i.events {
-            if let Event::Key {key, pressed, ..} = event {
-                let joypad_button = convert_to_joypad(key);
-                match pressed {
-                    true => joypad_press(joypad_button, &mut gba_context.memory),
-                    false => joypad_release(joypad_button, &mut gba_context.memory),
-                }
-            }
-        }
-    });
-}
-
+const SCREEN_WIDTH: usize = 240;
+const SCREEN_HEIGHT: usize = 160;
 const SCREEN_RATIO: f32 = 2.0;
-fn draw(ppu: &Ppu, ctx: &egui::Context) {
-    let converted_pixels = texture_pixels(ppu);
+fn draw(screen: &Vec<u32>, ctx: &egui::Context) {
+    let converted_pixels = texture_pixels(screen);
     let texture = ctx.load_texture(
         "game", 
         converted_pixels, 
@@ -199,9 +149,9 @@ fn draw(ppu: &Ppu, ctx: &egui::Context) {
     );
 }
 
-fn texture_pixels(ppu: &Ppu) -> egui::ColorImage {
+fn texture_pixels(screen: &Vec<u32>) -> egui::ColorImage {
     let mut pixels: Vec<egui::Color32> = vec![Color32::BLACK; SCREEN_WIDTH * SCREEN_HEIGHT];
-    for (i, c) in ppu.stored_screen.iter().enumerate() {
+    for (i, c) in screen.iter().enumerate() {
         let r = (*c >> 16) & 0xFF;
         let g = (*c >> 8) & 0xFF;
         let b = *c & 0xFF;
