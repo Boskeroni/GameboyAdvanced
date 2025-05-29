@@ -86,8 +86,8 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u8> {
     // x_tile and y_tile are 0->32, offsets are 0->8
     let (mut x_tile, x_tile_offset, y_tile, y_tile_offset);
     {
-        let x_offset = memory.read_u16(PpuRegisters::BgHOffset as u32 + (bg * 4)) as u32 & 0x1FF;
-        let y_offset = memory.read_u16(PpuRegisters::BgVOffset as u32 + (bg * 4)) as u32 & 0x1FF;
+        let x_offset = memory.read_u16(PpuRegisters::BgHOffset as u32 + (bg * 4)) as u32 & 0x1FF % width;
+        let y_offset = memory.read_u16(PpuRegisters::BgVOffset as u32 + (bg * 4)) as u32 & 0x1FF % height;
 
         x_tile = x_offset / 8;
         x_tile_offset = x_offset % 8;

@@ -1,5 +1,6 @@
 use crate::memory::Memory;
 
+#[derive(Debug, Clone, Copy)]
 pub enum Button {
     A,
     B,

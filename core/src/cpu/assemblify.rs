@@ -1,6 +1,5 @@
 use core::panic;
 use crate::cpu::decode::{decode_arm, DecodedArm, DecodedThumb};
-
 use super::decode::decode_thumb;
 
 fn convert_cond_string(cond: u8) -> String {

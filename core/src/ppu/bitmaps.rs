@@ -9,15 +9,15 @@ pub fn bg_mode_3(ppu: &mut Ppu, memory: &mut Memory, line: u16) {
     }
     ppu.pixel_priorities = vec![0; 240];
 }
+
 pub fn bg_mode_4(ppu: &mut Ppu, memory: &mut Memory, line: u16) {
     let dispcnt = memory.read_u16(PpuRegisters::DispCnt as u32);
     let displayed_frame = (dispcnt >> 4) & 1 == 1;
 
-    let mut address;
-    match displayed_frame {
-        true => address = 0x600A000,
-        false => address = 0x6000000,
-    }
+    let mut address = match displayed_frame {
+        true => 0x600A000,
+        false => 0x6000000,
+    };
     address += line as u32 * 240;
 
     for i in 0..240 {
@@ -28,6 +28,7 @@ pub fn bg_mode_4(ppu: &mut Ppu, memory: &mut Memory, line: u16) {
     }
     ppu.pixel_priorities = vec![0; 240];
 }
+
 pub fn bg_mode_5(ppu: &mut Ppu, memory: &mut Memory, line: u16) {
     let (width, height) = (160, 128);
     if line >= height {

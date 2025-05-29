@@ -75,8 +75,6 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
 
     let new_line = ppu.elapsed_time / (LCD_WIDTH + 68) != vcount as usize;
     if new_line {
-        vcount += 1;
-
         if vcount < LCD_HEIGHT as u16 {
             // clear it for the new line
             ppu.worked_on_line = [0; 240];
@@ -100,13 +98,12 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
             ).collect();
             ppu.stored_screen.extend(new_line);
         }
-
+        vcount += 1;
         if vcount as usize >= (LCD_HEIGHT + 68) {
             vcount = 0;
             ppu.new_screen = true;
         }
         memory.write_io(PpuRegisters::VCount as u32, vcount as u16);
-          
     }
 
     update_registers(ppu, memory, dispstat, vcount);

@@ -1,7 +1,7 @@
 use core::cpu::Cpu;
-use std::sync::mpsc::{Receiver, Sender};
+use std::{sync::mpsc::{Receiver, Sender}, time::Instant};
 use eframe::egui;
-use egui::{Color32, TextureOptions};
+use egui::{Color32, Frame, TextureOptions};
 
 pub enum DebugCommand {
     Run,
@@ -12,14 +12,14 @@ pub enum DebugCommand {
 pub struct DebugDataBackend {
     pub cpu_dbg: Sender<Cpu>,
     pub ppu_dbg: Sender<Vec<u32>>,
-    pub mem_dbg: Sender<String>,
+    pub mem_dbg: Sender<Vec<u8>>,
     pub ins_dbg: Sender<String>,
     pub cnt_dbg: Receiver<DebugCommand>,
 }
 pub struct DebugDataFrontend {
     pub cpu_dbg: Receiver<Cpu>,
     pub ppu_dbg: Receiver<Vec<u32>>,
-    pub mem_dbg: Receiver<String>,
+    pub mem_dbg: Receiver<Vec<u8>>,
     pub ins_dbg: Receiver<String>,
     pub cnt_dbg: Sender<DebugCommand>,
 }
@@ -68,9 +68,14 @@ impl GbaAdvanceDebug {
 
         }
         // ppu although this happens always
-        if let Ok(new_screen) = self.debug.ppu_dbg.try_recv() {
-            self.screen = new_screen;
+        loop {
+            if let Ok(new_screen) = self.debug.ppu_dbg.try_recv() {
+                self.screen = new_screen;
+                continue;                
+            }
+            break;
         }
+        
         // mem debug
         if let Ok(_mem_state) = self.debug.mem_dbg.try_recv() {
             
@@ -88,7 +93,7 @@ impl GbaAdvanceDebug {
             if !i.focused { return; }
 
             for event in &i.events {
-                self.input_send.send(event.clone());
+                self.input_send.send(event.clone()).unwrap();
             }
         });
     }
@@ -150,10 +155,11 @@ fn draw(screen: &Vec<u32>, ctx: &egui::Context) {
         egui::ViewportBuilder::default()
             .with_title("game viewport")
             .with_inner_size([(SCREEN_WIDTH as f32) * SCREEN_RATIO, (SCREEN_HEIGHT as f32) * SCREEN_RATIO])
-            .with_position([0., 0.]),
+            .with_position([0., 0.])
+            .with_resizable(false),
         |ctx, class| {
             assert!(class == egui::ViewportClass::Immediate);
-            egui::CentralPanel::default().show(ctx, |ui| {
+            egui::CentralPanel::default().frame(Frame::NONE).show(ctx, |ui| {
                 ui.add(egui::Image::new(sized_texture).fit_to_exact_size(size * 2.));
             });
         } 

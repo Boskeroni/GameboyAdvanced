@@ -138,6 +138,7 @@ impl Memory {
         }
         
         let (upp_add, low_add) = split_memory_address(address);
+        
         // why do the video memory buffers not allow 8-bit writes??
         // no clue but it does
         if is_in_video_memory(upp_add) && is_8_bit {
@@ -175,7 +176,9 @@ impl Memory {
             0x3 => self.iwram[low_add % IWRAM_LENGTH] = data,
             0x4 => self.io_reg[low_add % IO_REG_LENGTH] = data,
             0x5 => self.obj_pall[low_add % OBJ_PALL_LENGTH] = data,
-            0x6 => self.vram[low_add % VRAM_LENGTH] = data,
+            0x6 => {
+                self.vram[low_add % VRAM_LENGTH] = data
+            }
             0x7 => self.oam[low_add % OAM_LENGTH] = data,
             0xE => self.sram[low_add % SRAM_MAX_LENGTH] = data,
             _ => {},
@@ -213,6 +216,8 @@ impl Memory {
         self.io_reg[address + 1] = split.1;
     }
 }
+
+#[inline]
 fn is_in_video_memory(upp_add: u32) -> bool {
     return (upp_add == 0x5) | (upp_add == 0x6) | (upp_add == 0x7);
 }

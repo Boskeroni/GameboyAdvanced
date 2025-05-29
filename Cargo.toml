@@ -6,8 +6,15 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [workspace]
 
+[profile.dev]
+opt-level = 3
+overflow-checks = false
+
 [dependencies]
 core = { path = "core/"}
 
 egui = "0.31.1"
 eframe = "0.31.1"
+
+[features]
+debug = []

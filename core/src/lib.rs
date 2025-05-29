@@ -14,6 +14,7 @@ use cpu::{
 use memory::*;
 use ppu::*;
 
+#[derive(Debug, Clone, Copy)]
 pub struct Fde {
     pub fetched: Option<u32>,
     pub decoded: Option<DecodedInstruction>,
