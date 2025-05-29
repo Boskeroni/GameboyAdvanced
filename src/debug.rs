@@ -24,7 +24,7 @@ pub struct DebugDataFrontend {
     pub cnt_dbg: Sender<DebugCommand>,
 }
 
-pub fn setup_debug(debug_interface: DebugDataFrontend, sender: Sender<egui::Key>) {
+pub fn setup_debug(debug_interface: DebugDataFrontend, sender: Sender<egui::Event>) {
     let options = eframe::NativeOptions::default();
     let debug = GbaAdvanceDebug::new(debug_interface, sender);
     eframe::run_native(
@@ -37,7 +37,7 @@ pub fn setup_debug(debug_interface: DebugDataFrontend, sender: Sender<egui::Key>
 struct GbaAdvanceDebug {
     debug: DebugDataFrontend,
     screen: Vec<u32>,
-    input_send: Sender<egui::Key>,
+    input_send: Sender<egui::Event>,
 
     show_memory_panel: bool,
     show_vram_panel: bool,
@@ -47,7 +47,7 @@ struct GbaAdvanceDebug {
     step: bool
 }
 impl GbaAdvanceDebug {
-    pub fn new(debug: DebugDataFrontend, sender: Sender<egui::Key>) -> Self {
+    pub fn new(debug: DebugDataFrontend, sender: Sender<egui::Event>) -> Self {
         Self {
             debug,
             screen: Vec::new(),
@@ -82,6 +82,16 @@ impl GbaAdvanceDebug {
         // send command
 
     }
+
+    fn send_inputs(&self, ctx: &egui::Context) {
+        ctx.input(|i| {
+            if !i.focused { return; }
+
+            for event in &i.events {
+                self.input_send.send(event.clone());
+            }
+        });
+    }
 }
 impl eframe::App for GbaAdvanceDebug {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
@@ -114,6 +124,7 @@ impl eframe::App for GbaAdvanceDebug {
             }
         });
         self.update_debug();
+        self.send_inputs(ctx);
 
         draw(&self.screen, ctx);
         egui::Context::request_repaint(ctx);

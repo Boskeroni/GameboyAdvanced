@@ -14,7 +14,7 @@ fn main() {
     let (mem_send, mem_recv) = mpsc::channel::<String>();
     let (ins_send, ins_recv) = mpsc::channel::<String>();
     let (cnt_send, cnt_recv) = mpsc::channel::<DebugCommand>();
-    let (inp_send, inp_recv) = mpsc::channel::<egui::Key>();
+    let (inp_send, inp_recv) = mpsc::channel::<egui::Event>();
 
     let dbg_back = DebugDataBackend {
         cpu_dbg: cpu_send,

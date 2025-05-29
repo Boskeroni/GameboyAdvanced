@@ -1,6 +1,6 @@
-use core::{cpu::{decode::{decode_arm, decode_thumb, DecodedInstruction}, execute_arm::execute_arm, execute_thumb::execute_thumb, handle_interrupts, Cpu}, joypad, memory::{self, dma_tick, update_timer, Memory}, ppu::{tick_ppu, Ppu}, Fde};
+use core::{cpu::{decode::{decode_arm, decode_thumb, DecodedInstruction}, execute_arm::execute_arm, execute_thumb::execute_thumb, handle_interrupts, Cpu}, joypad::{self, joypad_press, joypad_release}, memory::{self, dma_tick, update_timer, Memory}, ppu::{tick_ppu, Ppu}, Fde};
 use std::sync::mpsc::Receiver;
-use egui::Key;
+use egui::{Event, Key};
 use crate::debug::{DebugCommand, DebugDataBackend};
 
 fn convert_to_joypad(code: &Key) -> joypad::Button {
@@ -56,7 +56,7 @@ impl Emulator {
 pub fn run_emulator(
     mut emulator: Emulator,
     debug: DebugDataBackend,
-    input: Receiver<egui::Key>,
+    input: Receiver<egui::Event>,
 ) {
     let mut is_running = true;
     let mut step = false;
@@ -74,6 +74,16 @@ pub fn run_emulator(
             continue;
         }
         step = false;
+
+        if let Ok(event) = input.try_recv() {
+            if let Event::Key {key, pressed, ..} = event {
+                let button = convert_to_joypad(&key);
+                match pressed {
+                    true => joypad_press(button, &mut emulator.memory),
+                    false => joypad_release(button, &mut emulator.memory),
+                }
+            }
+        }
 
         let redraw_needed = gba_step(
             &mut emulator.cpu, 
