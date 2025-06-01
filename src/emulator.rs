@@ -40,6 +40,8 @@ impl EmulatorApp {
         dbg_ctx_send: Option<Sender<egui::Context>>,
         dbg_cmd_recv: Option<Receiver<EmulatorCommand>>
     ) -> Self {
+        init_joypad(&mut emulator.lock().unwrap().mem);
+
         Self {
             emulator,
             dbg_cmd_recv,
