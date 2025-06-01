@@ -177,6 +177,7 @@ impl Memory {
             0x4 => self.io_reg[low_add % IO_REG_LENGTH] = data,
             0x5 => self.obj_pall[low_add % OBJ_PALL_LENGTH] = data,
             0x6 => {
+                println!("{data:X}");
                 self.vram[low_add % VRAM_LENGTH] = data
             }
             0x7 => self.oam[low_add % OAM_LENGTH] = data,

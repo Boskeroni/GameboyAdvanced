@@ -369,6 +369,8 @@ impl Cpu {
 }
 
 
+use decode::DecodedInstruction;
+
 use crate::memory::Memory;
 enum CpuRegisters {
     Ie = 0x4000200,
@@ -447,4 +449,20 @@ pub fn add_with_carry(a: u32, b: u32, carry: bool)
     let v_bit = s_u_sum != s_sum;
 
     return (u_sum, n_bit, z_bit, c_bit, v_bit)
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Fde {
+    pub fetched: Option<u32>,
+    pub decoded: Option<DecodedInstruction>,
+    pub decoded_opcode: u32,
+}
+impl Fde {
+    pub fn new() -> Self {
+        Self {
+            fetched: None,
+            decoded: None,
+            decoded_opcode: 0,
+        }
+    }
 }

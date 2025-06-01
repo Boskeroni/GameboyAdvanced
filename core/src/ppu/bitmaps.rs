@@ -10,6 +10,7 @@ pub fn bg_mode_3(ppu: &mut Ppu, memory: &mut Memory, line: u16) {
     ppu.pixel_priorities = vec![0; 240];
 }
 
+// TODO: this isn't always displaying text for some reason, maybe not a mode_4 issue
 pub fn bg_mode_4(ppu: &mut Ppu, memory: &mut Memory, line: u16) {
     let dispcnt = memory.read_u16(PpuRegisters::DispCnt as u32);
     let displayed_frame = (dispcnt >> 4) & 1 == 1;

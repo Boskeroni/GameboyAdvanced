@@ -1,12 +1,10 @@
-use core::{cpu::{assemblify, decode::{decode_arm, decode_thumb, DecodedInstruction}, execute_arm::execute_arm, execute_thumb::execute_thumb, handle_interrupts, Cpu}, joypad::{self, init_joypad, joypad_press, joypad_release}, memory::{self, dma_tick, update_timer, Memory}, ppu::{tick_ppu, Ppu}, Fde};
-use std::sync::mpsc::Receiver;
-use egui::{Event, Key};
-use crate::debug::{DebugCommand, DebugDataBackend};
+use core::{run_frame, joypad::{self, init_joypad, joypad_press, joypad_release}, run_single_step, Emulator};
+use std::sync::{mpsc::{Receiver, Sender}, Arc, Mutex};
+use egui::{Color32, Event, Frame, Key, TextureOptions};
 
 fn convert_to_joypad(code: Key) -> joypad::Button {
     use joypad::Button;
     use egui::Key;
-
     match code {
         Key::Z => Button::Select,
         Key::X => Button::Start,
@@ -22,166 +20,108 @@ fn convert_to_joypad(code: Key) -> joypad::Button {
     }
 }
 
-const FROM_BIOS: bool = false;
-pub struct Emulator {
-    cpu: Cpu,
-    ppu: Ppu,
-    memory: Box<Memory>,
-    fde: Fde,
-    cycles: u32,
+// this might just be used for the debug, but it seems
+// useful to have anyways
+pub enum EmulatorCommand {
+    Run,
+    Pause,
+    Step,
 }
-impl Emulator {
-    pub fn new(filename: &str) -> Self {
-        let cpu = match FROM_BIOS {
-            true => Cpu::from_bios(),
-            false => Cpu::new(),
-        };
-        let ppu = Ppu::new();
-        let memory = memory::create_memory(filename);
-        let fde = Fde::new();
 
+pub struct EmulatorApp { 
+    pub emulator: Arc<Mutex<Emulator>>,
+    pub dbg_ctx_send: Option<Sender<egui::Context>>,
+    pub dbg_cmd_recv: Option<Receiver<EmulatorCommand>>,
+    state: EmulatorCommand,
+}
+impl EmulatorApp {
+    pub fn new(
+        emulator: Arc<Mutex<Emulator>>,
+        dbg_ctx_send: Option<Sender<egui::Context>>,
+        dbg_cmd_recv: Option<Receiver<EmulatorCommand>>
+    ) -> Self {
         Self {
-            cpu,
-            ppu,
-            memory,
-            fde,
-            cycles: 0,
+            emulator,
+            dbg_cmd_recv,
+            dbg_ctx_send,
+            state: EmulatorCommand::Run,
         }
-    }
-
-    fn send_debug_info(&self, debug: &DebugDataBackend, old_fde: Fde) {
-        // instruction
-        if let Some(instruction) = old_fde.decoded {
-            let opcode = old_fde.decoded_opcode;
-
-            use core::cpu::decode::DecodedInstruction::*;
-            let assembly = match instruction {
-                Thumb(_) => assemblify::to_thumb_assembly(opcode as u16),
-                Arm(_) => assemblify::to_arm_assembly(opcode),
-            };
-            debug.ins_dbg.send(assembly).unwrap();
-        }
-        
-        // cpu
-        //debug.cpu_dbg.send(self.cpu.clone()).unwrap();
-
-        // mem
     }
 }
+impl eframe::App for EmulatorApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let mut emulator = self.emulator.lock().unwrap();
 
-pub fn run_emulator(
-    mut emulator: Emulator,
-    debug: DebugDataBackend,
-    input: Receiver<egui::Event>,
-) {
-    init_joypad(&mut emulator.memory);
-
-    let mut is_running = true;
-    let mut step = false;
-
-    loop {
-        if let Ok(message) = debug.cnt_dbg.try_recv() {
-            match message {
-                DebugCommand::Run => is_running = true,
-                DebugCommand::Step => step = true,
-                DebugCommand::Stop => is_running = false,
-            }
+        use EmulatorCommand::*;
+        let redraw_needed;
+        match self.state {
+            Run => {
+                run_frame(&mut emulator);
+                redraw_needed = true;
+            },
+            Step => redraw_needed = run_single_step(&mut emulator),
+            Pause => redraw_needed = false,
         }
-
-        if !is_running && !step {
-            continue;
-        }
-        step = false;
-
-        if let Ok(event) = input.try_recv() {
-            if let Event::Key {key, pressed, ..} = event {
-                let button = convert_to_joypad(key);
-
-                match pressed {
-                    true => joypad_press(button, &mut emulator.memory),
-                    false => joypad_release(button, &mut emulator.memory),
-                }
-            }
-        }
-
-        //let fde_copy = emulator.fde;
-        let redraw_needed = gba_step(
-            &mut emulator.cpu, 
-            &mut emulator.memory, 
-            &mut emulator.ppu, 
-            &mut emulator.fde, 
-            &mut emulator.cycles
-        );
-        //emulator.send_debug_info(&debug, fde_copy);
 
         if redraw_needed {
-            debug.ppu_dbg.send(emulator.ppu.stored_screen.clone()).unwrap();
-            emulator.ppu.acknowledge_frame();
+            draw(&emulator.ppu.stored_screen, ctx);
+            ctx.request_repaint();
+        }
+
+        ctx.input(|i| {
+            if !i.focused { return; }
+            for event in &i.events {
+                if let Event::Key {key, pressed, ..} = event {
+                    let button = convert_to_joypad(*key);
+                    match pressed {
+                        true => joypad_press(button, &mut emulator.mem),
+                        false => joypad_release(button, &mut emulator.mem),
+                    }
+
+                }
+            }
+        });
+
+        if let Some(dbg_send) = &self.dbg_ctx_send {
+            dbg_send.send(ctx.clone()).unwrap();
+        }
+        if let Some(dbg_recv) = &self.dbg_cmd_recv {
+            if let Ok(cmd) = dbg_recv.try_recv() {
+                self.state = cmd;
+            }
         }
     }
 }
 
-fn gba_step(
-    cpu: &mut Cpu, 
-    mem: &mut Memory, 
-    ppu: &mut Ppu, 
-    fde: &mut Fde, 
-    cycles: &mut u32,
-) -> bool {
-    update_timer(mem, cycles, 1);
-    let dma_is_active = dma_tick(mem);
-
-    tick_ppu(ppu, mem);
-    if ppu.new_screen {
-        ppu.new_screen = false;
-        return true;
-    }
-
-    if dma_is_active {
-        return false;
-    }
-
-    let ahead_by = if fde.fetched == None { 0 } else if fde.decoded == None { 1 } else { 2 };
-    handle_interrupts(mem, cpu, ahead_by);
-    if cpu.clear_pipeline {
-        fde.fetched = None;
-        fde.decoded = None;
-        cpu.clear_pipeline = false;
-        return false;
-    }
-
-    // Execute
-    if let Some(instruction) = fde.decoded {
-        use DecodedInstruction::*;
-
-        match instruction {
-            Thumb(instr) => execute_thumb(fde.decoded_opcode as u16, instr, cpu, mem),
-            Arm(instr) => execute_arm(fde.decoded_opcode, instr, cpu, mem),
-        };
-
-        if cpu.clear_pipeline {
-            fde.fetched = None;
-            fde.decoded = None;
-            cpu.clear_pipeline = false;
-            return false;
-        }
-    }
-
-    // Decode
-    if let Some(opcode) = fde.fetched {
-        fde.decoded = Some(match cpu.cpsr.t {
-            true => DecodedInstruction::Thumb(decode_thumb(opcode as u16)),
-            false => DecodedInstruction::Arm(decode_arm(opcode)),
-        });
-
-        fde.decoded_opcode = opcode;
-    }
-
-    // Fetch
-    fde.fetched = Some(match cpu.cpsr.t {
-        true => mem.read_u16(cpu.get_pc_thumb()) as u32,
-        false => mem.read_u32(cpu.get_pc_arm()),
+const SCREEN_WIDTH: usize = 240;
+const SCREEN_HEIGHT: usize = 160;
+const SCREEN_RATIO: f32 = 2.0;
+fn draw(screen: &Vec<u32>, ctx: &egui::Context) {
+    let converted_pixels = texture_pixels(screen);
+    let texture = ctx.load_texture(
+        "game", 
+        converted_pixels, 
+        TextureOptions::default()
+    );
+    let size = texture.size_vec2();
+    let sized_texture = egui::load::SizedTexture::new(&texture, size);
+    
+    egui::CentralPanel::default().frame(Frame::NONE).show(ctx, |ui| {
+        ui.add(egui::Image::new(sized_texture).fit_to_exact_size(size * SCREEN_RATIO));
     });
+}
 
-    return false;
+fn texture_pixels(screen: &Vec<u32>) -> egui::ColorImage {
+    let mut pixels: Vec<egui::Color32> = vec![Color32::BLACK; SCREEN_WIDTH * SCREEN_HEIGHT];
+    for (i, c) in screen.iter().enumerate() {
+        let r = (*c >> 16) & 0xFF;
+        let g = (*c >> 8) & 0xFF;
+        let b = *c & 0xFF;
+
+        pixels[i] = Color32::from_rgb(r as u8, g as u8, b as u8);
+    }
+    egui::ColorImage {
+        size: [SCREEN_WIDTH, SCREEN_HEIGHT],
+        pixels,
+    }
 }

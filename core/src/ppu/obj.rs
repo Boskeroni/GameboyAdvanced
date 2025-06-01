@@ -110,6 +110,7 @@ fn load_obj(
             let ver_flip = (obj1 >> 13) & 1 == 1;
 
             // not this lines responsibility to draw
+            // y_coord represents the top of the sprite's tile
             if y_coord > vcount || y_coord + height < vcount {
                 return Vec::new();
             }
