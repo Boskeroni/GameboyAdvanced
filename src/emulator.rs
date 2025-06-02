@@ -1,6 +1,7 @@
 use core::{run_frame, joypad::{self, init_joypad, joypad_press, joypad_release}, run_single_step, Emulator};
-use std::sync::{mpsc::{Receiver, Sender}, Arc, Mutex};
-use egui::{Color32, Event, Frame, Key, TextureOptions};
+use std::{sync::{mpsc::{Receiver, SyncSender}, Arc, Mutex}, time::{Duration, Instant}};
+use egui::Key;
+
 
 fn convert_to_joypad(code: Key) -> joypad::Button {
     use joypad::Button;
@@ -20,110 +21,68 @@ fn convert_to_joypad(code: Key) -> joypad::Button {
     }
 }
 
-// this might just be used for the debug, but it seems
-// useful to have anyways
-pub enum EmulatorCommand {
+pub enum EmulatorSend {
+    StateUpdate(EmulatorState),
+    Event(Key, bool),
+}
+#[derive(Debug, Clone, Copy)]
+pub enum EmulatorState {
     Run,
     Pause,
     Step,
+    End,
 }
 
-pub struct EmulatorApp { 
-    pub emulator: Arc<Mutex<Emulator>>,
-    pub dbg_ctx_send: Option<Sender<egui::Context>>,
-    pub dbg_cmd_recv: Option<Receiver<EmulatorCommand>>,
-    state: EmulatorCommand,
-}
-impl EmulatorApp {
-    pub fn new(
-        emulator: Arc<Mutex<Emulator>>,
-        dbg_ctx_send: Option<Sender<egui::Context>>,
-        dbg_cmd_recv: Option<Receiver<EmulatorCommand>>
-    ) -> Self {
-        init_joypad(&mut emulator.lock().unwrap().mem);
-
-        Self {
-            emulator,
-            dbg_cmd_recv,
-            dbg_ctx_send,
-            state: EmulatorCommand::Run,
-        }
+pub fn run_emulator(
+    emulator_arc: Arc<Mutex<Emulator>>,
+    redraw_send: SyncSender<Vec<u32>>,
+    inp_recv: Receiver<EmulatorSend>,
+) {
+    {
+        let mut emulator = emulator_arc.lock().unwrap();
+        init_joypad(&mut emulator.mem);
     }
-}
-impl eframe::App for EmulatorApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let mut emulator = self.emulator.lock().unwrap();
 
-        use EmulatorCommand::*;
-        let redraw_needed;
-        match self.state {
-            Run => {
-                run_frame(&mut emulator);
-                redraw_needed = true;
-            },
-            Step => redraw_needed = run_single_step(&mut emulator),
-            Pause => redraw_needed = false,
-        }
-
+    // since the lock needs to end, this is done in its own function
+    // also looks a bit cleaner
+    let mut state = EmulatorState::Run;
+    loop {
+        let redraw_needed = update_emulator(&emulator_arc, &mut state);
         if redraw_needed {
-            draw(&emulator.ppu.stored_screen, ctx);
-            ctx.request_repaint();
+            let emulator = emulator_arc.lock().unwrap();
+            redraw_send.send(emulator.ppu.stored_screen.clone()).unwrap();
         }
 
-        ctx.input(|i| {
-            if !i.focused { return; }
-            for event in &i.events {
-                if let Event::Key {key, pressed, ..} = event {
-                    let button = convert_to_joypad(*key);
+        if let Ok(i) = inp_recv.try_recv() {
+            match i {
+                EmulatorSend::Event(key, pressed) => {
+                    let mut emulator = emulator_arc.lock().unwrap();
+                    let button = convert_to_joypad(key);
                     match pressed {
                         true => joypad_press(button, &mut emulator.mem),
                         false => joypad_release(button, &mut emulator.mem),
                     }
-
                 }
-            }
-        });
-
-        if let Some(dbg_send) = &self.dbg_ctx_send {
-            dbg_send.send(ctx.clone()).unwrap();
-        }
-        if let Some(dbg_recv) = &self.dbg_cmd_recv {
-            if let Ok(cmd) = dbg_recv.try_recv() {
-                self.state = cmd;
+                EmulatorSend::StateUpdate(EmulatorState::End) => return,
+                EmulatorSend::StateUpdate(new_state) => state = new_state,
             }
         }
     }
 }
 
-const SCREEN_WIDTH: usize = 240;
-const SCREEN_HEIGHT: usize = 160;
-const SCREEN_RATIO: f32 = 2.0;
-fn draw(screen: &Vec<u32>, ctx: &egui::Context) {
-    let converted_pixels = texture_pixels(screen);
-    let texture = ctx.load_texture(
-        "game", 
-        converted_pixels, 
-        TextureOptions::default()
-    );
-    let size = texture.size_vec2();
-    let sized_texture = egui::load::SizedTexture::new(&texture, size);
-    
-    egui::CentralPanel::default().frame(Frame::NONE).show(ctx, |ui| {
-        ui.add(egui::Image::new(sized_texture).fit_to_exact_size(size * SCREEN_RATIO));
-    });
-}
+fn update_emulator(emulator_arc: &Arc<Mutex<Emulator>>, state: &mut EmulatorState) -> bool {
+    let mut emulator = emulator_arc.lock().unwrap();
 
-fn texture_pixels(screen: &Vec<u32>) -> egui::ColorImage {
-    let mut pixels: Vec<egui::Color32> = vec![Color32::BLACK; SCREEN_WIDTH * SCREEN_HEIGHT];
-    for (i, c) in screen.iter().enumerate() {
-        let r = (*c >> 16) & 0xFF;
-        let g = (*c >> 8) & 0xFF;
-        let b = *c & 0xFF;
+    use EmulatorState::*;
+    let redraw_needed = match state {
+        Run => {run_frame(&mut emulator); true }
+        Step => run_single_step(&mut emulator),
+        Pause => false,
+        End => unreachable!(),
+    };
+    if let EmulatorState::Step = *state {
+        *state = EmulatorState::Pause;
+    }
 
-        pixels[i] = Color32::from_rgb(r as u8, g as u8, b as u8);
-    }
-    egui::ColorImage {
-        size: [SCREEN_WIDTH, SCREEN_HEIGHT],
-        pixels,
-    }
+    return redraw_needed;
 }

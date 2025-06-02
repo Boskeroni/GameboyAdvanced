@@ -1,39 +1,40 @@
 #[cfg(feature = "debug")]
 mod debug;
+use debug::Debugger;
 
 mod emulator;
-use core::joypad::init_joypad;
+use egui::{Color32, Event, Frame, TextureOptions};
+use emulator::{run_emulator, EmulatorSend};
 use core::Emulator;
 
+use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{mpsc, Arc, Mutex};
 use std::env;
 use std::thread;
+use std::time::{Duration, Instant};
 
-use emulator::{EmulatorApp, EmulatorCommand};
 
 fn main() {
     let file = env::args().nth(1).unwrap();
     let rom_path = format!("roms/{file}");
-    let emulator = Arc::new(Mutex::new(Emulator::new(&rom_path)));
+    let emulator_ref = Arc::new(Mutex::new(Emulator::new(&rom_path)));
 
-    // debug windows
-    let mut dbg_ctx_send = None;
-    let mut dbg_cmd_recv = None;
+    let (emu_send, emu_recv) = mpsc::channel::<EmulatorSend>();
+    let (draw_send, draw_recv) = mpsc::sync_channel::<Vec<u32>>(1);
 
-    if cfg!(feature = "debug") {
-        let debug_emulator = emulator.clone();
-        let (ctx_send, ctx_recv) = mpsc::channel::<egui::Context>();
-        let (cmd_send, cmd_recv) = mpsc::channel::<EmulatorCommand>();
-        dbg_ctx_send = Some(ctx_send);
-        dbg_cmd_recv = Some(cmd_recv);
-        thread::spawn(|| {
-            debug::setup_debug(debug_emulator, ctx_recv, cmd_send);
-        });
-    }
+    let emulator = emulator_ref.clone();
+    thread::Builder::new().name("emulator_thread".into()).spawn(|| {
+        run_emulator(emulator, draw_send, emu_recv);
+    }).unwrap();
     
-    init_joypad(&mut emulator.lock().unwrap().mem);
+    let debugger;
+    match cfg!(feature = "debug") {
+        true => debugger = Some(Debugger::new(emulator_ref, emu_send.clone())),
+        false => debugger = None,
+    }
+
     let options = eframe::NativeOptions::default();
-    let emulator_app = EmulatorApp::new(emulator, dbg_ctx_send, dbg_cmd_recv);
+    let emulator_app = EmulatorApp::new(draw_recv, emu_send, debugger);
     eframe::run_native(
         "Emulator", 
         options, 
@@ -41,3 +42,78 @@ fn main() {
     ).unwrap();
 }
 
+struct EmulatorApp {
+    redraw_recv: Receiver<Vec<u32>>,
+    inp_send: Sender<EmulatorSend>,
+    debugger: Option<Debugger>,
+}
+impl EmulatorApp {
+    fn new(
+        redraw_recv: Receiver<Vec<u32>>, 
+        inp_send: Sender<EmulatorSend>,
+        debugger: Option<Debugger>
+    ) -> Self {
+        Self {
+            redraw_recv,
+            inp_send,
+            debugger
+        }
+    }
+}
+impl eframe::App for EmulatorApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if let Some(ref mut debugger) = self.debugger {
+            // thread::sleep(Duration::from_millis(200));
+            debugger.update(ctx);
+        }
+
+        // check if a redraw needs to happen
+        if let Ok(screen) = self.redraw_recv.try_recv() {
+            draw(&screen, ctx);
+        }
+
+        ctx.input(|i| {
+            for event in &i.events {
+                if let Event::Key {key, pressed, ..} = event {
+                    self.inp_send.send(EmulatorSend::Event(*key, *pressed)).unwrap();
+                }
+            }
+        });
+
+        
+
+        ctx.request_repaint();
+    }
+}
+
+const SCREEN_WIDTH: usize = 240;
+const SCREEN_HEIGHT: usize = 160;
+const SCREEN_RATIO: f32 = 2.0;
+fn draw(screen: &Vec<u32>, ctx: &egui::Context) {
+    let converted_pixels = texture_pixels(screen);
+    let texture = ctx.load_texture(
+        "game", 
+        converted_pixels, 
+        TextureOptions::default()
+    );
+    let size = texture.size_vec2();
+    let sized_texture = egui::load::SizedTexture::new(&texture, size);
+
+    egui::CentralPanel::default().frame(Frame::NONE).show(ctx, |ui| {
+        ui.add(egui::Image::new(sized_texture).fit_to_exact_size(size * SCREEN_RATIO));
+    });
+}
+
+fn texture_pixels(screen: &Vec<u32>) -> egui::ColorImage {
+    let mut pixels: Vec<egui::Color32> = vec![Color32::BLACK; SCREEN_WIDTH * SCREEN_HEIGHT];
+    for (i, c) in screen.iter().enumerate() {
+        let r = (*c >> 16) & 0xFF;
+        let g = (*c >> 8) & 0xFF;
+        let b = *c & 0xFF;
+        pixels[i] = Color32::from_rgb(r as u8, g as u8, b as u8);
+    }
+    egui::ColorImage {
+        size: [SCREEN_WIDTH, SCREEN_HEIGHT],
+        pixels,
+    }
+}
