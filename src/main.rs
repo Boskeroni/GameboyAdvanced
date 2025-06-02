@@ -6,7 +6,7 @@ mod emulator;
 use egui::{Color32, Event, Frame, TextureOptions};
 use emulator::{run_emulator, EmulatorSend};
 use parking_lot::RwLock;
-use core::Emulator;
+use gba_core::Emulator;
 
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{mpsc, Arc};

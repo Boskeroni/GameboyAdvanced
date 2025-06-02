@@ -176,10 +176,7 @@ impl Memory {
             0x3 => self.iwram[low_add % IWRAM_LENGTH] = data,
             0x4 => self.io_reg[low_add % IO_REG_LENGTH] = data,
             0x5 => self.obj_pall[low_add % OBJ_PALL_LENGTH] = data,
-            0x6 => {
-                println!("{data:X}");
-                self.vram[low_add % VRAM_LENGTH] = data
-            }
+            0x6 => self.vram[low_add % VRAM_LENGTH] = data,
             0x7 => self.oam[low_add % OAM_LENGTH] = data,
             0xE => self.sram[low_add % SRAM_MAX_LENGTH] = data,
             _ => {},
@@ -215,6 +212,18 @@ impl Memory {
 
         self.io_reg[address + 0] = split.0;
         self.io_reg[address + 1] = split.1;
+    }
+
+    pub const fn get_memory_ranges() -> [std::ops::Range<u32>; 7] {
+        return [
+            0..0x00004000,
+            0x02000000..0x02040000,
+            0x03000000..0x03008000,
+            0x04000000..0x040003FF,
+            0x05000000..0x05000400,
+            0x06000000..0x06018000,
+            0x07000000..0x07000400,
+        ];
     }
 }
 

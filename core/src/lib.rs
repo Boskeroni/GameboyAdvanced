@@ -42,17 +42,6 @@ impl Emulator {
     }
 }
 
-pub fn run_frame(emulator: &mut Emulator) {
-    emulator.ppu.acknowledge_frame();
-
-    loop {
-        let res = run_single_step(emulator);
-        if res {
-            return;
-        }
-    }
-}
-
 pub fn run_single_step(emu: &mut Emulator) -> bool {
     // update the timer
     // add 1 for now, make it more accurate later
@@ -80,7 +69,7 @@ pub fn run_single_step(emu: &mut Emulator) -> bool {
     // Execute
     if let Some(instruction) = emu.fde.decoded {
         use DecodedInstruction::*;
-
+        
         match instruction {
             Thumb(instr) => execute_thumb(emu.fde.decoded_opcode as u16, instr, &mut emu.cpu, &mut emu.mem),
             Arm(instr) => execute_arm(emu.fde.decoded_opcode, instr, &mut emu.cpu, &mut emu.mem),

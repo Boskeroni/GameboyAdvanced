@@ -1,17 +1,24 @@
 #![cfg(feature = "debug")]
-use std::{sync::{mpsc::Sender, Arc}, time::Instant};
-use egui::{Frame, ViewportBuilder, ViewportClass, ViewportId};
+mod memory_widget;
+mod instruction_widget;
+mod cpu_widget;
+
+use std::sync::{mpsc::Sender, Arc};
+use cpu_widget::CpuWidget;
+use egui::{ViewportBuilder, ViewportClass, ViewportId};
+use instruction_widget::InstructionWidget;
+use memory_widget::MemoryWidget;
 use parking_lot::RwLock;
-use core::{memory::Memory, Emulator};
+use gba_core::Emulator;
 use crate::emulator::{EmulatorSend, EmulatorState};
 
 pub struct Debugger {
     emulator_ref: Arc<RwLock<Emulator>>,
     inp_send: Sender<EmulatorSend>,
-    show_memory: bool,
+    mem_widget: MemoryWidget,
+    ins_widget: InstructionWidget,
+    cpu_widget: CpuWidget,
     show_vram: bool,
-    show_cpu: bool,
-    show_instructions: bool,
     pause: bool,
 }
 impl Debugger {
@@ -19,10 +26,10 @@ impl Debugger {
         Self { 
             emulator_ref: emulator,
             inp_send,
-            show_memory: false,
+            mem_widget: MemoryWidget::new(),
+            ins_widget: InstructionWidget::new(),
+            cpu_widget: CpuWidget::new(),
             show_vram: false,
-            show_cpu: false,
-            show_instructions: false,
             pause: false,
         } 
     }
@@ -41,10 +48,10 @@ impl Debugger {
 
                     // menu to create new windows with information
                     ui.columns(2, |columns| {
-                        columns[0].checkbox(&mut self.show_memory, "Show memory panel");
+                        columns[0].checkbox(&mut self.mem_widget.open, "Show memory panel");
                         columns[0].checkbox(&mut self.show_vram, "Show VRAM panel");
-                        columns[1].checkbox(&mut self.show_cpu, "Show CPU panel");
-                        columns[1].checkbox(&mut self.show_instructions, "Show instruction panel");
+                        columns[1].checkbox(&mut self.cpu_widget.open, "Show CPU panel");
+                        columns[1].checkbox(&mut self.ins_widget.open, "Show instruction panel");
                     });
 
                     ui.separator();
@@ -71,25 +78,9 @@ impl Debugger {
         );
 
         let emulator = self.emulator_ref.read();
-        println!("we get access :? {:?}", Instant::now());
-        if self.show_cpu {eprintln!("not done yet"); self.show_cpu = false;}
-        if self.show_instructions {eprintln!("not done yet"); self.show_instructions = false;}
+        if self.cpu_widget.open { self.cpu_widget.draw(ctx, &emulator.cpu); }
+        if self.ins_widget.open { self.ins_widget.draw(ctx)}
         if self.show_vram {eprintln!("not done yet"); self.show_vram = false;}
-        if self.show_memory { show_memory(&emulator.mem, ctx) }
-        
-        
+        if self.mem_widget.open { self.mem_widget.draw(&emulator.mem, ctx) }   
     }
-}
-
-fn show_memory(mem: &Memory, ctx: &egui::Context) {
-    ctx.show_viewport_immediate(
-        ViewportId::from_hash_of("memory panel"), 
-        ViewportBuilder::default(), 
-        |ctx, class| {
-            assert!(class == ViewportClass::Immediate);
-            egui::CentralPanel::default().frame(Frame::NONE).show(&ctx, |ui| {
-
-            });
-        }
-    );
 }

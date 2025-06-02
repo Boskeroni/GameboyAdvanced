@@ -1,8 +1,7 @@
-use core::{run_frame, joypad::{self, init_joypad, joypad_press, joypad_release}, run_single_step, Emulator};
+use gba_core::{joypad::{self, init_joypad, joypad_press, joypad_release}, run_single_step, Emulator};
 use std::sync::{mpsc::{Receiver, SyncSender}, Arc};
 use egui::Key;
 use parking_lot::RwLock;
-
 
 fn convert_to_joypad(code: Key) -> joypad::Button {
     use joypad::Button;
@@ -45,7 +44,7 @@ pub fn run_emulator(
 
     // since the lock needs to end, this is done in its own function
     // also looks a bit cleaner
-    let mut state = EmulatorState::Run;
+    let mut state = EmulatorState::Pause;
     loop {
         let redraw_needed = update_emulator(&emulator_arc, &mut state);
         if redraw_needed {
@@ -74,7 +73,15 @@ fn update_emulator(emulator_arc: &Arc<RwLock<Emulator>>, state: &mut EmulatorSta
     let mut emulator = emulator_arc.write();
     use EmulatorState::*;
     let redraw_needed = match state {
-        Run => {run_frame(&mut emulator); true }
+        Run => {
+            emulator.ppu.acknowledge_frame();
+            loop {
+                let finished = run_single_step(&mut emulator);
+                if finished {
+                    return true;
+                }
+            }; 
+        }
         Step => run_single_step(&mut emulator),
         Pause => false,
         End => unreachable!(),

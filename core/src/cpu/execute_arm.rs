@@ -10,6 +10,8 @@ pub fn execute_arm(
     cpu: &mut Cpu,
     memory: &mut Memory,
 ) {
+    //println!("{:?} {:X}", assemblify::to_arm_assembly(opcode), opcode);
+
     // first check if we even have to do it
     let condition = opcode >> 28;
     if !check_condition(condition, &cpu.cpsr) {
@@ -187,8 +189,10 @@ fn data_processing(opcode: u32, cpu: &mut Cpu) {
 
     if rd_index == 15 && s_bit {
         let pc = cpu.get_register_mut(rd_index);
-        *pc = result;
-        cpu.clear_pipeline = true;
+        if !undo {
+            *pc = result;
+            cpu.clear_pipeline = true;
+        }
 
         cpu.cpsr = *cpu.get_spsr();
         return;
@@ -585,8 +589,10 @@ fn block_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
                 let next_r = rlist.trailing_zeros();
 
                 // LDM with r15 in transfer list and s bit set (mode changes)
-                if next_r == 15 && s_bit {
-                    cpu.cpsr = *cpu.get_spsr();
+                if next_r == 15 {
+                    if s_bit {
+                        cpu.cpsr = *cpu.get_spsr();
+                    }
                     cpu.clear_pipeline = true;
                 }
 

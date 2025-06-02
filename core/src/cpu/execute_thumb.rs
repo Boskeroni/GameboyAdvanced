@@ -10,8 +10,9 @@ pub fn execute_thumb(
     cpu: &mut Cpu,
     memory: &mut Memory,
 ) {
-    use DecodedThumb::*;
+    //println!("{:?}", assemblify::to_thumb_assembly(opcode));
 
+    use DecodedThumb::*;
     match instruction {
         MoveShifted => move_shifted(opcode, cpu),
         AddSub => add_sub(opcode, cpu),

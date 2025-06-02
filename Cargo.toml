@@ -10,7 +10,7 @@ edition = "2021"
 opt-level = 3
 
 [dependencies]
-core = { path = "core/"}
+gba_core = { path = "core/"}
 egui = "0.31.1"
 eframe = "0.31.1"
 parking_lot = {version = "0.12.4", features = ["deadlock_detection"]}
