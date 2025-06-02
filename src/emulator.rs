@@ -1,6 +1,7 @@
 use core::{run_frame, joypad::{self, init_joypad, joypad_press, joypad_release}, run_single_step, Emulator};
-use std::{sync::{mpsc::{Receiver, SyncSender}, Arc, Mutex}, time::{Duration, Instant}};
+use std::sync::{mpsc::{Receiver, SyncSender}, Arc};
 use egui::Key;
+use parking_lot::RwLock;
 
 
 fn convert_to_joypad(code: Key) -> joypad::Button {
@@ -34,14 +35,13 @@ pub enum EmulatorState {
 }
 
 pub fn run_emulator(
-    emulator_arc: Arc<Mutex<Emulator>>,
+    emulator_arc: Arc<RwLock<Emulator>>,
     redraw_send: SyncSender<Vec<u32>>,
     inp_recv: Receiver<EmulatorSend>,
 ) {
-    {
-        let mut emulator = emulator_arc.lock().unwrap();
-        init_joypad(&mut emulator.mem);
-    }
+    let mut emulator = emulator_arc.write();
+    init_joypad(&mut emulator.mem);
+    drop(emulator);
 
     // since the lock needs to end, this is done in its own function
     // also looks a bit cleaner
@@ -49,14 +49,14 @@ pub fn run_emulator(
     loop {
         let redraw_needed = update_emulator(&emulator_arc, &mut state);
         if redraw_needed {
-            let emulator = emulator_arc.lock().unwrap();
+            let emulator = emulator_arc.read();
             redraw_send.send(emulator.ppu.stored_screen.clone()).unwrap();
         }
 
         if let Ok(i) = inp_recv.try_recv() {
             match i {
                 EmulatorSend::Event(key, pressed) => {
-                    let mut emulator = emulator_arc.lock().unwrap();
+                    let mut emulator = emulator_arc.write();
                     let button = convert_to_joypad(key);
                     match pressed {
                         true => joypad_press(button, &mut emulator.mem),
@@ -70,9 +70,8 @@ pub fn run_emulator(
     }
 }
 
-fn update_emulator(emulator_arc: &Arc<Mutex<Emulator>>, state: &mut EmulatorState) -> bool {
-    let mut emulator = emulator_arc.lock().unwrap();
-
+fn update_emulator(emulator_arc: &Arc<RwLock<Emulator>>, state: &mut EmulatorState) -> bool {
+    let mut emulator = emulator_arc.write();
     use EmulatorState::*;
     let redraw_needed = match state {
         Run => {run_frame(&mut emulator); true }
@@ -80,6 +79,7 @@ fn update_emulator(emulator_arc: &Arc<Mutex<Emulator>>, state: &mut EmulatorStat
         Pause => false,
         End => unreachable!(),
     };
+
     if let EmulatorState::Step = *state {
         *state = EmulatorState::Pause;
     }

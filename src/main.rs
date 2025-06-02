@@ -5,19 +5,18 @@ use debug::Debugger;
 mod emulator;
 use egui::{Color32, Event, Frame, TextureOptions};
 use emulator::{run_emulator, EmulatorSend};
+use parking_lot::RwLock;
 use core::Emulator;
 
 use std::sync::mpsc::{Receiver, Sender};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc};
 use std::env;
 use std::thread;
-use std::time::{Duration, Instant};
-
 
 fn main() {
     let file = env::args().nth(1).unwrap();
     let rom_path = format!("roms/{file}");
-    let emulator_ref = Arc::new(Mutex::new(Emulator::new(&rom_path)));
+    let emulator_ref = Arc::new(RwLock::new(Emulator::new(&rom_path)));
 
     let (emu_send, emu_recv) = mpsc::channel::<EmulatorSend>();
     let (draw_send, draw_recv) = mpsc::sync_channel::<Vec<u32>>(1);
@@ -46,30 +45,34 @@ struct EmulatorApp {
     redraw_recv: Receiver<Vec<u32>>,
     inp_send: Sender<EmulatorSend>,
     debugger: Option<Debugger>,
+    previous_screen: Vec<u32>,
 }
 impl EmulatorApp {
     fn new(
         redraw_recv: Receiver<Vec<u32>>, 
         inp_send: Sender<EmulatorSend>,
-        debugger: Option<Debugger>
+        debugger: Option<Debugger>,
     ) -> Self {
         Self {
             redraw_recv,
             inp_send,
-            debugger
+            debugger,
+            previous_screen: vec![0; SCREEN_HEIGHT * SCREEN_WIDTH],
         }
     }
 }
 impl eframe::App for EmulatorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if let Some(ref mut debugger) = self.debugger {
-            // thread::sleep(Duration::from_millis(200));
             debugger.update(ctx);
         }
-
+    
         // check if a redraw needs to happen
         if let Ok(screen) = self.redraw_recv.try_recv() {
             draw(&screen, ctx);
+            self.previous_screen = screen;
+        } else {
+            draw(&self.previous_screen, ctx);
         }
 
         ctx.input(|i| {
@@ -79,8 +82,6 @@ impl eframe::App for EmulatorApp {
                 }
             }
         });
-
-        
 
         ctx.request_repaint();
     }
