@@ -3,7 +3,7 @@ mod memory_widget;
 mod instruction_widget;
 mod cpu_widget;
 
-use std::sync::{mpsc::Sender, Arc};
+use std::{sync::{mpsc::Sender, Arc}, time::Instant};
 use cpu_widget::CpuWidget;
 use egui::{ViewportBuilder, ViewportClass, ViewportId};
 use instruction_widget::InstructionWidget;
@@ -20,6 +20,7 @@ pub struct Debugger {
     cpu_widget: CpuWidget,
     show_vram: bool,
     pause: bool,
+    delay: String,
 }
 impl Debugger {
     pub fn new(emulator: Arc<RwLock<Emulator>>, inp_send: Sender<EmulatorSend>) -> Self { 
@@ -31,6 +32,7 @@ impl Debugger {
             cpu_widget: CpuWidget::new(),
             show_vram: false,
             pause: false,
+            delay: String::from("0"),
         } 
     }
 
@@ -40,7 +42,8 @@ impl Debugger {
             ViewportBuilder::default()
                 .with_title("control panel")
                 .with_resizable(false)
-                .with_inner_size([340., 140.]), 
+                .with_inner_size([340., 140.])
+                .with_position([780., 575.]), 
             |ctx, class| {
                 assert!(class == ViewportClass::Immediate);
                 egui::CentralPanel::default().show(&ctx, |ui| {
@@ -65,9 +68,11 @@ impl Debugger {
                             self.pause = !self.pause;
                             self.inp_send.send(match self.pause {
                                 true => EmulatorSend::StateUpdate(EmulatorState::Pause),
-                                false => EmulatorSend::StateUpdate(EmulatorState::Run),
+                                false => EmulatorSend::StateUpdate(EmulatorState::Run(self.delay.parse().unwrap_or(0))),
                             }).unwrap();
                         }
+
+                        ui.add(egui::TextEdit::singleline(&mut self.delay).desired_width(100.));
 
                         if ui.add(egui::Button::new("⏭")).clicked() {
                             self.inp_send.send(EmulatorSend::StateUpdate(EmulatorState::Step)).unwrap();
@@ -81,6 +86,6 @@ impl Debugger {
         if self.cpu_widget.open { self.cpu_widget.draw(ctx, &emulator.cpu); }
         if self.ins_widget.open { self.ins_widget.draw(ctx)}
         if self.show_vram {eprintln!("not done yet"); self.show_vram = false;}
-        if self.mem_widget.open { self.mem_widget.draw(&emulator.mem, ctx) }   
+        if self.mem_widget.open { self.mem_widget.draw(&emulator.mem, ctx) }
     }
 }

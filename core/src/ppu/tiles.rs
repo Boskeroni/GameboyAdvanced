@@ -2,35 +2,7 @@ use crate::memory::Memory;
 use super::{Ppu, PpuRegisters, PALETTE_BASE, VRAM_BASE};
 
 pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory, line: u32) {
-    let dispcnt = memory.read_u16(PpuRegisters::DispCnt as u32);
-
-    // the index of the background and its priority.
-    // highest priority to lowest priority
-    // 3 = lowest, 0 = highest
-    let mut backgrounds = Vec::new();
-    let mut priorities = Vec::new();
-    for i in 0..=3 {
-        // the background is turned off
-        if dispcnt >> (8 + i) & 1 == 0 {
-            continue;
-        }
-
-        let bg_cnt = memory.read_u16(PpuRegisters::BGCnt as u32 + i*2);
-        let priority = bg_cnt & 0b11;
-
-        // cheeky little insertions
-        let mut curr = 0;
-        while curr < priorities.len()  {
-            if priorities[curr] > priority  {
-                break;
-            }
-            curr += 1;
-        }
-        backgrounds.insert(curr, i);
-        priorities.insert(curr, priority);
-    }
-
-    // can't display anything to any background
+    let backgrounds = get_background_priorities(memory, vec![0, 1, 2, 3]);
     if backgrounds.is_empty() {
         return;
     }
@@ -38,15 +10,12 @@ pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory, line: u32) {
     // now have a list of the order of the backgrounds
     let mut scanline = vec![0; 240];
     let mut pixel_priorities = vec![0; 240];
-    for j in 0..backgrounds.len() {
-        let bg = backgrounds[j];
-        let priority = priorities[j];
-
-        let read_line = read_scanline(line, bg, memory);
+    for (bg, priority) in backgrounds {
+        let read_line = text_mode_scanline(line, bg as u32, memory);
         for i in 0..240 {
             // something has already been displayed to the scanline
             if scanline[i] != 0 || read_line[i] == 0 { continue; }
-            pixel_priorities[i] = priority;
+            pixel_priorities[i] = priority as u16;
             scanline[i] = read_line[i];
         }
     }
@@ -59,7 +28,92 @@ pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory, line: u32) {
     }
 }
 
-fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u8> {
+pub fn bg_mode_1(ppu: &mut Ppu, memory: &mut Memory, line: u32) { 
+    let backgrounds = get_background_priorities(memory, vec![0, 1, 2]);
+    if backgrounds.is_empty() {
+        return;
+    }
+
+    let mut scanline = vec![0; 240];
+    let mut pixel_priorities = vec![3; 240]; // better to assume its lowest priority
+    for (bg, priority) in backgrounds {
+        // bgs 0, 1 are text
+        // bg 2 is rotation
+        let read_scanline = match bg {
+            0|1 => text_mode_scanline(line, bg as u32, memory),
+            2 => rotation_mode_scanline(line, bg as u32, memory),
+            _ => unreachable!(),
+        };
+        for i in 0..240 {
+            if scanline[i] != 0 || read_scanline[i] == 0 { continue; }
+            pixel_priorities[i] = priority as u16;
+            scanline[i] = read_scanline[i];
+        }
+    }
+
+    for i in 0..240 {
+        let palette_index = scanline[i];
+        let pixel = memory.read_u16(PALETTE_BASE + (palette_index as u32 * 2));
+        ppu.worked_on_line[i] = pixel;
+    }
+}
+
+pub fn bg_mode_2(ppu: &mut Ppu, memory: &mut Memory, line: u16) { 
+    todo!()
+}
+
+/// returns all the backgrounds in order of priority
+/// first number is the background number, second is its priority
+fn get_background_priorities(memory: &Memory, available_bgs: Vec<u32>) -> Vec<(u8, u8)> {
+    let disp_cnt = memory.read_u16(PpuRegisters::DispCnt as u32);
+
+    let mut priorities = vec![Vec::new(); 4];
+    for bg in available_bgs {
+        if (disp_cnt >> (8 + bg)) & 1 == 0 {
+            continue;
+        } 
+
+        let bg_cnt = memory.read_u16(PpuRegisters::BGCnt as u32 + bg*2) & 0b11;
+        priorities[bg_cnt as usize].push((bg as u8, bg_cnt as u8));
+    }
+    priorities.into_iter().flatten().collect()
+}
+
+fn rotation_mode_scanline(line: u32, bg: u32, memory: &Memory) -> Vec<u8> {
+    let bg_cnt = memory.read_u16(PpuRegisters::BGCnt as u32 + bg * 2);
+
+    let base = PpuRegisters::BgRotationBase as u32 + (bg - 2) * 0x10;
+    let x_coord = {
+        let lower = memory.read_u16(base + 0x8) as u32;
+        let higher = memory.read_u16(base + 0xA) as u32 & 0x0FFF;
+        higher << 16 | lower
+    };
+    let y_coord = {
+        let lower = memory.read_u16(base + 0xC) as u32;
+        let higher = memory.read_u16(base + 0xE) as u32 & 0x0FFF;
+        higher << 16 | lower
+    };
+
+    let dx = memory.read_u16(base + 0x0);
+    let dmx = memory.read_u16(base + 0x2);
+    let dy = memory.read_u16(base + 0x4);
+    let dmy = memory.read_u16(base + 0x6);
+
+    // TODO: fix this extremely inefficient implementation    
+    // it practically creates a whole screen just for one line
+    
+
+
+
+
+
+
+
+
+    todo!();
+}
+// when i remember what this does, i will put a comment here
+fn text_mode_scanline(line: u32, bg: u32, memory: &Memory) -> Vec<u8> {
     let bg_cnt = memory.read_u16(PpuRegisters::BGCnt as u32 + bg * 2);
 
     // all the variables stored within the bg_cnt register
@@ -199,10 +253,4 @@ fn read_scanline(line: u32, bg: u32, memory: &mut Memory) -> Vec<u8> {
 
     scanline = scanline[(x_tile_offset as usize)..(x_tile_offset as usize + 240)].to_vec();
     return scanline
-}
-pub fn bg_mode_1(ppu: &mut Ppu, memory: &mut Memory, line: u16) { 
-    todo!()
-}
-pub fn bg_mode_2(ppu: &mut Ppu, memory: &mut Memory, line: u16) { 
-    todo!()
 }

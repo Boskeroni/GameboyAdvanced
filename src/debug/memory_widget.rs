@@ -1,11 +1,12 @@
 #![cfg(feature = "debug")]
 
-use gba_core::memory::Memory;
+use egui::{Label, TextEdit};
+use gba_core::memory::{DMABaseAddress, Memory};
 use std::{cmp::min, time::Instant};
 use std::ops::Range;
 use egui::{scroll_area::ScrollBarVisibility, vec2, RichText, ViewportBuilder, ViewportClass, ViewportId, Widget};
 
-const RANGES_NAMES: [&str; 7] = [
+const RANGES_NAMES: [&str; 9] = [
     "BIOS",
     "WRAM - On-board Work RAM",
     "WRAM - On-chip Work RAM",
@@ -13,17 +14,19 @@ const RANGES_NAMES: [&str; 7] = [
     "BG/OBJ Palette RAM",
     "VRAM - Video RAM",
     "OAM - OBJ Attributes",
+    "Game Pack ROM",
+    "Game Pak SRAM",
 ];
 
 pub struct MemoryWidget {
     pub open: bool,
-    ranges_shown: [bool; 7],
+    ranges_shown: [bool; 9],
 }
 impl MemoryWidget {
     pub fn new() -> Self {
         Self {
             open: true,
-            ranges_shown: [false; 7]
+            ranges_shown: [false; 9]
         }
     }
 
@@ -31,21 +34,82 @@ impl MemoryWidget {
         ctx.show_viewport_immediate(
             ViewportId::from_hash_of("memory panel"), 
             ViewportBuilder::default()
-                .with_inner_size([550., 600.])
+                .with_inner_size([560., 1000.])
+                .with_resizable(false)
+                .with_position([0., 0.])
                 .with_title("memory"), 
             |ctx, class| {
                 assert!(class == ViewportClass::Immediate);
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    // this is massive, so split into seperate function
-                    ui.label("memory table");
-                    ui.separator();
-
                     draw_grid(mem, &self.ranges_shown, ui);
                 });
 
                 egui::SidePanel::right("memory_select").show(ctx, |ui| {
-                    for i in 0..RANGES_NAMES.len() {
-                        ui.checkbox(&mut self.ranges_shown[i], RANGES_NAMES[i]);
+                    egui::ScrollArea::vertical()
+                        .scroll_bar_visibility(ScrollBarVisibility::VisibleWhenNeeded)
+                        .min_scrolled_height(ctx.screen_rect().height())
+                        .show(ui, |ui| {
+                        ui.heading("Memory ranges");
+                        for i in 0..RANGES_NAMES.len() {
+                            ui.checkbox(&mut self.ranges_shown[i], RANGES_NAMES[i]);
+                        }
+                        ui.separator();
+
+                        ui.heading("DMA registers");
+                        for dma in 0..4 {
+                            let dma_control = mem.read_u16(DMABaseAddress::Control as u32 + dma*0xC);
+                            let is_running = (dma_control >> 15) & 1 == 1;
+                            let headline_run_text = match is_running {
+                                true => "running",
+                                false => "dorment",
+                            };
+
+                            egui::CollapsingHeader::new(format!("DMA{dma}: {headline_run_text}")).show(ui, |ui| {
+                                ui.horizontal(|ui| {
+                                    let mut run_text = format!("{is_running}");
+
+                                    ui.add(Label::new(format!("is running:")));
+                                    ui.add(TextEdit::singleline(&mut run_text));
+                                });
+                                ui.horizontal(|ui| {
+                                    let mut control_text = format!("{:04X}", dma_control);
+                                    ui.label(format!("control:"));
+                                    ui.add(TextEdit::singleline(&mut control_text));
+                                });
+
+                                ui.horizontal(|ui| {
+                                    let src = mem.read_u32(DMABaseAddress::SAD as u32 + dma*0xC) & 0x0FFFFFFF;
+                                    let mut src_text = format!("{:08X}", src);
+                                    ui.label(format!("source:"));
+                                    ui.add(TextEdit::singleline(&mut src_text));
+                                });
+                                ui.horizontal(|ui| {
+                                    let dst = mem.read_u32(DMABaseAddress::DAD as u32 + dma*0xC) & 0x0FFFFFFF;
+                                    let mut dst_text = format!("{:08X}", dst);
+                                    ui.label(format!("destination:"));
+                                    ui.add(TextEdit::singleline(&mut dst_text));
+                                });ui.horizontal(|ui| {
+                                    let amount = mem.read_u32(DMABaseAddress::Amount as u32 + dma*0xC) & 0x0FFFFFFF;
+                                    let mut amount_text = format!("{:08X}", amount);
+                                    ui.label(format!("amount:"));
+                                    ui.add(TextEdit::singleline(&mut amount_text));
+                                });
+                            });
+                        }
+                    });
+                    
+
+                    ui.separator();
+                    ui.heading("timer registers");
+                    for i in 0..4 {
+                        let is_running = (mem.read_u16(0x4000100 + (i*4) + 2)) >> 7 & 1 == 1;
+                        let mut run_text = format!("{is_running}");
+                        let label_text = format!("Timer{i} running:");
+                        
+                        ui.horizontal(|ui| {
+                            ui.label(label_text);
+                            ui.add(TextEdit::singleline(&mut run_text));
+                        });
                     }
                 });
             }
@@ -53,7 +117,7 @@ impl MemoryWidget {
     }
 }
 
-fn draw_grid(mem: &Memory, ranges_shown: &[bool; 7], ui: &mut egui::Ui) {
+fn draw_grid(mem: &Memory, ranges_shown: &[bool; 9], ui: &mut egui::Ui) {
     if !ranges_shown.contains(&true) {
         return;
     }
@@ -88,7 +152,6 @@ fn draw_grid(mem: &Memory, ranges_shown: &[bool; 7], ui: &mut egui::Ui) {
                 if address % col_per_row == 0 {
                     ui.label(format!("{:07X}", address & 0xFFFFFFF0));
                 }
-
                 let data = mem.read_u8(address);
                 ui.label(RichText::new(format!("{data:02X}")).monospace());
 
@@ -102,11 +165,11 @@ fn draw_grid(mem: &Memory, ranges_shown: &[bool; 7], ui: &mut egui::Ui) {
 }
 
 fn scroll_range_to_addresses(
-    ranges_shown: &[bool; 7], 
-    mem_ranges: &[Range<u32>; 7], 
+    ranges_shown: &[bool; 9], 
+    mem_ranges: &[Range<u32>; 9], 
     scroll_range: Range<usize>
 ) -> Range<u32> {
-    for i in 0..7 {
+    for i in 0..9 {
         if !ranges_shown[i] { continue; }
         let bottom = mem_ranges[i].start + scroll_range.start as u32 * 16;
         // im not going to deal with when two different memory ranges overlap

@@ -11,6 +11,7 @@ use cpu::{
     handle_interrupts, 
     Cpu, Fde,
 };
+use joypad::init_joypad;
 use memory::*;
 use ppu::*;
 
@@ -29,7 +30,10 @@ impl Emulator {
             false => Cpu::new(),
         };
         let ppu = Ppu::new();
-        let memory = memory::create_memory(filename);
+        let mut memory = memory::create_memory(filename);
+        init_joypad(&mut memory);
+        memory.write_io(0x4000088, 0b0000_0010_0000_0000);
+
         let fde = Fde::new();
 
         Self {
@@ -59,11 +63,13 @@ pub fn run_single_step(emu: &mut Emulator) -> bool {
 
     let ahead_by = if emu.fde.fetched == None { 0 } else if emu.fde.decoded == None { 1 } else { 2 };
     handle_interrupts(&mut emu.mem, &mut emu.cpu, ahead_by);
+    if emu.cpu.halted {
+        return false;
+    }
     if emu.cpu.clear_pipeline {
         emu.fde.fetched = None;
         emu.fde.decoded = None;
         emu.cpu.clear_pipeline = false;
-        return false;
     }
 
     // Execute
@@ -75,11 +81,14 @@ pub fn run_single_step(emu: &mut Emulator) -> bool {
             Arm(instr) => execute_arm(emu.fde.decoded_opcode, instr, &mut emu.cpu, &mut emu.mem),
         };
 
+        if emu.mem.should_halt_cpu() {
+            emu.cpu.halted = true;
+        }
         if emu.cpu.clear_pipeline {
             emu.fde.fetched = None;
             emu.fde.decoded = None;
             emu.cpu.clear_pipeline = false;
-            return false;
+            return false; // TODO: check if it has to return
         }
     }
 

@@ -35,11 +35,6 @@ fn split_memory_address(address: u32) -> (u32, usize) {
     ((address >> 24) & 0xF, (address & 0xFFFFF) as usize)
 }
 
-const DMA_SAD: u32 = 0x40000B0;
-const DMA_DAD: u32 = 0x40000B4;
-const DMA_AMOUNT: u32 = 0x40000B8;
-const DMA_CONTROL: u32 = 0x40000BA;
-
 const EWRAM_LENGTH: usize = 0x40000;
 const IWRAM_LENGTH: usize = 0x8000;
 const VRAM_LENGTH: usize = 0x18000;
@@ -61,8 +56,14 @@ pub struct Memory {
 
     timer_resets: [u16; 4],
     dma_completions: [u32; 4],
+    should_halt_cpu: bool,
 }
 impl Memory {
+    pub fn should_halt_cpu(&mut self) -> bool {
+        let temp = self.should_halt_cpu;
+        self.should_halt_cpu = false;
+        temp
+    }
     pub fn read_u8(&self, address: u32) -> u8 {
         let (upp_add, low_add) = split_memory_address(address);
 
@@ -119,6 +120,10 @@ impl Memory {
     fn checked_write_u8(&mut self, address: u32, data: u8, is_8_bit: bool) {
         if address == 0x4000202 || address == 0x4000203 {
             self.io_reg[address as usize - 0x4000000] &= !data;
+            return;
+        }
+        // vcount is read only
+        if address == 0x4000006 || address == 0x4000007 {
             return;
         }
 
@@ -184,6 +189,11 @@ impl Memory {
     }
 
     pub fn write_u8(&mut self, address: u32, data: u8) {
+        if address == 0x4000301 {
+            self.should_halt_cpu = true;
+            return;
+        }
+
         self.checked_write_u8(address, data, true);
     }
 
@@ -214,7 +224,7 @@ impl Memory {
         self.io_reg[address + 1] = split.1;
     }
 
-    pub const fn get_memory_ranges() -> [std::ops::Range<u32>; 7] {
+    pub const fn get_memory_ranges() -> [std::ops::Range<u32>; 9] {
         return [
             0..0x00004000,
             0x02000000..0x02040000,
@@ -223,6 +233,8 @@ impl Memory {
             0x05000000..0x05000400,
             0x06000000..0x06018000,
             0x07000000..0x07000400,
+            0x08000000..0x0A000000,
+            0x0E000000..0x0E010000,
         ];
     }
 }
@@ -233,10 +245,18 @@ fn is_in_video_memory(upp_add: u32) -> bool {
 }
 
 // since DMA takes several cycles, its best to just have it be its own thing
+pub enum DMABaseAddress {
+    SAD = 0x40000B0,
+    DAD = 0x40000B4,
+    Amount = 0x40000B8,
+    Control = 0x40000BA,
+}
 pub fn dma_tick(mem: &mut Memory) -> bool {
+    use DMABaseAddress::*;
+
     let mut dma_transfer = None;
     for i in 0..=3 {
-        let cnt = mem.read_u16(DMA_CONTROL + i*0xC);
+        let cnt = mem.read_u16(Control as u32 + i*0xC);
         let is_on = (cnt >> 15) & 1 == 1;
 
         // highest priority goes 0 -> 3
@@ -252,9 +272,9 @@ pub fn dma_tick(mem: &mut Memory) -> bool {
     }
     let (i, cnt) = dma_transfer.unwrap();
 
-    let base_src_address = mem.read_u32(DMA_SAD + i*0xC) & 0xFFFFFFF; // top bits ignored
-    let base_dst_address = mem.read_u32(DMA_DAD + i*0xC) & 0xFFFFFFF; // top bits ignored
-    let cnt_l = mem.read_u16(DMA_AMOUNT + i *0xC) as u32;
+    let base_src_address = mem.read_u32(SAD as u32 + i*0xC) & 0x0FFFFFFF; // top bits ignored
+    let base_dst_address = mem.read_u32(DAD as u32 + i*0xC) & 0x0FFFFFFF; // top bits ignored
+    let cnt_l = mem.read_u16(Amount as u32 + i *0xC) as u32;
     let amount = match i {
         3 => match cnt_l {
             0 => 0x10000,
@@ -281,7 +301,13 @@ pub fn dma_tick(mem: &mut Memory) -> bool {
         0 => {}
         1 => if (dispstat >> 0) & 1 == 0 { return false; }
         2 => if (dispstat >> 1) & 1 == 0 { return false; }
-        3 => {}
+        3 => {
+            // special so must be false
+            assert!(base_dst_address == 0x40000A0 || base_dst_address == 0x40000A4);
+            // turn that shit off :P
+            mem.write_io(Control as u32 + i*0xC, cnt & 0x7FFF);
+            return false;
+        }
         _ => unreachable!(),
     }
 
@@ -317,7 +343,6 @@ pub fn dma_tick(mem: &mut Memory) -> bool {
             mem.dma_completions[i as usize] += 2;
         }
     }
-
     // DMA is finished
     let final_amount = match quantities {
         true => amount * 4,
@@ -338,7 +363,7 @@ pub fn dma_tick(mem: &mut Memory) -> bool {
         }
 
         // clear the top bit
-        mem.write_io(DMA_CONTROL + i*0xC, cnt & 0x7FFF);
+        mem.write_io(Control as u32 + i*0xC, cnt & 0x7FFF);
         return false;
     }
 
@@ -419,5 +444,6 @@ pub fn create_memory(file_name: &str) -> Box<Memory> {
 
         timer_resets: [0; 4],
         dma_completions: [0; 4],
+        should_halt_cpu: false,
     })
 }

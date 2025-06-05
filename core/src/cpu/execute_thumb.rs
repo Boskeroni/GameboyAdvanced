@@ -326,7 +326,7 @@ fn mem_offset(opcode: u16, cpu: &mut Cpu, memory: &mut Memory, uses_imm: bool) {
             let rd = cpu.get_register_mut(rd_index);
             match b_bit {
                 true => *rd = memory.read_u8(address) as u32,
-                false => *rd = memory.read_u32(address).rotate_right((address & 0b11) * 8),
+                false => *rd = memory.read_u32(address & !(0b11)).rotate_right((address & 0b11) * 8),
             }
         }
         false => {

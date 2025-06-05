@@ -1,4 +1,5 @@
 use core::panic;
+use std::fmt::format;
 use crate::cpu::decode::{decode_arm, DecodedArm, DecodedThumb};
 use super::decode::decode_thumb;
 
@@ -312,6 +313,45 @@ fn swi_assembly(opcode: u32) -> (String, String) {
 
     return (start, rest_of_line);
 }
+fn psr_assembly(opcode: u32) -> (String, String) {
+    let i_bit = (opcode >> 25) & 1 == 1;
+    let op_bit = (opcode >> 21) & 1 == 1;
+
+    let psr_string = match (opcode >> 22) & 1 == 1 {
+        true => "SPSR",
+        false => "CPSR"
+    }.to_string();
+    let start = match op_bit {
+        true => "MSR",
+        false => "MRS",
+    }.to_string();
+
+    let rest;
+    match op_bit {
+        true => { // MSR
+            let f_flag = (opcode >> 19) & 1 == 1;
+            let c_flag = (opcode >> 16) & 1 == 1;
+
+            let op2 = match i_bit {
+                true => barrel_shifter_assembly(opcode, true),
+                false => format!("r{}",opcode & 0xF),
+            }.to_string();
+
+            let msr_psr = match (f_flag, c_flag) {
+                (true, true) => psr_string,
+                (true, false) => format!("{psr_string}_flg"),
+                (false, true) => format!("{psr_string}_ctl"),
+                (false, false) => format!("{psr_string}")
+            };
+            rest = format!("{msr_psr}, {op2}");
+        }
+        false => { // MRS
+            let rd = (opcode >> 12) & 0xF;
+            rest = format!("r{rd}, {psr_string}");
+        }
+    }
+    return (start, rest);
+}
 fn data_processing_assembly(opcode: u32) -> (String, String) {
     let inner_opcode = (opcode >> 21) & 0xF;
     let name = match inner_opcode {
@@ -334,6 +374,11 @@ fn data_processing_assembly(opcode: u32) -> (String, String) {
         _ => unreachable!(),
     }.to_string();
     let mut rest_of_line = String::new();
+
+    let s_bit = (opcode >> 20) & 1 == 1;
+    if inner_opcode >= 0x8 && inner_opcode <= 0xb && s_bit {
+        return psr_assembly(opcode)
+    }
 
     let rn = (opcode >> 16) & 0xF;
     let rd = (opcode >> 12) & 0xF;

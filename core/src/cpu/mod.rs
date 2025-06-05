@@ -181,6 +181,7 @@ pub struct Cpu {
     pub many_banked_registers: [[u32; 6]; 2], 
     pub pc: u32,
     pub clear_pipeline: bool,
+    pub halted: bool,
 
     pub cpsr: Cpsr,
     pub spsr: [Cpsr; 6],
@@ -199,6 +200,7 @@ impl Cpu {
             barrel_shifter: false,
 
             clear_pipeline: false,
+            halted: false,
         }
     }
     pub fn from_bios() -> Self {
@@ -212,6 +214,7 @@ impl Cpu {
             barrel_shifter: false,
 
             clear_pipeline: false,
+            halted: false,
         }
     }
 
@@ -372,7 +375,7 @@ impl Cpu {
 use decode::DecodedInstruction;
 
 use crate::memory::Memory;
-enum CpuRegisters {
+pub enum CpuRegisters {
     Ie = 0x4000200,
     If = 0x4000202,
     Ime = 0x4000208,
@@ -387,16 +390,18 @@ pub fn handle_interrupts(memory: &mut Memory, cpu: &mut Cpu, ahead_by: u32) {
     }
 
     let interrupt_allowed = memory.read_u32(CpuRegisters::Ime as u32) & 1 == 1;
-    if !interrupt_allowed {
+    if !interrupt_allowed && !cpu.halted {
         return;
     }
     let interrupts_enabled = memory.read_u16(CpuRegisters::Ie as u32);
     let interrupts_called = memory.read_u16(CpuRegisters::If as u32);
-
     let called_interrupts = interrupts_enabled & interrupts_called;
     if called_interrupts == 0 {
         return;
     }
+
+    // just in case it was in halt mode
+    cpu.halted = false;
 
     let is_in_thumb = cpu.cpsr.t;
     let pc = cpu.get_register(15);

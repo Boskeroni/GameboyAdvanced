@@ -10,7 +10,7 @@ pub fn execute_arm(
     cpu: &mut Cpu,
     memory: &mut Memory,
 ) {
-    //println!("{:?} {:X}", assemblify::to_arm_assembly(opcode), opcode);
+    // println!("{:?} {:X}", assemblify::to_arm_assembly(opcode), opcode);
 
     // first check if we even have to do it
     let condition = opcode >> 28;

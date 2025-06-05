@@ -32,7 +32,13 @@ fn main() {
         false => debugger = None,
     }
 
-    let options = eframe::NativeOptions::default();
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_resizable(false)
+            .with_inner_size([SCREEN_WIDTH as f32 * SCREEN_RATIO, SCREEN_HEIGHT as f32 * SCREEN_RATIO])
+            .with_position([780., 0.]),
+        ..Default::default()
+    };
     let emulator_app = EmulatorApp::new(draw_recv, emu_send, debugger);
     eframe::run_native(
         "Emulator", 

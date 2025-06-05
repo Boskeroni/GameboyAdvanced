@@ -1,5 +1,5 @@
-use gba_core::{joypad::{self, init_joypad, joypad_press, joypad_release}, run_single_step, Emulator};
-use std::sync::{mpsc::{Receiver, SyncSender}, Arc};
+use gba_core::{joypad::{self, joypad_press, joypad_release}, run_single_step, Emulator};
+use std::{sync::{mpsc::{Receiver, SyncSender}, Arc}, thread, time::{Duration, Instant}};
 use egui::Key;
 use parking_lot::RwLock;
 
@@ -27,7 +27,7 @@ pub enum EmulatorSend {
 }
 #[derive(Debug, Clone, Copy)]
 pub enum EmulatorState {
-    Run,
+    Run(u32), // the delay (in milliseconds) each tick should wait
     Pause,
     Step,
     End,
@@ -38,18 +38,14 @@ pub fn run_emulator(
     redraw_send: SyncSender<Vec<u32>>,
     inp_recv: Receiver<EmulatorSend>,
 ) {
-    let mut emulator = emulator_arc.write();
-    init_joypad(&mut emulator.mem);
-    drop(emulator);
-
-    // since the lock needs to end, this is done in its own function
-    // also looks a bit cleaner
     let mut state = EmulatorState::Pause;
+    let mut drew_last_time = false;
     loop {
-        let redraw_needed = update_emulator(&emulator_arc, &mut state);
+        let redraw_needed = update_emulator(&emulator_arc, &mut state, &mut drew_last_time);
         if redraw_needed {
             let emulator = emulator_arc.read();
             redraw_send.send(emulator.ppu.stored_screen.clone()).unwrap();
+            drew_last_time = true;
         }
 
         if let Ok(i) = inp_recv.try_recv() {
@@ -69,18 +65,28 @@ pub fn run_emulator(
     }
 }
 
-fn update_emulator(emulator_arc: &Arc<RwLock<Emulator>>, state: &mut EmulatorState) -> bool {
+fn update_emulator(emulator_arc: &Arc<RwLock<Emulator>>, state: &mut EmulatorState, drew_before: &mut bool) -> bool {
     let mut emulator = emulator_arc.write();
+
+    // done like this cause it makes deadlocks impossible
+    // only one write
+    if *drew_before {
+        emulator.ppu.acknowledge_frame();
+        *drew_before = false;
+    }
+
     use EmulatorState::*;
     let redraw_needed = match state {
-        Run => {
-            emulator.ppu.acknowledge_frame();
-            loop {
+        Run(delay) => {
+            if *delay == 0 {
                 let finished = run_single_step(&mut emulator);
-                if finished {
-                    return true;
-                }
-            }; 
+                finished
+            } else {
+                let finished = run_single_step(&mut emulator);
+                thread::sleep(Duration::from_nanos(*delay as u64));
+                finished
+            }
+            
         }
         Step => run_single_step(&mut emulator),
         Pause => false,

@@ -1,3 +1,5 @@
+#![cfg(feature = "debug")]
+#![allow(unused)]
 use egui::{ViewportBuilder, ViewportClass, ViewportId};
 
 pub struct InstructionWidget {

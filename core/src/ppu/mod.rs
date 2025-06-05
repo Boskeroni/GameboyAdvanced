@@ -31,6 +31,7 @@ enum PpuRegisters {
     BGCnt = 0x4000008,
     BgHOffset = 0x4000010,
     BgVOffset = 0x4000012,
+    BgRotationBase = 0x4000020,
     _Mosaic = 0x400004C,
 }
 
@@ -64,10 +65,6 @@ impl Ppu {
 const DOTS_PER_FRAME: usize = (LCD_WIDTH + 68) * (LCD_HEIGHT + 68);
 pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
     let dispcnt = memory.read_u16(PpuRegisters::DispCnt as u32);
-    let forced_blank = (dispcnt >> 7) & 1 == 1;
-    if forced_blank {
-        return;
-    }
 
     // the line count we had last time, doesnt match the one this time
     let dispstat = memory.read_u16(PpuRegisters::DispStat as u32);
@@ -77,11 +74,11 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
     if new_line {
         if vcount < LCD_HEIGHT as u16 {
             // clear it for the new line
-            ppu.worked_on_line = [0; 240];
+            ppu.worked_on_line = [0; LCD_WIDTH];
             let bg_mode = dispcnt & 0b111;
             match bg_mode {
                 0 => bg_mode_0(ppu, memory, vcount as u32),
-                1 => bg_mode_1(ppu, memory, vcount),
+                1 => bg_mode_1(ppu, memory, vcount as u32),
                 2 => bg_mode_2(ppu, memory, vcount),
                 3 => bg_mode_3(ppu, memory, vcount),
                 4 => bg_mode_4(ppu, memory, vcount),
