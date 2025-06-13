@@ -39,10 +39,24 @@ const EWRAM_LENGTH: usize = 0x40000;
 const IWRAM_LENGTH: usize = 0x8000;
 const VRAM_LENGTH: usize = 0x18000;
 const IO_REG_LENGTH: usize = 0x400;
-const OBJ_PALL_LENGTH: usize = 0x400;
+const OBJ_PALL_LENGTH: usize = 0x400;   
 const OAM_LENGTH: usize = 0x400;
 // this could be wrong, just the max value is safer
 const SRAM_MAX_LENGTH: usize = 0x10000;
+
+pub trait Memoriable {
+    fn read_u8(&self, address: u32) -> u8;
+    fn read_u16(&self, address: u32) -> u16;
+    fn read_u32(&self, address: u32) -> u32;
+
+    fn write_u8(&mut self, address: u32, data: u8);
+    fn write_u16(&mut self, address: u32, data: u16);
+    fn write_u32(&mut self, address: u32, data: u32);
+    fn checked_write_u8(&mut self, address: u32, data: u8, is_8_bit: bool);
+
+    fn should_halt_cpu(&mut self) -> bool;
+    fn write_io(&mut self, address: u32, data: u16);
+}
 
 pub struct Memory {
     ewram: [u8; EWRAM_LENGTH], // WRAM - On-board Work RAM
@@ -58,13 +72,23 @@ pub struct Memory {
     dma_completions: [u32; 4],
     should_halt_cpu: bool,
 }
-impl Memory {
-    pub fn should_halt_cpu(&mut self) -> bool {
+impl Memoriable for Box<Memory> {
+    fn should_halt_cpu(&mut self) -> bool {
         let temp = self.should_halt_cpu;
         self.should_halt_cpu = false;
         temp
     }
-    pub fn read_u8(&self, address: u32) -> u8 {
+
+    /// avoids all of the checks, used just by the other sub-systems
+    fn write_io(&mut self, address: u32, data: u16) {
+        let address = (address as usize - 0x4000000) & !(0b1);
+        let split = lil_end_split_u16(data);
+
+        self.io_reg[address + 0] = split.0;
+        self.io_reg[address + 1] = split.1;
+    }
+
+    fn read_u8(&self, address: u32) -> u8 {
         let (upp_add, low_add) = split_memory_address(address);
 
         match upp_add {
@@ -96,8 +120,7 @@ impl Memory {
             },
         }
     }
-
-    pub fn read_u16(&self, address: u32) -> u16 {
+    fn read_u16(&self, address: u32) -> u16 {
         let base_address = address & !(0b1);
 
         lil_end_combine_u16(
@@ -105,8 +128,7 @@ impl Memory {
             self.read_u8(base_address + 1)
         )
     }
-
-    pub fn read_u32(&self, address: u32) -> u32 {
+    fn read_u32(&self, address: u32) -> u32 {
         let base_address = address & !(0b11);
 
         lil_end_combine_u32(
@@ -188,7 +210,7 @@ impl Memory {
         };
     }
 
-    pub fn write_u8(&mut self, address: u32, data: u8) {
+    fn write_u8(&mut self, address: u32, data: u8) {
         if address == 0x4000301 {
             self.should_halt_cpu = true;
             return;
@@ -197,7 +219,7 @@ impl Memory {
         self.checked_write_u8(address, data, true);
     }
 
-    pub fn write_u16(&mut self, address: u32, data: u16) {
+    fn write_u16(&mut self, address: u32, data: u16) {
         let split = lil_end_split_u16(data);
         let address = address & !(0b1);
 
@@ -205,7 +227,7 @@ impl Memory {
         self.checked_write_u8(address + 1, split.1, false);
     }
 
-    pub fn write_u32(&mut self, address: u32, data: u32) {
+    fn write_u32(&mut self, address: u32, data: u32) {
         let split = lil_end_split_u32(data);
         let address = address & !(0b11);
 
@@ -214,34 +236,25 @@ impl Memory {
         self.checked_write_u8(address + 2, split.2, false);
         self.checked_write_u8(address + 3, split.3, false);
     }
-
-    /// avoids all of the checks, used just by the other sub-systems
-    pub fn write_io(&mut self, address: u32, data: u16) {
-        let address = (address as usize - 0x4000000) & !(0b1);
-        let split = lil_end_split_u16(data);
-
-        self.io_reg[address + 0] = split.0;
-        self.io_reg[address + 1] = split.1;
-    }
-
-    pub const fn get_memory_ranges() -> [std::ops::Range<u32>; 9] {
-        return [
-            0..0x00004000,
-            0x02000000..0x02040000,
-            0x03000000..0x03008000,
-            0x04000000..0x040003FF,
-            0x05000000..0x05000400,
-            0x06000000..0x06018000,
-            0x07000000..0x07000400,
-            0x08000000..0x0A000000,
-            0x0E000000..0x0E010000,
-        ];
-    }
 }
 
 #[inline]
 fn is_in_video_memory(upp_add: u32) -> bool {
     return (upp_add == 0x5) | (upp_add == 0x6) | (upp_add == 0x7);
+}
+
+pub const fn get_memory_ranges() -> [std::ops::Range<u32>; 9] {
+    return [
+        0..0x00004000,
+        0x02000000..0x02040000,
+        0x03000000..0x03008000,
+        0x04000000..0x040003FF,
+        0x05000000..0x05000400,
+        0x06000000..0x06018000,
+        0x07000000..0x07000400,
+        0x08000000..0x0A000000,
+        0x0E000000..0x0E010000,
+    ];
 }
 
 // since DMA takes several cycles, its best to just have it be its own thing
@@ -251,7 +264,7 @@ pub enum DMABaseAddress {
     Amount = 0x40000B8,
     Control = 0x40000BA,
 }
-pub fn dma_tick(mem: &mut Memory) -> bool {
+pub fn dma_tick(mem: &mut Box<Memory>) -> bool {
     use DMABaseAddress::*;
 
     let mut dma_transfer = None;
@@ -372,7 +385,7 @@ pub fn dma_tick(mem: &mut Memory) -> bool {
 
 
 const BASE_TIMER_ADDRESS: u32 = 0x4000100;
-pub fn update_timer(memory: &mut Memory, old_cycles: &mut u32, new_cycles: u32) {
+pub fn update_timer(memory: &mut Box<Memory>, old_cycles: &mut u32, new_cycles: u32) {
     let total_cycles = *old_cycles + new_cycles;
     let mut prev_cascade = false;
 

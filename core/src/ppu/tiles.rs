@@ -1,7 +1,8 @@
 use crate::memory::Memory; 
+use crate::memory::Memoriable;
 use super::{Ppu, PpuRegisters, PALETTE_BASE, VRAM_BASE};
 
-pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory, line: u32) {
+pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Box<Memory>, line: u32) {
     let backgrounds = get_background_priorities(memory, vec![0, 1, 2, 3]);
     if backgrounds.is_empty() {
         return;
@@ -28,7 +29,7 @@ pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Memory, line: u32) {
     }
 }
 
-pub fn bg_mode_1(ppu: &mut Ppu, memory: &mut Memory, line: u32) { 
+pub fn bg_mode_1(ppu: &mut Ppu, memory: &mut Box<Memory>, line: u32) { 
     let backgrounds = get_background_priorities(memory, vec![0, 1, 2]);
     if backgrounds.is_empty() {
         return;
@@ -64,7 +65,7 @@ pub fn bg_mode_2(ppu: &mut Ppu, memory: &mut Memory, line: u16) {
 
 /// returns all the backgrounds in order of priority
 /// first number is the background number, second is its priority
-fn get_background_priorities(memory: &Memory, available_bgs: Vec<u32>) -> Vec<(u8, u8)> {
+fn get_background_priorities(memory: &Box<Memory>, available_bgs: Vec<u32>) -> Vec<(u8, u8)> {
     let disp_cnt = memory.read_u16(PpuRegisters::DispCnt as u32);
 
     let mut priorities = vec![Vec::new(); 4];
@@ -79,7 +80,7 @@ fn get_background_priorities(memory: &Memory, available_bgs: Vec<u32>) -> Vec<(u
     priorities.into_iter().flatten().collect()
 }
 
-fn rotation_mode_scanline(line: u32, bg: u32, memory: &Memory) -> Vec<u8> {
+fn rotation_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
     let bg_cnt = memory.read_u16(PpuRegisters::BGCnt as u32 + bg * 2);
 
     let base = PpuRegisters::BgRotationBase as u32 + (bg - 2) * 0x10;
@@ -113,7 +114,7 @@ fn rotation_mode_scanline(line: u32, bg: u32, memory: &Memory) -> Vec<u8> {
     todo!();
 }
 // when i remember what this does, i will put a comment here
-fn text_mode_scanline(line: u32, bg: u32, memory: &Memory) -> Vec<u8> {
+fn text_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
     let bg_cnt = memory.read_u16(PpuRegisters::BGCnt as u32 + bg * 2);
 
     // all the variables stored within the bg_cnt register

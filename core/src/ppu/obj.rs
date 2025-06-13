@@ -1,4 +1,4 @@
-use crate::memory::Memory;
+use crate::memory::{Memoriable, Memory};
 use super::Ppu;
 
 const OAM: u32 = 0x7000000;
@@ -9,7 +9,7 @@ const TILE_CHAR_BLOCK: u32 = 0x6010000;
 /// on priorities) to the PPU's worked_on_line. Honestly, so much stuff is happening in this
 /// function that I have had to split it into so many subfunctions just to make it somewhat coherent
 /// (which it really isn't).
-pub fn oam_scan(ppu: &mut Ppu, mem: &Memory, vcount: u16, dispcnt: u16) {
+pub fn oam_scan(ppu: &mut Ppu, mem: &Box<Memory>, vcount: u16, dispcnt: u16) {
     let two_dimensional_mapping = (dispcnt >> 6) & 1 == 0;
 
     for obj in 0..=127 {
@@ -62,7 +62,7 @@ const SIZE_GRIDS: [[(u16, u16); 3]; 4] = [
 /// looed at tile. This returns just an empty list if it doesn't output any pixels to the current line.
 /// Once again trying to make it readable but that is quite a struggle.
 fn load_obj(
-    mem: &Memory, 
+    mem: &Box<Memory>, 
     obj0: u16, obj1: u16, obj2: u16, 
     vcount: u16,
     two_dimensional: bool

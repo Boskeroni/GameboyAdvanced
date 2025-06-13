@@ -2,6 +2,8 @@
 mod debug;
 use debug::Debugger;
 
+mod json_tests;
+
 mod emulator;
 use egui::{Color32, Event, Frame, TextureOptions};
 use emulator::{run_emulator, EmulatorSend};
@@ -13,7 +15,13 @@ use std::sync::{mpsc, Arc};
 use std::env;
 use std::thread;
 
+const JSON_TESTS: bool = true;
 fn main() {
+    if JSON_TESTS {
+        json_tests::perform_tests();
+        return;
+    }
+
     let file = env::args().nth(1).unwrap();
     let rom_path = format!("roms/{file}");
     let emulator_ref = Arc::new(RwLock::new(Emulator::new(&rom_path)));

@@ -1,7 +1,8 @@
 use crate::memory::Memory;
+use crate::memory::Memoriable;
 use super::{Ppu, PpuRegisters, PALETTE_BASE};
 
-pub fn bg_mode_3(ppu: &mut Ppu, memory: &mut Memory, line: u16) {
+pub fn bg_mode_3(ppu: &mut Ppu, memory: &mut Box<Memory>, line: u16) {
     let start = 0x6000000 + (line as u32 * 480); // screen width * 2
     for i in 0..240 {
         let pixel = memory.read_u16(start + i*2);
@@ -11,7 +12,7 @@ pub fn bg_mode_3(ppu: &mut Ppu, memory: &mut Memory, line: u16) {
 }
 
 // TODO: this isn't always displaying text for some reason, maybe not a mode_4 issue
-pub fn bg_mode_4(ppu: &mut Ppu, memory: &mut Memory, line: u16) {
+pub fn bg_mode_4(ppu: &mut Ppu, memory: &mut Box<Memory>, line: u16) {
     let dispcnt = memory.read_u16(PpuRegisters::DispCnt as u32);
     let displayed_frame = (dispcnt >> 4) & 1 == 1;
 
@@ -30,7 +31,7 @@ pub fn bg_mode_4(ppu: &mut Ppu, memory: &mut Memory, line: u16) {
     ppu.pixel_priorities = vec![0; 240];
 }
 
-pub fn bg_mode_5(ppu: &mut Ppu, memory: &mut Memory, line: u16) {
+pub fn bg_mode_5(ppu: &mut Ppu, memory: &mut Box<Memory>, line: u16) {
     let (width, height) = (160, 128);
     if line >= height {
         ppu.worked_on_line = [0; 240];

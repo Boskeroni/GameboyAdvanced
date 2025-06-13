@@ -3,6 +3,7 @@ pub mod execute_thumb;
 pub mod decode;
 pub mod assemblify;
 
+use crate::memory::*;
 /// several different instructions make use of this behaviour
 /// I'm not sure if they all function the same but I have no reason to believe otherwise
 /// both the shifted value and the carry flag are returned
@@ -171,6 +172,27 @@ pub fn convert_psr_u32(cpsr: &Cpsr) -> u32 {
     (cpsr.t as u32) << 5  |
     (cpsr.mode as u32)
 }
+pub fn convert_u32_psr(cpsr: u32) -> Cpsr {
+    Cpsr {
+        n: cpsr >> 31 & 1 == 1,
+        z: cpsr >> 30 & 1 == 1,
+        c: cpsr >> 29 & 1 == 1,
+        v: cpsr >> 28 & 1 == 1,
+        i: cpsr >> 7 & 1 == 1,
+        f: cpsr >> 6 & 1 == 1,
+        t: cpsr >> 5 & 1 == 1,
+        mode: match cpsr & 0b11111 {
+            0b10000 => ProcessorMode::User,
+            0b10001 => ProcessorMode::FastInterrupt,
+            0b10010 => ProcessorMode::Interrupt,
+            0b10011 => ProcessorMode::Supervisor,
+            0b10111 => ProcessorMode::Abort,
+            0b11011 => ProcessorMode::Undefined,
+            0b11111 => ProcessorMode::System,
+            _ => ProcessorMode::Undefined,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Cpu {
@@ -186,7 +208,7 @@ pub struct Cpu {
     pub cpsr: Cpsr,
     pub spsr: [Cpsr; 6],
 
-    barrel_shifter: bool,
+    pub barrel_shifter: bool,
 }
 impl Cpu {
     pub fn new() -> Self {
@@ -373,8 +395,6 @@ impl Cpu {
 
 
 use decode::DecodedInstruction;
-
-use crate::memory::Memory;
 pub enum CpuRegisters {
     Ie = 0x4000200,
     If = 0x4000202,
@@ -384,7 +404,7 @@ pub enum CpuRegisters {
 /// the ahead_by variable represents how many instructions the pc is
 /// it is multiplied by 4 for ARM, and 2 for Thumb.
 /// Just intended for callbacks
-pub fn handle_interrupts(memory: &mut Memory, cpu: &mut Cpu, ahead_by: u32) {
+pub fn handle_interrupts(memory: &mut Box<Memory>, cpu: &mut Cpu, ahead_by: u32) {
     if cpu.cpsr.i {
         return;
     }

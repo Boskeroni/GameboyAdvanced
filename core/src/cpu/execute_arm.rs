@@ -4,13 +4,13 @@ use super::*;
 use super::decode::DecodedArm;
 use super::get_shifted_value;
 
-pub fn execute_arm(
+pub fn execute_arm<M: Memoriable>(
     opcode: u32, 
     decoded_arm: DecodedArm,
     cpu: &mut Cpu,
-    memory: &mut Memory,
+    memory: &mut M,
 ) {
-    // println!("{:?} {:X}", assemblify::to_arm_assembly(opcode), opcode);
+    //println!("{:?} {:X}", assemblify::to_arm_assembly(opcode), opcode);
 
     // first check if we even have to do it
     let condition = opcode >> 28;
@@ -357,7 +357,7 @@ fn software_interrupt(cpu: &mut Cpu) {
     *change_pc = 0x08;
     cpu.clear_pipeline = true;
 }
-fn data_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
+fn data_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
     let rd_index = (opcode >> 12) as u8 & 0xF;
     let rn_index = (opcode >> 16) as u8 & 0xF;
 
@@ -425,7 +425,7 @@ fn data_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
 }
 /// this function handles both the immediate and register offsets
 /// Both pretty much have identical implementation besides for data acquisition
-fn halfword_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
+fn halfword_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
     let rd_index = (opcode >> 12) as u8 & 0xF;
     let rn_index = (opcode >> 16) as u8 & 0xF;
 
@@ -534,7 +534,7 @@ fn halfword_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
         *rn = address;
     }
 }
-fn block_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
+fn block_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
     let mut rlist = opcode & 0xFFFF;
     let r15_in_list = (rlist >> 15) & 1 == 1;
     let started_empty = rlist == 0;
@@ -657,7 +657,7 @@ fn block_transfer(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
         }
     }
 }
-fn single_swap(opcode: u32, cpu: &mut Cpu, memory: &mut Memory) {
+fn single_swap<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
     // for now just have them happen at the same time
     let rn_index = (opcode >> 16) as u8 & 0xF;
     let rm_index = opcode as u8 & 0xF;

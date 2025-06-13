@@ -1,4 +1,4 @@
-use crate::memory::Memory;
+use crate::memory::{Memoriable, Memory};
 
 const LCD_HEIGHT: usize = 160;
 const LCD_WIDTH: usize = 240;
@@ -63,7 +63,7 @@ impl Ppu {
     }
 }
 const DOTS_PER_FRAME: usize = (LCD_WIDTH + 68) * (LCD_HEIGHT + 68);
-pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
+pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Box<Memory>) {
     let dispcnt = memory.read_u16(PpuRegisters::DispCnt as u32);
 
     // the line count we had last time, doesnt match the one this time
@@ -105,7 +105,7 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Memory) {
 
     update_registers(ppu, memory, dispstat, vcount);
 }
-fn update_registers(ppu: &mut Ppu, memory: &mut Memory, mut dispstat: u16, vcount: u16) {
+fn update_registers(ppu: &mut Ppu, memory: &mut Box<Memory>, mut dispstat: u16, vcount: u16) {
     // work in progress
     ppu.elapsed_time += 1;
     
