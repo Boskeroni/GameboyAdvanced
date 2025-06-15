@@ -1,5 +1,3 @@
-use crate::memory::Memory;
-
 use super::*;
 use super::decode::DecodedArm;
 use super::get_shifted_value;
@@ -63,12 +61,16 @@ fn branch_exchange(opcode: u32, cpu: &mut Cpu) {
     let rn = cpu.get_register(rn_index);
     let pc = cpu.get_register_mut(15);
 
+    *pc = rn;
     match rn & 1 == 1 {
         true => {
-            *pc = rn & !(0x1);
+            *pc &= !(0x1);
             cpu.cpsr.t = true;
         }
-        false => *pc = rn & !(0x3),
+        false => {
+            *pc &= !(0x3);
+            cpu.cpsr.t = false; // not fully needed but safe
+        },
     }
     cpu.clear_pipeline = true;
 }
@@ -96,7 +98,10 @@ fn data_processing(opcode: u32, cpu: &mut Cpu) {
 
             // i am just assuming that the carry bit functions in the same way
             // that the ROR carry bit works
-            op2_carry = (op2 >> 31) & 1 != 0;
+            match shift_amount {
+                0 => op2_carry = cpu.cpsr.c,
+                _ => op2_carry = (op2 >> 31) & 1 == 1,
+            }
         }
         // operand 2 is a register
         false => (op2, op2_carry) = get_shifted_value(cpu, opcode),
@@ -187,6 +192,12 @@ fn data_processing(opcode: u32, cpu: &mut Cpu) {
         cpu.cpsr.v = v_backup;
     }
 
+    if s_bit {
+        cpu.cpsr.z = result == 0;
+        cpu.cpsr.n = (result >> 31) & 1 == 1;
+        cpu.cpsr.c = alu_carry;      
+    }
+
     if rd_index == 15 && s_bit {
         let pc = cpu.get_register_mut(rd_index);
         if !undo {
@@ -197,14 +208,8 @@ fn data_processing(opcode: u32, cpu: &mut Cpu) {
         cpu.cpsr = *cpu.get_spsr();
         return;
     }
-
-    if s_bit {
-        cpu.cpsr.z = result == 0;
-        cpu.cpsr.n = (result >> 31) & 1 == 1;
-        cpu.cpsr.c = alu_carry;
-        if undo {
-            return;
-        }
+    if undo {
+        return;
     }
 
     cpu.clear_pipeline = rd_index == 15;
@@ -233,13 +238,24 @@ fn psr_transfer(opcode: u32, cpu: &mut Cpu) {
                     cpu.get_register(rm_index)
                 }
             };
+            let mode_clone = cpu.cpsr.mode;
+
             let psr = match psr_bit {
-                true => cpu.get_spsr_mut(),
+                true => {
+                    // writes are ignored for user and system mode
+                    if let ProcessorMode::User | ProcessorMode::System = cpu.cpsr.mode {
+                        return;
+                    }
+                    cpu.get_spsr_mut()
+                }
                 false => &mut cpu.cpsr,
             };
 
             if f_bit {
                 psr.set_flags(operand);
+            }
+            if let ProcessorMode::User = mode_clone {
+                return;
             }
             if c_bit {
                 psr.set_control(operand);
@@ -265,10 +281,6 @@ fn multiply(opcode: u32, cpu: &mut Cpu) {
     let rs_index = (opcode >> 8)  as u8 & 0xF;
     let rm_index = opcode         as u8 & 0xF;
 
-    if rn_index == 15 || rd_index == 15 || rs_index == 15 || rm_index == 15 {
-        panic!("register 15 cannot be used as an operand or destination");
-    }
-
     let rn = cpu.get_register(rn_index);
     let rs = cpu.get_register(rs_index);
     let rm = cpu.get_register(rm_index);
@@ -292,14 +304,6 @@ fn multiply_long(opcode: u32, cpu: &mut Cpu) {
     let rs_index = (opcode >> 8)   as u8 & 0xF;
     let rdl_index = (opcode >> 12) as u8 & 0xF;
     let rdh_index = (opcode >> 16) as u8 & 0xF;
-
-    // operand restrictions as usual
-    if rm_index == 15 || rs_index == 15 || rdh_index == 15 || rdl_index == 15 {
-        panic!("register 15 cannot be used as an operand or destination");
-    }
-    if rm_index == rdh_index || rdh_index == rdl_index || rdl_index == rm_index {
-        panic!("rdh, rdl, and rm must all be different from eachother");
-    }
 
     let rm = cpu.get_register(rm_index);
     let rs = cpu.get_register(rs_index);
@@ -421,117 +425,112 @@ fn data_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
         let rn = cpu.get_register_mut(rn_index);
         // this address has changed and is being written back
         *rn = address;
+        if rn_index == 15 {
+            *rn += 4;
+        }
+        cpu.clear_pipeline |= rn_index == 15;
     }
 }
 /// this function handles both the immediate and register offsets
 /// Both pretty much have identical implementation besides for data acquisition
 fn halfword_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
+    let p_bit = (opcode >> 24) & 1 == 1;
+    let u_bit = (opcode >> 23) & 1 == 1;
+    let i_bit = (opcode >> 22) & 1 == 1;
+    let w_bit = (opcode >> 21) & 1 == 1;
+    let l_bit = (opcode >> 20) & 1 == 1;
+    let s_bit = (opcode >> 6)  & 1 == 1;
+    let h_bit = (opcode >> 5)  & 1 == 1;
+
     let rd_index = (opcode >> 12) as u8 & 0xF;
     let rn_index = (opcode >> 16) as u8 & 0xF;
 
     let mut address = cpu.get_register(rn_index);
+    let offset = match i_bit {
+        true => (opcode & 0xF) | ((opcode >> 4) & 0xF0),
+        false => cpu.get_register(opcode as u8 & 0xF),
+    };
 
-    let offset;
-    // this bit decides how it is interpreted
-    let offset_type = (opcode >> 22) & 1 == 1;
-    match offset_type {
-        true => {
-            offset = (opcode & 0xF) | (opcode >> 4) & 0xF0;
-        }
-        false => {
-            let rm_index = opcode as u8 & 0xF;
-            offset = cpu.get_register(rm_index);
-        }
-    }
-
-    let p_bit = (opcode >> 24) & 1 == 1;
-    let u_bit = (opcode >> 23) & 1 == 1;
+    // pre-indexed
     if p_bit {
         match u_bit {
-            true => address += offset,
-            false => address -= offset,
+            true => address = address.wrapping_add(offset),
+            false => address =  address.wrapping_sub(offset),
         }
     }
 
-    // the reading of the memory
-    let sh = (opcode >> 5) as u8 & 0b11;
-    let l_bit = (opcode >> 20) & 1 == 1;
-    match sh {
-        0b00 => unreachable!("unreachable due to decoding"),
-        0b01 => {
-            //Unsigned halfwords
-            match l_bit {
-                true => {
+    // need to clear pipeline
+    if l_bit && rd_index == 15 {
+        cpu.clear_pipeline = true;
+    }
+
+    // the processing part
+    match l_bit {
+        false => {
+            assert!(!s_bit, "s-bit must be false");
+            assert!(h_bit, "h-bit must be set");
+
+            let rd = cpu.get_register(rd_index);
+            memory.write_u16(address, rd as u16);
+        }
+        true => {
+            match (s_bit, h_bit) {
+                (false, true) => {
                     let rd = cpu.get_register_mut(rd_index);
-                    *rd = (memory.read_u16(address & !(0b1)) as u32).rotate_right((address % 2) * 8);
-                    if rd_index == rn_index {
-                        return;
-                    }
+                    *rd = (memory.read_u16(address) as u32).rotate_right((address & 1) * 8);
                 }
-                false => {
-                    let rd = cpu.get_register(rd_index);
-                    memory.write_u16(address, rd as u16);
-                }
-            }
-        }
-        0b10 => {
-            // Signed byte
-            // loads shouldn't happen when its signed
-            assert!(l_bit, "L bit should not be set low");
-
-            let mut raw_reading = memory.read_u8(address) as u32;
-            if (raw_reading >> 7) & 1 == 1 {
-                raw_reading |= 0xFFFFFF00;
-            }
-
-            let rd = cpu.get_register_mut(rd_index);
-            *rd = raw_reading;
-            if rd_index == rn_index {
-                return;
-            }
-        }
-        0b11 => {
-            // signed halfword
-            assert!(l_bit, "L bit should not be set low");
-
-            let mut raw_reading;
-            let is_aligned = address & 1 == 1;
-            match is_aligned {
-                true => {
-                    raw_reading = memory.read_u8(address) as u32;
+                (true, false) => {
+                    let mut raw_reading = memory.read_u8(address) as u32;
                     if (raw_reading >> 7) & 1 == 1 {
                         raw_reading |= 0xFFFFFF00;
                     }
-                },
-                false => {
-                    raw_reading = memory.read_u16(address & !(1)) as u32;
-                    if (raw_reading >> 15) & 1 == 1 {
-                        raw_reading |= 0xFFFF0000;
-                    }
-                }
-            }
 
-            let rd = cpu.get_register_mut(rd_index);
-            *rd = raw_reading;
-            if rd_index == rn_index {
-                return;
+                    let rd = cpu.get_register_mut(rd_index);
+                    *rd = raw_reading;
+                }
+                (true, true) => {
+                    let mut raw_reading;
+                    let is_aligned = address & 1 == 1;
+                    match is_aligned {
+                        true => {
+                            raw_reading = (memory.read_u16(address) as u32) >> 8;
+                            if (raw_reading >> 7) & 1 == 1 {
+                                raw_reading |= 0xFFFFFF00;
+                            }
+                        },
+                        false => {
+                            raw_reading = memory.read_u16(address) as u32;
+                            if (raw_reading >> 15) & 1 == 1 {
+                                raw_reading |= 0xFFFF0000;
+                            }
+                        }
+                    }
+
+                    let rd = cpu.get_register_mut(rd_index);
+                    *rd = raw_reading;
+                }
+                _ => unreachable!(),
             }
+            cpu.clear_pipeline |= rd_index == 15;
         }
-        _ => unreachable!()
     }
-    
     if !p_bit {
         match u_bit {
-            true => address += offset,
-            false => address -= offset,
+            true => address = address.wrapping_add(offset),
+            false => address = address.wrapping_sub(offset),
         }
     }
+    if rd_index == rn_index && l_bit {
+        return;
+    }
 
-    let write_back = (opcode >> 21) & 1 == 1;
-    if write_back || !p_bit {
-        assert!(rn_index != 15);
+    if w_bit || !p_bit {
         let rn = cpu.get_register_mut(rn_index);
         *rn = address;
+        if rn_index == 15 {
+            *rn += 4;
+        }
+        cpu.clear_pipeline |= rn_index == 15;
     }
 }
 fn block_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
@@ -541,7 +540,6 @@ fn block_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
     if started_empty {
         rlist |= 0x8000;
     }
-
 
     let l_bit = (opcode >> 20) & 1 == 1;
     let w_bit = (opcode >> 21) & 1 == 1;
@@ -583,10 +581,12 @@ fn block_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
         true => {
             while rlist != 0 {
                 if p_bit == u_bit {
-                current_address += 4;
+                    current_address += 4;
                 }
 
                 let next_r = rlist.trailing_zeros();
+                let rb = cpu.get_register_mut_specific(next_r as u8, used_mode);
+                *rb = memory.read_u32(current_address);
 
                 // LDM with r15 in transfer list and s bit set (mode changes)
                 if next_r == 15 {
@@ -595,9 +595,6 @@ fn block_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
                     }
                     cpu.clear_pipeline = true;
                 }
-
-                let rb = cpu.get_register_mut_specific(next_r as u8, used_mode);
-                *rb = memory.read_u32(current_address);
 
                 if p_bit != u_bit {
                     current_address += 4;
@@ -642,7 +639,11 @@ fn block_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
     }
 
     if w_bit {
-        let rn_mut = cpu.get_register_mut(rn_index as u8);
+        if rn_index == 15 {
+            cpu.clear_pipeline = true;
+        }
+        let rn_mut = cpu.get_register_mut_specific(rn_index as u8, used_mode);
+
         if started_empty {
             match u_bit {
                 true => *rn_mut = starting_base + 0x40,

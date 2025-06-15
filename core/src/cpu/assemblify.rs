@@ -1,5 +1,3 @@
-use core::panic;
-use std::fmt::format;
 use crate::cpu::decode::{decode_arm, DecodedArm, DecodedThumb};
 use super::decode::decode_thumb;
 

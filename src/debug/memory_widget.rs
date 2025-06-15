@@ -1,4 +1,5 @@
 #![cfg(feature = "debug")]
+use gba_core::memory::{self, Memoriable};
 
 use egui::{Label, TextEdit};
 use gba_core::memory::{DMABaseAddress, Memory};
@@ -30,7 +31,7 @@ impl MemoryWidget {
         }
     }
 
-    pub fn draw(&mut self, mem: &Memory, ctx: &egui::Context) {
+    pub fn draw(&mut self, mem: &Box<Memory>, ctx: &egui::Context) {
         ctx.show_viewport_immediate(
             ViewportId::from_hash_of("memory panel"), 
             ViewportBuilder::default()
@@ -117,13 +118,13 @@ impl MemoryWidget {
     }
 }
 
-fn draw_grid(mem: &Memory, ranges_shown: &[bool; 9], ui: &mut egui::Ui) {
+fn draw_grid(mem: &Box<Memory>, ranges_shown: &[bool; 9], ui: &mut egui::Ui) {
     if !ranges_shown.contains(&true) {
         return;
     }
 
     let col_per_row = 16;
-    let mem_ranges = Memory::get_memory_ranges();
+    let mem_ranges = memory::get_memory_ranges();
     let total_rows = {
         let mut count = 0;
         for i in 0..ranges_shown.len() {

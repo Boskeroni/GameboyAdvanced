@@ -52,10 +52,6 @@ pub trait Memoriable {
     fn write_u8(&mut self, address: u32, data: u8);
     fn write_u16(&mut self, address: u32, data: u16);
     fn write_u32(&mut self, address: u32, data: u32);
-    fn checked_write_u8(&mut self, address: u32, data: u8, is_8_bit: bool);
-
-    fn should_halt_cpu(&mut self) -> bool;
-    fn write_io(&mut self, address: u32, data: u16);
 }
 
 pub struct Memory {
@@ -72,15 +68,15 @@ pub struct Memory {
     dma_completions: [u32; 4],
     should_halt_cpu: bool,
 }
-impl Memoriable for Box<Memory> {
-    fn should_halt_cpu(&mut self) -> bool {
+impl Memory {
+    pub fn should_halt_cpu(&mut self) -> bool {
         let temp = self.should_halt_cpu;
         self.should_halt_cpu = false;
         temp
     }
 
     /// avoids all of the checks, used just by the other sub-systems
-    fn write_io(&mut self, address: u32, data: u16) {
+    pub fn write_io(&mut self, address: u32, data: u16) {
         let address = (address as usize - 0x4000000) & !(0b1);
         let split = lil_end_split_u16(data);
 
@@ -88,58 +84,7 @@ impl Memoriable for Box<Memory> {
         self.io_reg[address + 1] = split.1;
     }
 
-    fn read_u8(&self, address: u32) -> u8 {
-        let (upp_add, low_add) = split_memory_address(address);
-
-        match upp_add {
-            0x0 => BIOS[low_add % BIOS.len()],
-            0x2 => self.ewram[low_add % EWRAM_LENGTH],
-            0x3 => self.iwram[low_add % IWRAM_LENGTH],
-            0x4 => self.io_reg[low_add % IO_REG_LENGTH],
-            0x5 => self.obj_pall[low_add % OBJ_PALL_LENGTH],
-            0x6 => {
-                // 64k-32k (then the 32k is mirrored again) (then everything is mirrored again)
-                let base = low_add % 0x20000;
-                if base >= 0x10000 {
-                    return self.vram[0x10000 + (base % 0x8000)]
-                }
-                self.vram[base]
-            }
-            0x7 => self.oam[low_add % OAM_LENGTH],
-            0xE => self.sram[low_add % SRAM_MAX_LENGTH],
-            _ => { // assuming this is just ROM
-                // deals with the mirrors
-                // this will be more important once I start dealing with timings
-                // let unmirrored_address = (address % 0x2000000) + 0x8000000;
-
-                // this is just cause some games store this in prefetch but don't use it
-                if low_add >= self.gp_rom.len() {
-                    return 0x00;
-                }
-                self.gp_rom[low_add]
-            },
-        }
-    }
-    fn read_u16(&self, address: u32) -> u16 {
-        let base_address = address & !(0b1);
-
-        lil_end_combine_u16(
-            self.read_u8(base_address + 0), 
-            self.read_u8(base_address + 1)
-        )
-    }
-    fn read_u32(&self, address: u32) -> u32 {
-        let base_address = address & !(0b11);
-
-        lil_end_combine_u32(
-            self.read_u8(base_address + 0), 
-            self.read_u8(base_address + 1), 
-            self.read_u8(base_address + 2), 
-            self.read_u8(base_address + 3),
-        )
-    }
-
-    fn checked_write_u8(&mut self, address: u32, data: u8, is_8_bit: bool) {
+    pub fn checked_write_u8(&mut self, address: u32, data: u8, is_8_bit: bool) {
         if address == 0x4000202 || address == 0x4000203 {
             self.io_reg[address as usize - 0x4000000] &= !data;
             return;
@@ -193,7 +138,7 @@ impl Memoriable for Box<Memory> {
 
             // just mirrors it up and down
             // since should be recursive as is_8_bit will be set to false
-            self.write_u16(address & !1, (data as u16) * 0x101);
+            self.write_io(address & !1, (data as u16) * 0x101);
             return;
         }
 
@@ -208,6 +153,58 @@ impl Memoriable for Box<Memory> {
             0xE => self.sram[low_add % SRAM_MAX_LENGTH] = data,
             _ => {},
         };
+    }
+}
+impl Memoriable for Box<Memory> {
+    fn read_u8(&self, address: u32) -> u8 {
+        let (upp_add, low_add) = split_memory_address(address);
+
+        match upp_add {
+            0x0 => BIOS[low_add % BIOS.len()],
+            0x2 => self.ewram[low_add % EWRAM_LENGTH],
+            0x3 => self.iwram[low_add % IWRAM_LENGTH],
+            0x4 => self.io_reg[low_add % IO_REG_LENGTH],
+            0x5 => self.obj_pall[low_add % OBJ_PALL_LENGTH],
+            0x6 => {
+                // 64k-32k (then the 32k is mirrored again) (then everything is mirrored again)
+                let base = low_add % 0x20000;
+                if base >= 0x10000 {
+                    return self.vram[0x10000 + (base % 0x8000)]
+                }
+                self.vram[base]
+            }
+            0x7 => self.oam[low_add % OAM_LENGTH],
+            0xE => self.sram[low_add % SRAM_MAX_LENGTH],
+            _ => { // assuming this is just ROM
+                // deals with the mirrors
+                // this will be more important once I start dealing with timings
+                // let unmirrored_address = (address % 0x2000000) + 0x8000000;
+
+                // this is just cause some games store this in prefetch but don't use it
+                if low_add >= self.gp_rom.len() {
+                    return 0x00;
+                }
+                self.gp_rom[low_add]
+            },
+        }
+    }
+    fn read_u16(&self, address: u32) -> u16 {
+        let base_address = address & !(0b1);
+
+        lil_end_combine_u16(
+            self.read_u8(base_address + 0), 
+            self.read_u8(base_address + 1)
+        )
+    }
+    fn read_u32(&self, address: u32) -> u32 {
+        let base_address = address & !(0b11);
+
+        lil_end_combine_u32(
+            self.read_u8(base_address + 0), 
+            self.read_u8(base_address + 1), 
+            self.read_u8(base_address + 2), 
+            self.read_u8(base_address + 3),
+        )
     }
 
     fn write_u8(&mut self, address: u32, data: u8) {

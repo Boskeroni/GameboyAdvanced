@@ -1,4 +1,5 @@
 use crate::memory::Memory;
+use crate::memory::Memoriable;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Button {
@@ -24,7 +25,7 @@ pub fn init_joypad(mem: &mut Memory) {
     mem.write_io(JPRegisters::KeyInput as u32, 0xFFFF);
 }
 
-pub fn joypad_press(input: Button, mem: &mut Memory) {
+pub fn joypad_press(input: Button, mem: &mut Box<Memory>) {
     let mut joypad = mem.read_u16(JPRegisters::KeyInput as u32);
 
     use Button::*;
@@ -46,7 +47,7 @@ pub fn joypad_press(input: Button, mem: &mut Memory) {
     joypad_interrupt(mem, joypad);
 }
 
-pub fn joypad_release(input: Button, mem: &mut Memory) {
+pub fn joypad_release(input: Button, mem: &mut Box<Memory>) {
     let mut joypad = mem.read_u16(JPRegisters::KeyInput as u32);
 
     use Button::*;
@@ -67,7 +68,7 @@ pub fn joypad_release(input: Button, mem: &mut Memory) {
     joypad_interrupt(mem, joypad);
 }
 
-fn joypad_interrupt(mem: &mut Memory, joypad: u16) {
+fn joypad_interrupt(mem: &mut Box<Memory>, joypad: u16) {
     let control = mem.read_u16(JPRegisters::KeyCnt as u32);
     if (control >> 14) & 1 == 0 {
         return;

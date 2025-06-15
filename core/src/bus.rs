@@ -1,5 +1,6 @@
 #![allow(unused)]
 use crate::memory::Memory;
+use crate::memory::Memoriable;
 
 struct Bus {
     last_bios_fetch: u32,
@@ -9,7 +10,7 @@ struct Bus {
 }
 
 impl Bus {
-    pub fn new(mem: &Memory, from_bios: bool) -> Self {
+    pub fn new(mem: &Box<Memory>, from_bios: bool) -> Self {
         // starting from the bios
         if from_bios {
             // these values will be instantly updated anyways

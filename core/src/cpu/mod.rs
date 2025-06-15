@@ -95,7 +95,7 @@ fn _get_shifted_value(cpu: &Cpu, opcode: u32) -> (u32, bool) {
     }
 }
 
-#[derive(Debug, Copy, Clone, Default)]
+#[derive(Debug, Copy, Clone, Default, PartialEq)]
 pub enum ProcessorMode {
     #[default]
     User = 0b10000,
@@ -106,8 +106,22 @@ pub enum ProcessorMode {
     Undefined = 0b11011,
     System = 0b11111,
 }
+impl ProcessorMode {
+    pub fn from_bits(bits: u32) -> Self {
+        match bits & 0b1111 {
+            0b0000 => ProcessorMode::User,
+            0b0001 => ProcessorMode::FastInterrupt,
+            0b0010 => ProcessorMode::Interrupt,
+            0b0011 => ProcessorMode::Supervisor,
+            0b0111 => ProcessorMode::Abort,
+            0b1011 => ProcessorMode::Undefined,
+            0b1111 => ProcessorMode::System,
+            _ => ProcessorMode::Undefined,
+        }
+    }
+}
 
-#[derive(Debug, Clone, Default, Copy)]
+#[derive(Debug, Clone, Default, Copy, PartialEq)]
 pub struct Cpsr {
     pub z: bool, // true if the value is 0
     pub c: bool, // true if the was a carry
@@ -129,16 +143,7 @@ impl Cpsr {
         self.i = (bits >> 7) & 1 == 1;
         self.f = (bits >> 6) & 1 == 1;
         self.t = (bits >> 5) & 1 == 1;
-        self.mode = match bits & 0b11111 {
-            0b10000 => ProcessorMode::User,
-            0b10001 => ProcessorMode::FastInterrupt,
-            0b10010 => ProcessorMode::Interrupt,
-            0b10011 => ProcessorMode::Supervisor,
-            0b10111 => ProcessorMode::Abort,
-            0b11011 => ProcessorMode::Undefined,
-            0b11111 => ProcessorMode::System,
-            _ => ProcessorMode::Undefined,
-        }
+        self.mode = ProcessorMode::from_bits(bits);
     }
 }
 pub fn check_condition(condition: u32, cpsr: &Cpsr) -> bool {
@@ -181,16 +186,7 @@ pub fn convert_u32_psr(cpsr: u32) -> Cpsr {
         i: cpsr >> 7 & 1 == 1,
         f: cpsr >> 6 & 1 == 1,
         t: cpsr >> 5 & 1 == 1,
-        mode: match cpsr & 0b11111 {
-            0b10000 => ProcessorMode::User,
-            0b10001 => ProcessorMode::FastInterrupt,
-            0b10010 => ProcessorMode::Interrupt,
-            0b10011 => ProcessorMode::Supervisor,
-            0b10111 => ProcessorMode::Abort,
-            0b11011 => ProcessorMode::Undefined,
-            0b11111 => ProcessorMode::System,
-            _ => ProcessorMode::Undefined,
-        }
+        mode: ProcessorMode::from_bits(cpsr),
     }
 }
 
@@ -206,7 +202,7 @@ pub struct Cpu {
     pub halted: bool,
 
     pub cpsr: Cpsr,
-    pub spsr: [Cpsr; 6],
+    pub spsr: [Cpsr; 5],
 
     pub barrel_shifter: bool,
 }
@@ -218,7 +214,7 @@ impl Cpu {
             many_banked_registers: [[0x03007F00, 0, 0x03007FE0, 0, 0x03007FA0, 0], [0, 0, 0, 0, 0, 0]],
             pc: 0x8000000,
             cpsr: Cpsr::default(),
-            spsr: [Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default()],
+            spsr: [Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default()],
             barrel_shifter: false,
 
             clear_pipeline: false,
@@ -232,7 +228,7 @@ impl Cpu {
             many_banked_registers: [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]],
             pc: 0,
             cpsr: Cpsr::default(),
-            spsr: [Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default()],
+            spsr: [Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default()],
             barrel_shifter: false,
 
             clear_pipeline: false,
@@ -372,8 +368,7 @@ impl Cpu {
             Abort => &self.spsr[2],
             Interrupt => &self.spsr[3],
             Undefined => &self.spsr[4],
-            System => &self.cpsr, // edge case got from a discord person
-            _ => panic!("this shouldnt be accessed"),
+            User|System => &self.cpsr, // edge case got from a discord person
         }   
     }
     pub fn get_spsr_mut(&mut self) -> &mut Cpsr {
