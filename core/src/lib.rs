@@ -61,52 +61,39 @@ pub fn run_single_step(emu: &mut Emulator) -> bool {
         return false;
     }
 
-    let ahead_by = if emu.fde.fetched == None { 0 } else if emu.fde.decoded == None { 1 } else { 2 };
-    handle_interrupts(&mut emu.mem, &mut emu.cpu, ahead_by);
+    handle_interrupts(&mut emu.mem, &mut emu.cpu);
     if emu.cpu.halted {
         return false;
     }
-    if emu.cpu.clear_pipeline {
-        emu.fde.fetched = None;
-        emu.fde.decoded = None;
-        emu.cpu.clear_pipeline = false;
-    }
 
     // Execute
-    if let Some(instruction) = emu.fde.decoded {
-        use DecodedInstruction::*;
-        
-        match instruction {
-            Thumb(instr) => execute_thumb(emu.fde.decoded_opcode as u16, instr, &mut emu.cpu, &mut emu.mem),
-            Arm(instr) => execute_arm(emu.fde.decoded_opcode, instr, &mut emu.cpu, &mut emu.mem),
+    if let Some(instruction) = emu.cpu.fde.decoded_opcode {        
+        match emu.cpu.cpsr.t {
+            true => execute_thumb(instruction as u16, &mut emu.cpu, &mut emu.mem),
+            false => execute_arm(instruction, &mut emu.cpu, &mut emu.mem),
         };
 
         if emu.mem.should_halt_cpu() {
             emu.cpu.halted = true;
         }
-        if emu.cpu.clear_pipeline {
-            emu.fde.fetched = None;
-            emu.fde.decoded = None;
-            emu.cpu.clear_pipeline = false;
-            return false; // TODO: check if it has to return
-        }
     }
 
-    // Decode
-    if let Some(opcode) = emu.fde.fetched {
-        emu.fde.decoded = Some(match emu.cpu.cpsr.t {
-            true => DecodedInstruction::Thumb(decode_thumb(opcode as u16)),
-            false => DecodedInstruction::Arm(decode_arm(opcode)),
-        });
-
-        emu.fde.decoded_opcode = opcode;
+    // if there was a clear, need to get new fetched
+    if let None = emu.cpu.fde.fetched_opcode {
+        let fetch = match emu.cpu.cpsr.t {
+            true => emu.mem.read_u16(emu.cpu.get_pc_thumb()) as u32,
+            false => emu.mem.read_u32(emu.cpu.get_pc_arm()),
+        };
+        emu.cpu.fde.fetched_opcode = Some(fetch);
     }
 
-    // Fetch
-    emu.fde.fetched = Some(match emu.cpu.cpsr.t {
+    // move the fetched to decoded
+    emu.cpu.fde.decoded_opcode = emu.cpu.fde.fetched_opcode.clone();
+    let fetch = match emu.cpu.cpsr.t {
         true => emu.mem.read_u16(emu.cpu.get_pc_thumb()) as u32,
         false => emu.mem.read_u32(emu.cpu.get_pc_arm()),
-    });
+    };
+    emu.cpu.fde.fetched_opcode = Some(fetch);
 
     return false;
 }

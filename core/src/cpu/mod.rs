@@ -193,12 +193,13 @@ pub fn convert_u32_psr(cpsr: u32) -> Cpsr {
 #[derive(Debug, Clone)]
 pub struct Cpu {
     pub unbanked_registers: [u32; 8],
-    // 1D array representing [[r8, r8_fiq], [r9, r9_fiq], ..., [r12, r12_fiq]]
+    // [[r8, r8_fiq], [r9, r9_fiq], ..., [r12, r12_fiq]]
     pub double_banked_registers: [[u32; 2]; 5],
-    // same logic as the previous one, just with more [[r13, f13_fiq, r13_svc, r13_abt, r13_irq, r13_und], ...]
+    // [[r13, f13_fiq, r13_svc, r13_abt, r13_irq, r13_und], ...]
     pub many_banked_registers: [[u32; 6]; 2], 
     pub pc: u32,
-    pub clear_pipeline: bool,
+    pub fde: Fde,
+
     pub halted: bool,
 
     pub cpsr: Cpsr,
@@ -217,7 +218,7 @@ impl Cpu {
             spsr: [Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default()],
             barrel_shifter: false,
 
-            clear_pipeline: false,
+            fde: Fde::new(),
             halted: false,
         }
     }
@@ -231,7 +232,7 @@ impl Cpu {
             spsr: [Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default(), Cpsr::default()],
             barrel_shifter: false,
 
-            clear_pipeline: false,
+            fde: Fde::new(),
             halted: false,
         }
     }
@@ -386,11 +387,13 @@ impl Cpu {
     pub fn get_barrel_shift(&self) -> bool {
         self.barrel_shifter
     }
+    pub fn clear_pipeline(&mut self) {
+        self.fde.decoded_opcode = None;
+        self.fde.fetched_opcode = None;
+    }
 }
 
-
-use decode::DecodedInstruction;
-pub enum CpuRegisters {
+pub enum CpuMemoryRegisters {
     Ie = 0x4000200,
     If = 0x4000202,
     Ime = 0x4000208,
@@ -399,17 +402,17 @@ pub enum CpuRegisters {
 /// the ahead_by variable represents how many instructions the pc is
 /// it is multiplied by 4 for ARM, and 2 for Thumb.
 /// Just intended for callbacks
-pub fn handle_interrupts(memory: &mut Box<Memory>, cpu: &mut Cpu, ahead_by: u32) {
+pub fn handle_interrupts(memory: &mut Box<Memory>, cpu: &mut Cpu) {
     if cpu.cpsr.i {
         return;
     }
 
-    let interrupt_allowed = memory.read_u32(CpuRegisters::Ime as u32) & 1 == 1;
+    let interrupt_allowed = memory.read_u32(CpuMemoryRegisters::Ime as u32) & 1 == 1;
     if !interrupt_allowed && !cpu.halted {
         return;
     }
-    let interrupts_enabled = memory.read_u16(CpuRegisters::Ie as u32);
-    let interrupts_called = memory.read_u16(CpuRegisters::If as u32);
+    let interrupts_enabled = memory.read_u16(CpuMemoryRegisters::Ie as u32);
+    let interrupts_called = memory.read_u16(CpuMemoryRegisters::If as u32);
     let called_interrupts = interrupts_enabled & interrupts_called;
     if called_interrupts == 0 {
         return;
@@ -422,8 +425,8 @@ pub fn handle_interrupts(memory: &mut Box<Memory>, cpu: &mut Cpu, ahead_by: u32)
     let pc = cpu.get_register(15);
     let lr = cpu.get_register_mut_specific(14, ProcessorMode::Interrupt);
     match is_in_thumb {
-        true => *lr = pc - (ahead_by * 2) + 4,
-        false => *lr = pc - (ahead_by * 4) + 4,
+        true => *lr = pc,
+        false => *lr = pc - 4,
     }
     cpu.set_specific_spsr(cpu.cpsr, ProcessorMode::Interrupt);
 
@@ -433,7 +436,7 @@ pub fn handle_interrupts(memory: &mut Box<Memory>, cpu: &mut Cpu, ahead_by: u32)
 
     let pc = cpu.get_register_mut(15);
     *pc = 0x18;
-    cpu.clear_pipeline = true;
+    cpu.clear_pipeline();
 }
 
 /// now just some functions to make the thumb opcodes and arm opcodes easier
@@ -473,16 +476,14 @@ pub fn add_with_carry(a: u32, b: u32, carry: bool)
 
 #[derive(Debug, Clone, Copy)]
 pub struct Fde {
-    pub fetched: Option<u32>,
-    pub decoded: Option<DecodedInstruction>,
-    pub decoded_opcode: u32,
+    pub fetched_opcode: Option<u32>,
+    pub decoded_opcode: Option<u32>,
 }
 impl Fde {
     pub fn new() -> Self {
         Self {
-            fetched: None,
-            decoded: None,
-            decoded_opcode: 0,
+            fetched_opcode: Some(0),
+            decoded_opcode: Some(0),
         }
     }
 }

@@ -148,7 +148,15 @@ impl Memory {
             0x3 => self.iwram[low_add % IWRAM_LENGTH] = data,
             0x4 => self.io_reg[low_add % IO_REG_LENGTH] = data,
             0x5 => self.obj_pall[low_add % OBJ_PALL_LENGTH] = data,
-            0x6 => self.vram[low_add % VRAM_LENGTH] = data,
+            0x6 => {
+                // 64k-32k (then the 32k is mirrored again) (then everything is mirrored again)
+                let base = low_add % 0x20000;
+                if base >= 0x10000 {
+                    self.vram[0x10000 + (base % 0x8000)] = data;
+                    return;
+                }
+                self.vram[base] = data;
+            }
             0x7 => self.oam[low_add % OAM_LENGTH] = data,
             0xE => self.sram[low_add % SRAM_MAX_LENGTH] = data,
             _ => {},

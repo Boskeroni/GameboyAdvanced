@@ -1,10 +1,11 @@
+use crate::cpu::decode::decode_arm;
+
 use super::*;
 use super::decode::DecodedArm;
 use super::get_shifted_value;
 
 pub fn execute_arm<M: Memoriable>(
     opcode: u32, 
-    decoded_arm: DecodedArm,
     cpu: &mut Cpu,
     memory: &mut M,
 ) {
@@ -15,8 +16,10 @@ pub fn execute_arm<M: Memoriable>(
     if !check_condition(condition, &cpu.cpsr) {
         return;
     }
+
     use DecodedArm::*;
-    match decoded_arm {
+    let instruction = decode_arm(opcode);
+    match instruction {
         DataProcessing => data_processing(opcode, cpu),
         Multiply => multiply(opcode, cpu),
         MultiplyLong => multiply_long(opcode, cpu),
@@ -36,6 +39,8 @@ pub fn execute_arm<M: Memoriable>(
 }
 
 fn branch_link(opcode: u32, cpu: &mut Cpu) {
+    let l_bit = (opcode >> 24) & 1 == 1;
+
     // the bottom 24-bits
     let mut offset = (opcode & 0x00FFFFFF) as u32;
     offset <<= 2;
@@ -44,7 +49,7 @@ fn branch_link(opcode: u32, cpu: &mut Cpu) {
     }
 
     // link
-    if (opcode >> 24) & 1 == 1 {
+    if l_bit {
         let prev_pc = cpu.get_register(15);
         let link = cpu.get_register_mut(14);
         // it is 2 instructions ahead, we only want it 1
@@ -53,7 +58,7 @@ fn branch_link(opcode: u32, cpu: &mut Cpu) {
 
     let pc = cpu.get_register_mut(15);
     *pc = pc.wrapping_add(offset);
-    cpu.clear_pipeline = true;
+    cpu.clear_pipeline();
 }
 fn branch_exchange(opcode: u32, cpu: &mut Cpu) {
     let rn_index = opcode as u8 & 0xF;
@@ -72,7 +77,7 @@ fn branch_exchange(opcode: u32, cpu: &mut Cpu) {
             cpu.cpsr.t = false; // not fully needed but safe
         },
     }
-    cpu.clear_pipeline = true;
+    cpu.clear_pipeline();
 }
 fn data_processing(opcode: u32, cpu: &mut Cpu) {
     let s_bit = (opcode >> 20) & 1 == 1;
@@ -202,7 +207,7 @@ fn data_processing(opcode: u32, cpu: &mut Cpu) {
         let pc = cpu.get_register_mut(rd_index);
         if !undo {
             *pc = result;
-            cpu.clear_pipeline = true;
+            cpu.clear_pipeline();
         }
 
         cpu.cpsr = *cpu.get_spsr();
@@ -212,7 +217,9 @@ fn data_processing(opcode: u32, cpu: &mut Cpu) {
         return;
     }
 
-    cpu.clear_pipeline = rd_index == 15;
+    if rd_index == 15 {
+        cpu.clear_pipeline();
+    }
     let dst = cpu.get_register_mut(rd_index);
     *dst = result;
 }
@@ -281,7 +288,10 @@ fn multiply(opcode: u32, cpu: &mut Cpu) {
     let rs_index = (opcode >> 8)  as u8 & 0xF;
     let rm_index = opcode         as u8 & 0xF;
 
-    let rn = cpu.get_register(rn_index);
+    let rn = match rn_index {
+        15 => cpu.get_register(rn_index) + 4,
+        _ => cpu.get_register(rn_index),
+    };
     let rs = cpu.get_register(rs_index);
     let rm = cpu.get_register(rm_index);
 
@@ -290,8 +300,10 @@ fn multiply(opcode: u32, cpu: &mut Cpu) {
     if acc_bit {
         result = result.wrapping_add(rn);
     }
-    let rd = cpu.get_register_mut(rd_index);
-    *rd = result;
+    if rd_index != 15 {
+        let rd = cpu.get_register_mut(rd_index);
+        *rd = result;
+    }
 
     if (opcode >> 20) & 1 == 1 {
         cpu.cpsr.z = result == 0;
@@ -346,6 +358,9 @@ fn multiply_long(opcode: u32, cpu: &mut Cpu) {
         cpu.cpsr.z = result == 0;
         cpu.cpsr.n = (result >> 63) & 1 == 1;
     }
+    if (rdh_index == 15) | (rdl_index == 15) {
+        cpu.clear_pipeline();
+    }
 }
 /// this instruction shouldnt change any of the CPSR flags
 fn software_interrupt(cpu: &mut Cpu) {
@@ -359,7 +374,7 @@ fn software_interrupt(cpu: &mut Cpu) {
 
     let change_pc = cpu.get_register_mut(15);
     *change_pc = 0x08;
-    cpu.clear_pipeline = true;
+    cpu.clear_pipeline();
 }
 fn data_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
     let rd_index = (opcode >> 12) as u8 & 0xF;
@@ -394,7 +409,9 @@ fn data_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
             let rd = cpu.get_register_mut(rd_index);
             *rd = data;
 
-            cpu.clear_pipeline = rd_index == 15;
+            if rd_index == 15 {
+                cpu.clear_pipeline();
+            }
             if rn_index == rd_index {
                 return;
             }
@@ -428,7 +445,9 @@ fn data_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
         if rn_index == 15 {
             *rn += 4;
         }
-        cpu.clear_pipeline |= rn_index == 15;
+        if rn_index == 15 {
+            cpu.clear_pipeline();
+        }
     }
 }
 /// this function handles both the immediate and register offsets
@@ -461,7 +480,7 @@ fn halfword_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) 
 
     // need to clear pipeline
     if l_bit && rd_index == 15 {
-        cpu.clear_pipeline = true;
+        cpu.clear_pipeline();
     }
 
     // the processing part
@@ -511,7 +530,9 @@ fn halfword_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) 
                 }
                 _ => unreachable!(),
             }
-            cpu.clear_pipeline |= rd_index == 15;
+            if rd_index == 15 {
+                cpu.clear_pipeline();
+            }
         }
     }
     if !p_bit {
@@ -530,7 +551,9 @@ fn halfword_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) 
         if rn_index == 15 {
             *rn += 4;
         }
-        cpu.clear_pipeline |= rn_index == 15;
+        if rn_index == 15 {
+            cpu.clear_pipeline();
+        }
     }
 }
 fn block_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
@@ -593,7 +616,7 @@ fn block_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
                     if s_bit {
                         cpu.cpsr = *cpu.get_spsr();
                     }
-                    cpu.clear_pipeline = true;
+                    cpu.clear_pipeline();
                 }
 
                 if p_bit != u_bit {
@@ -640,7 +663,7 @@ fn block_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
 
     if w_bit {
         if rn_index == 15 {
-            cpu.clear_pipeline = true;
+            cpu.clear_pipeline();
         }
         let rn_mut = cpu.get_register_mut_specific(rn_index as u8, used_mode);
 
@@ -663,10 +686,6 @@ fn single_swap<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
     let rn_index = (opcode >> 16) as u8 & 0xF;
     let rm_index = opcode as u8 & 0xF;
     let rd_index = (opcode >> 12) as u8 & 0xF;
-
-    assert!(rn_index != 15, "r15 cannot be used in SWP");
-    assert!(rm_index != 15, "r15 cannot be used in SWP");
-    assert!(rd_index != 15, "r15 cannot be used in SWP");
 
     let address = cpu.get_register(rn_index);
 

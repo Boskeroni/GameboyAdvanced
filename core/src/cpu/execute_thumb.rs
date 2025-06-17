@@ -1,17 +1,17 @@
 use crate::cpu::*;
-use crate::cpu::decode::DecodedThumb;
+use crate::cpu::decode::{decode_thumb, DecodedThumb};
 
 use super::get_shifted_value;
 
 pub fn execute_thumb<M: Memoriable>(
     opcode: u16,
-    instruction: DecodedThumb,
     cpu: &mut Cpu,
     memory: &mut M,
 ) {
     //println!("{:?}", assemblify::to_thumb_assembly(opcode));
 
     use DecodedThumb::*;
+    let instruction = decode_thumb(opcode);
     match instruction {
         MoveShifted => move_shifted(opcode, cpu),
         AddSub => add_sub(opcode, cpu),
@@ -186,7 +186,11 @@ fn alu_ops(opcode: u16, cpu: &mut Cpu) {
             undo = true; 
             (rd & rs, cpu.cpsr.c)
         }, // tst
-        0b1001 => (0_u32.wrapping_sub(rs), cpu.get_barrel_shift()), // teq
+        0b1001 => {
+            let (result, _, _, c, v) = add_with_carry(0, !rs, true);
+            cpu.cpsr.v = v;
+            (result, c)
+        }, // neg
         0b1010 => {
             undo = true;
             let (result, _, _, c, v) = add_with_carry(rd, !rs, true);
@@ -204,7 +208,10 @@ fn alu_ops(opcode: u16, cpu: &mut Cpu) {
         0b1100 => {
             (rd | rs, cpu.cpsr.c)
         }, // orr
-        0b1101 => rd.overflowing_mul(rs), // mul
+        0b1101 => {
+            let (result, carry) = rs.overflowing_mul(rd);
+            (result, !carry)
+        }, // mul
         0b1110 => (rd & !rs, cpu.cpsr.c), // bic
         0b1111 => (!rs, cpu.cpsr.c), // mvn
         _ => unreachable!()
@@ -236,13 +243,9 @@ fn hi_ops(opcode: u16, cpu: &mut Cpu) {
     }
 
     let op = (opcode >> 8) as u8 & 0b11;
-    if !h1 && !h2 {
-        assert!(op == 0b11, "H1=0, H2=0, instruction is invalid for these values");
-    }
-
     let rs = cpu.get_register(rs_index);
     let rd = cpu.get_register(rd_index);
-
+ 
     let result;
     match op {
         0b00 => result = rd.wrapping_add(rs),
@@ -260,15 +263,16 @@ fn hi_ops(opcode: u16, cpu: &mut Cpu) {
             assert!(!h1, "H1=1 for this instruction is undefined");
 
             let pc = cpu.get_register_mut(15);
+            println!("{rs:X}");
             match rs & 1 == 1 {
                 true => *pc = rs & !(0x1),
                 false => {
                     // swapping to arm mode
-                    *pc = rs & !(0x3);
+                    *pc = (rs + 4) & !(0x3);
                     cpu.cpsr.t = false;
                 },
             }
-            cpu.clear_pipeline = true;
+            cpu.clear_pipeline();
             return;
         }
         _ => unreachable!(),
@@ -278,7 +282,7 @@ fn hi_ops(opcode: u16, cpu: &mut Cpu) {
     *rd = result;
     if rd_index == 15 {
         *rd &= !(0b1);
-        cpu.clear_pipeline = true;
+        cpu.clear_pipeline();
     }
 
 }
@@ -481,7 +485,7 @@ fn push_pop<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
                 let change = memory.read_u32(base_address);
                 *reg = change & !(1);
                 base_address += 4;
-                cpu.clear_pipeline = true;
+                cpu.clear_pipeline();
             }
             let sp_mut = cpu.get_register_mut(13);
             *sp_mut = base_address;
@@ -537,7 +541,7 @@ fn mem_multiple<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
                 let reg = cpu.get_register_mut(15);
                 let change = memory.read_u32(curr_address);
                 *reg = change;
-                cpu.clear_pipeline = true;
+                cpu.clear_pipeline();
 
                 curr_address += 0x40;
             }
@@ -583,7 +587,7 @@ fn unconditional_branch(opcode: u16, cpu: &mut Cpu) {
 
     let pc = cpu.get_register_mut(15);
     *pc = pc.wrapping_add_signed(offset as i32);
-    cpu.clear_pipeline = true;
+    cpu.clear_pipeline();
 }
 fn conditional_branch(opcode: u16, cpu: &mut Cpu) {
     let condition = (opcode >> 8) & 0xF;
@@ -598,7 +602,7 @@ fn conditional_branch(opcode: u16, cpu: &mut Cpu) {
         offset |= 0xFFFFFF00;
     }
     *pc = pc.wrapping_add_signed(offset as i32);
-    cpu.clear_pipeline = true;
+    cpu.clear_pipeline();
 }
 fn long_branch_link(opcode: u16, cpu: &mut Cpu) {
     let mut offset = opcode as u32 & 0x7FF;
@@ -622,9 +626,10 @@ fn long_branch_link(opcode: u16, cpu: &mut Cpu) {
 
             let temp = *pc - 2;
             *pc = lr.wrapping_add(offset);
+            *pc &= !1; // clear the last bit
             let lr = cpu.get_register_mut(14);
             *lr = temp | 1;
-            cpu.clear_pipeline = true;
+            cpu.clear_pipeline();
         },
     };
 }
@@ -639,6 +644,6 @@ fn software_interrupt(cpu: &mut Cpu) {
 
     let pc = cpu.get_register_mut(15);
     *pc = 0x08;
-    cpu.clear_pipeline = true;
+    cpu.clear_pipeline();
     cpu.cpsr.t = false;
 }
