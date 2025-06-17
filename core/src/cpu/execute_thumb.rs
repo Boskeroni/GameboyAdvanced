@@ -108,18 +108,18 @@ fn alu_imm(opcode: u16, cpu: &mut Cpu) {
 
     let op = (opcode >> 11) & 0x3;
     match op {
-        0 => rd = 0,
-        1 => offset = !offset,
-        2 => {}
-        3 => offset = !offset,
-        _ => unreachable!(),
+        0 => rd = 0, // mov is the same as rd = 0 + offset
+        1|3 => offset = !offset, // subtraction
+        _ => {}
     }
     let (result, n, z, c, v) = add_with_carry(rd, offset, op & 1 == 1);
 
-    cpu.cpsr.v = v;
-    cpu.cpsr.c = c;
-    cpu.cpsr.n = n;
+    if op != 0 {
+        cpu.cpsr.v = v;
+        cpu.cpsr.c = c;
+    }
     cpu.cpsr.z = z;
+    cpu.cpsr.n = n;
 
     // CMP doesnt change the value
     if op == 1 {
@@ -263,7 +263,6 @@ fn hi_ops(opcode: u16, cpu: &mut Cpu) {
             assert!(!h1, "H1=1 for this instruction is undefined");
 
             let pc = cpu.get_register_mut(15);
-            println!("{rs:X}");
             match rs & 1 == 1 {
                 true => *pc = rs & !(0x1),
                 false => {
@@ -329,7 +328,7 @@ fn mem_offset<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M, uses_im
             let rd = cpu.get_register_mut(rd_index);
             match b_bit {
                 true => *rd = memory.read_u8(address) as u32,
-                false => *rd = memory.read_u32(address & !(0b11)).rotate_right((address & 0b11) * 8),
+                false => *rd = memory.read_u32(address).rotate_right((address & 0b11) * 8),
             }
         }
         false => {
@@ -359,7 +358,7 @@ fn mem_sign_extended<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) 
         }
         0b10 => { // LDRH
             let rd = cpu.get_register_mut(rd_index);
-            *rd = (memory.read_u16(address & !(0b1)) as u32).rotate_right((address % 2) * 8);
+            *rd = (memory.read_u16(address) as u32).rotate_right((address % 2) * 8);
         }
         0b01 => {
             let mut raw_reading = memory.read_u8(address) as u32;
@@ -375,13 +374,13 @@ fn mem_sign_extended<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) 
             let is_aligned = address & 1 == 1;
             match is_aligned {
                 true => {
-                    raw_reading = memory.read_u8(address) as u32;
+                    raw_reading = (memory.read_u16(address) >> 8) as u32;
                     if (raw_reading >> 7) & 1 == 1 {
                         raw_reading |= 0xFFFFFF00;
                     }
                 },
                 false => {
-                    raw_reading = memory.read_u16(address & !(1)) as u32;
+                    raw_reading = memory.read_u16(address) as u32;
                     if (raw_reading >> 15) & 1 == 1 {
                         raw_reading |= 0xFFFF0000;
                     }
@@ -407,7 +406,7 @@ fn mem_halfword<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
     match l_bit {
         true => {
             let rd = cpu.get_register_mut(rd_index);
-            *rd = (memory.read_u16(address & !(0b1)) as u32).rotate_right((address%2) * 8);
+            *rd = (memory.read_u16(address) as u32).rotate_right((address%2) * 8);
         }
         false => {
             let rd = cpu.get_register(rd_index);
@@ -465,6 +464,7 @@ fn push_pop<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
     let r_bit = (opcode >> 8) & 1 == 1;
 
     let sp = cpu.get_register(13);
+    let address;
     match l_bit {
         true => { 
             // pop
@@ -478,23 +478,25 @@ fn push_pop<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
                 *reg = change;
                 
                 base_address += 4;
-                rlist &= !(1<<next_r);
+                rlist &= !(1<<next_r); // clear it for next time
             }
             if r_bit {
-                let reg = cpu.get_register_mut(15);
                 let change = memory.read_u32(base_address);
+
+                let reg = cpu.get_register_mut(15);
                 *reg = change & !(1);
-                base_address += 4;
                 cpu.clear_pipeline();
+
+                base_address += 4;
             }
-            let sp_mut = cpu.get_register_mut(13);
-            *sp_mut = base_address;
+            address = base_address; // updates to the end state
         }
         false => {
+            // push
             let total_increments = rlist.count_ones() + r_bit as u32;
 
             let mut base_address = sp - (total_increments * 4);
-            let base_address_copy = base_address;
+            address = base_address; // updates to the start state
             while rlist != 0 {
                 let next_r = rlist.trailing_zeros();
                 let reg = cpu.get_register(next_r as u8);
@@ -506,11 +508,11 @@ fn push_pop<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
                 let reg = cpu.get_register(14);
                 memory.write_u32(base_address, reg);
             }
-
-            let sp = cpu.get_register_mut(13);
-            *sp = base_address_copy;
         }
     }
+
+    let sp = cpu.get_register_mut(13);
+    *sp = address;
 }
 fn mem_multiple<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
     let mut rlist = opcode & 0xFF;

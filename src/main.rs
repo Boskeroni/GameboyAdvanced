@@ -15,7 +15,7 @@ use std::sync::{mpsc, Arc};
 use std::env;
 use std::thread;
 
-const JSON_TESTS: bool = true;
+const JSON_TESTS: bool = false;
 fn main() {
     if JSON_TESTS {
         json_tests::perform_tests();

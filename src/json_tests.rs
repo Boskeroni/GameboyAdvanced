@@ -76,9 +76,8 @@ pub fn perform_tests() {
         let name = file.file_name();
         let filename = name.to_str().unwrap();
         if filename.ends_with(".py") { continue; }
-        if filename.contains("arm_mul") { continue; }
-        if filename.contains("cdp")  { continue; }
-        if !filename.contains("swp")   { continue; }
+        if filename.contains("arm")   { continue; }
+        if filename.contains("bx")   { continue; }
 
         println!("{}", file.file_name().to_str().unwrap());
         let read_file = std::fs::read_to_string(file.path()).unwrap();
@@ -94,7 +93,7 @@ pub fn perform_tests() {
                 cycles: 0,
                 mem
             };
-            println!("{}", emu.cpu.fde.decoded_opcode.unwrap());
+            //println!("{}", emu.cpu.fde.decoded_opcode.unwrap());
             run_json_test(&mut emu);
             if let Some(e) = check_identical(&emu.cpu, &end_cpu) {
                 println!("{}", serde_json::to_string_pretty(test).unwrap());
@@ -180,6 +179,15 @@ fn run_json_test(emu: &mut JsonEmulator) {
     match emu.cpu.cpsr.t {
         true => {
             execute_thumb(opcode as u16, &mut emu.cpu, &mut emu.mem);
+            let addition = match emu.cpu.cpsr.t {
+                true => 2,
+                false => 4,
+            };
+
+            match emu.cpu.fde.fetched_opcode.is_none() {
+                true => emu.cpu.pc = emu.cpu.pc.wrapping_add(addition * 2),
+                false => emu.cpu.pc = emu.cpu.pc.wrapping_add(addition),
+            }
         }
         false => {
             let runs = check_condition(opcode >> 28, &emu.cpu.cpsr);
@@ -188,13 +196,16 @@ fn run_json_test(emu: &mut JsonEmulator) {
             }
             execute_arm(opcode, &mut emu.cpu, &mut emu.mem);
 
-            if runs && emu.cpu.fde.fetched_opcode.is_none() {
-                match emu.cpu.cpsr.t {
-                    true => emu.cpu.pc = emu.cpu.pc.wrapping_add(4),
-                    false => emu.cpu.pc = emu.cpu.pc.wrapping_add(8),
+            let addition = match emu.cpu.cpsr.t {
+                true => 2,
+                false => 4,
+            };
+
+            if runs {
+                match emu.cpu.fde.fetched_opcode.is_none() {
+                    true => emu.cpu.pc = emu.cpu.pc.wrapping_add(addition * 2),
+                    false => emu.cpu.pc = emu.cpu.pc.wrapping_add(addition),
                 }
-            } else if runs {
-                emu.cpu.pc = emu.cpu.pc.wrapping_add(4)
             }
         }
     };
