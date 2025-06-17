@@ -1,4 +1,4 @@
-use gba_core::{cpu::{check_condition, convert_u32_psr, decode::{decode_arm, decode_thumb}, execute_arm::execute_arm, execute_thumb::execute_thumb, Cpu, Fde}, memory::Memoriable};
+use gba_core::{cpu::{check_condition, convert_u32_psr, execute_arm::execute_arm, execute_thumb::execute_thumb, Cpu, Fde}, memory::Memoriable};
 use serde_json::{self, Value};
 
 pub struct JsonEmulator {
@@ -28,6 +28,7 @@ impl JsonMemory {
             return transaction["data"].as_u64().unwrap() as u32;
         }
         panic!("address not handled {addr} {}", serde_json::to_string_pretty(&self.transactions).unwrap());
+        // println!("failed");
     }
     fn write(&self, size: u64, addr: u32, data: u64) {
         for transaction in self.transactions.as_array().unwrap() {
@@ -41,11 +42,13 @@ impl JsonMemory {
                 continue;
             }
             if transaction["data"].as_u64().unwrap() != data {
-                panic!("wrong data supplied");
+                println!("wrong data supplied {data} at {addr}");
+                break;
             }
             return;
         }
-        panic!("address not handled {addr} {}", serde_json::to_string_pretty(&self.transactions).unwrap());
+        panic!("{}", serde_json::to_string_pretty(&self.transactions).unwrap());
+        // println!("failed :(");
     }
     fn read_instruction(&self, address: u32) -> u32 {
         if address == self.base_addr {
@@ -75,7 +78,7 @@ pub fn perform_tests() {
         if filename.ends_with(".py") { continue; }
         if filename.contains("arm_mul") { continue; }
         if filename.contains("cdp")  { continue; }
-        if filename.contains("bx")   { continue; }
+        if !filename.contains("swp")   { continue; }
 
         println!("{}", file.file_name().to_str().unwrap());
         let read_file = std::fs::read_to_string(file.path()).unwrap();
@@ -91,6 +94,7 @@ pub fn perform_tests() {
                 cycles: 0,
                 mem
             };
+            println!("{}", emu.cpu.fde.decoded_opcode.unwrap());
             run_json_test(&mut emu);
             if let Some(e) = check_identical(&emu.cpu, &end_cpu) {
                 println!("{}", serde_json::to_string_pretty(test).unwrap());

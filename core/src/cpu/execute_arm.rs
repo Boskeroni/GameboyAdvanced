@@ -374,6 +374,7 @@ fn software_interrupt(cpu: &mut Cpu) {
 
     let change_pc = cpu.get_register_mut(15);
     *change_pc = 0x08;
+    cpu.cpsr.i = true;
     cpu.clear_pipeline();
 }
 fn data_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
@@ -645,7 +646,7 @@ fn block_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
                     _ => cpu.get_register_specific(next_r as u8, used_mode),
                 };
 
-                memory.write_u32(current_address & !(0b11), rb);
+                memory.write_u32(current_address, rb);
                 if p_bit != u_bit {
                     current_address += 4;
                 }
@@ -687,9 +688,15 @@ fn single_swap<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
     let rm_index = opcode as u8 & 0xF;
     let rd_index = (opcode >> 12) as u8 & 0xF;
 
-    let address = cpu.get_register(rn_index);
-
+    let address = match rn_index {
+        15 => cpu.get_register(rn_index) + 4,
+        _ => cpu.get_register(rn_index),
+    };
     let quantity_bit = (opcode >> 22) & 1 == 1;
+    let rm = match rm_index {
+        15 => cpu.get_register(rm_index) + 4,
+        _ => cpu.get_register(rm_index),
+    };
 
     let data;
     match quantity_bit {
@@ -697,12 +704,14 @@ fn single_swap<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
         false => data = memory.read_u32(address).rotate_right((address & 0b11) * 8),
     }
     
-    let rm = cpu.get_register(rm_index);
+    let rd = cpu.get_register_mut(rd_index);
+    *rd = data;
+    if rd_index == 15 {
+        cpu.clear_pipeline();
+    }
+
     match quantity_bit {
         true => memory.write_u8(address, rm as u8),
         false => memory.write_u32(address, rm),
     }
-
-    let rd = cpu.get_register_mut(rd_index);
-    *rd = data;
 }
