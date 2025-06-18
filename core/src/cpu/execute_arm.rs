@@ -9,7 +9,7 @@ pub fn execute_arm<M: Memoriable>(
     cpu: &mut Cpu,
     memory: &mut M,
 ) {
-    //println!("{:?} {:X}", assemblify::to_arm_assembly(opcode), opcode);
+    println!("{:?} {:X}", assemblify::to_arm_assembly(opcode), opcode);
 
     // first check if we even have to do it
     let condition = opcode >> 28;
@@ -245,14 +245,8 @@ fn psr_transfer(opcode: u32, cpu: &mut Cpu) {
                     cpu.get_register(rm_index)
                 }
             };
-            let mode_clone = cpu.cpsr.mode;
-
             let psr = match psr_bit {
                 true => {
-                    // writes are ignored for user and system mode
-                    if let ProcessorMode::User | ProcessorMode::System = cpu.cpsr.mode {
-                        return;
-                    }
                     cpu.get_spsr_mut()
                 }
                 false => &mut cpu.cpsr,
@@ -260,9 +254,6 @@ fn psr_transfer(opcode: u32, cpu: &mut Cpu) {
 
             if f_bit {
                 psr.set_flags(operand);
-            }
-            if let ProcessorMode::User = mode_clone {
-                return;
             }
             if c_bit {
                 psr.set_control(operand);

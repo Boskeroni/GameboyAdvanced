@@ -78,24 +78,17 @@ fn update_emulator(emulator_arc: &Arc<RwLock<Emulator>>, state: &mut EmulatorSta
     use EmulatorState::*;
     let redraw_needed = match state {
         Run(delay) => {
-            if *delay == 0 {
-                let finished = run_single_step(&mut emulator);
-                finished
-            } else {
-                let finished = run_single_step(&mut emulator);
-                thread::sleep(Duration::from_nanos(*delay as u64));
-                finished
-            }
-            
+            let finished = run_single_step(&mut emulator);
+            thread::sleep(Duration::from_nanos(*delay as u64));
+            finished
         }
-        Step => run_single_step(&mut emulator),
+        Step => {
+            *state = EmulatorState::Pause;
+            run_single_step(&mut emulator)
+        }
         Pause => false,
-        End => unreachable!(),
+        _ => unreachable!(),
     };
-
-    if let EmulatorState::Step = *state {
-        *state = EmulatorState::Pause;
-    }
 
     return redraw_needed;
 }

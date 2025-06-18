@@ -212,7 +212,7 @@ impl Memoriable for Box<Memory> {
             self.read_u8(base_address + 1), 
             self.read_u8(base_address + 2), 
             self.read_u8(base_address + 3),
-        )
+        ).rotate_right((address & 0b11) * 8)
     }
 
     fn write_u8(&mut self, address: u32, data: u8) {

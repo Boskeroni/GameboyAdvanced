@@ -482,8 +482,8 @@ pub struct Fde {
 impl Fde {
     pub fn new() -> Self {
         Self {
-            fetched_opcode: Some(0),
-            decoded_opcode: Some(0),
+            fetched_opcode: None,
+            decoded_opcode: None,
         }
     }
 }
