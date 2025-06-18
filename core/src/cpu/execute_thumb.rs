@@ -8,7 +8,7 @@ pub fn execute_thumb<M: Memoriable>(
     cpu: &mut Cpu,
     memory: &mut M,
 ) {
-    //println!("{:?}", assemblify::to_thumb_assembly(opcode));
+    // println!("{:?}", assemblify::to_thumb_assembly(opcode));
 
     use DecodedThumb::*;
     let instruction = decode_thumb(opcode);
@@ -267,7 +267,7 @@ fn hi_ops(opcode: u16, cpu: &mut Cpu) {
                 true => *pc = rs & !(0x1),
                 false => {
                     // swapping to arm mode
-                    *pc = (rs + 4) & !(0x3);
+                    *pc = rs & !(0x3);
                     cpu.cpsr.t = false;
                 },
             }
@@ -328,7 +328,7 @@ fn mem_offset<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M, uses_im
             let rd = cpu.get_register_mut(rd_index);
             match b_bit {
                 true => *rd = memory.read_u8(address) as u32,
-                false => *rd = memory.read_u32(address).rotate_right((address & 0b11) * 8),
+                false => *rd = memory.read_u32(address),
             }
         }
         false => {
@@ -358,7 +358,7 @@ fn mem_sign_extended<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) 
         }
         0b10 => { // LDRH
             let rd = cpu.get_register_mut(rd_index);
-            *rd = (memory.read_u16(address) as u32).rotate_right((address % 2) * 8);
+            *rd = (memory.read_u16(address) as u32).rotate_right((address & 0b1) * 8);
         }
         0b01 => {
             let mut raw_reading = memory.read_u8(address) as u32;
@@ -406,7 +406,7 @@ fn mem_halfword<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
     match l_bit {
         true => {
             let rd = cpu.get_register_mut(rd_index);
-            *rd = (memory.read_u16(address) as u32).rotate_right((address%2) * 8);
+            *rd = (memory.read_u16(address) as u32).rotate_right((address & 0b1) * 8);
         }
         false => {
             let rd = cpu.get_register(rd_index);
@@ -425,7 +425,7 @@ fn mem_sp_relative<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
     match l_bit {
         true => {
             let rd = cpu.get_register_mut(rd_index);
-            *rd = memory.read_u32(address).rotate_right((address & 0b11) * 8);
+            *rd = memory.read_u32(address);
         }
         false => {
             let rd = cpu.get_register(rd_index);

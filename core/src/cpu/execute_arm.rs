@@ -9,7 +9,7 @@ pub fn execute_arm<M: Memoriable>(
     cpu: &mut Cpu,
     memory: &mut M,
 ) {
-    println!("{:?} {:X}", assemblify::to_arm_assembly(opcode), opcode);
+    // println!("{:?} {:X}", assemblify::to_arm_assembly(opcode), opcode);
 
     // first check if we even have to do it
     let condition = opcode >> 28;
@@ -396,7 +396,7 @@ fn data_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
         true => {
             let data = match b_bit {
                 true => memory.read_u8(address) as u32,
-                false => memory.read_u32(address).rotate_right((address & 0b11) * 8),
+                false => memory.read_u32(address),
             };
             let rd = cpu.get_register_mut(rd_index);
             *rd = data;
@@ -601,7 +601,7 @@ fn block_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
 
                 let next_r = rlist.trailing_zeros();
                 let rb = cpu.get_register_mut_specific(next_r as u8, used_mode);
-                *rb = memory.read_u32(current_address);
+                *rb = memory.read_u32(current_address & !(0b11));
 
                 // LDM with r15 in transfer list and s bit set (mode changes)
                 if next_r == 15 {
@@ -637,7 +637,7 @@ fn block_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
                     _ => cpu.get_register_specific(next_r as u8, used_mode),
                 };
 
-                memory.write_u32(current_address, rb);
+                memory.write_u32(current_address & !(0b11), rb);
                 if p_bit != u_bit {
                     current_address += 4;
                 }
@@ -692,7 +692,7 @@ fn single_swap<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
     let data;
     match quantity_bit {
         true => data = memory.read_u8(address) as u32,
-        false => data = memory.read_u32(address).rotate_right((address & 0b11) * 8),
+        false => data = memory.read_u32(address),
     }
     
     let rd = cpu.get_register_mut(rd_index);

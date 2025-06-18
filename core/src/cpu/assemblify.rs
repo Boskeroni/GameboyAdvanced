@@ -316,12 +316,12 @@ fn psr_assembly(opcode: u32) -> (String, String) {
     let op_bit = (opcode >> 21) & 1 == 1;
 
     let psr_string = match (opcode >> 22) & 1 == 1 {
-        true => "SPSR",
-        false => "CPSR"
+        true => "spsr",
+        false => "cpsr"
     }.to_string();
     let start = match op_bit {
-        true => "MSR",
-        false => "MRS",
+        true => "msr ",
+        false => "mrs ",
     }.to_string();
 
     let rest;
@@ -351,7 +351,13 @@ fn psr_assembly(opcode: u32) -> (String, String) {
     return (start, rest);
 }
 fn data_processing_assembly(opcode: u32) -> (String, String) {
+    let s_bit = (opcode >> 20) & 1 == 1;
     let inner_opcode = (opcode >> 21) & 0xF;
+
+    if inner_opcode >= 0x8 && inner_opcode <= 0xB && !s_bit {
+        return psr_assembly(opcode);
+    }
+
     let name = match inner_opcode {
         0x0 => "and",
         0x1 => "eor",
@@ -373,16 +379,12 @@ fn data_processing_assembly(opcode: u32) -> (String, String) {
     }.to_string();
     let mut rest_of_line = String::new();
 
-    let s_bit = (opcode >> 20) & 1 == 1;
-    if inner_opcode >= 0x8 && inner_opcode <= 0xb && s_bit {
-        return psr_assembly(opcode)
-    }
-
     let rn = (opcode >> 16) & 0xF;
     let rd = (opcode >> 12) & 0xF;
     let op2_assembly = barrel_shifter_assembly(opcode, (opcode >> 25) & 1 == 1);
 
     // its a testing opcode
+    // so no result register is specified
     if inner_opcode >= 0x8 && inner_opcode <= 0xB {
         return (name, format!(" r{rn}, {op2_assembly}"));
     } 
