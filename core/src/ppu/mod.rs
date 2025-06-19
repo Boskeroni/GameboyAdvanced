@@ -16,6 +16,27 @@ use tiles::*;
 const VRAM_BASE: u32 = 0x6000000;
 const PALETTE_BASE: u32 = 0x5000000;
 
+fn get_rotation_scaling(bg: u32, memory: &Box<Memory>) -> (u32, u32, u16, u16, u16, u16) {
+    let base = PpuRegisters::BgRotationBase as u32 + (bg - 2) * 0x10;
+    let x0 = {
+        let lower = memory.read_u16(base + 0x8) as u32;
+        let higher = memory.read_u16(base + 0xA) as u32 & 0x0FFF;
+        higher << 16 | lower
+    };
+    let y0 = {
+        let lower = memory.read_u16(base + 0xC) as u32;
+        let higher = memory.read_u16(base + 0xE) as u32 & 0x0FFF;
+        higher << 16 | lower
+    };
+
+    let dx = memory.read_u16(base + 0x0);
+    let dmx = memory.read_u16(base + 0x2);
+    let dy = memory.read_u16(base + 0x4);
+    let dmy = memory.read_u16(base + 0x6);
+
+    return (x0, y0, dx, dmx, dy, dmy);
+}
+
 fn convert_palette_winit(palette: u16) -> u32 {
     let (r, g, b) = (palette & 0x1F, (palette >> 5) & 0x1F, (palette >> 10) & 0x1F);
     let (float_r, float_g, float_b) = (r as f32 / 31., g as f32 / 31., b as f32 / 31.);

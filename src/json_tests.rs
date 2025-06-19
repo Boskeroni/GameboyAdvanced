@@ -47,7 +47,7 @@ impl JsonMemory {
             }
             return;
         }
-        panic!("{}", serde_json::to_string_pretty(&self.transactions).unwrap());
+        panic!("{} {addr}", serde_json::to_string_pretty(&self.transactions).unwrap());
         // println!("failed :(");
     }
     fn read_instruction(&self, address: u32) -> u32 {
@@ -76,9 +76,7 @@ pub fn perform_tests() {
         let name = file.file_name();
         let filename = name.to_str().unwrap();
         if filename.ends_with(".py") { continue; }
-        if filename.contains("arm")   { continue; }
-        if filename.contains("bx")   { continue; }
-
+        
         println!("{}", file.file_name().to_str().unwrap());
         let read_file = std::fs::read_to_string(file.path()).unwrap();
         let json: Value = serde_json::from_str(&read_file).unwrap();
@@ -93,7 +91,7 @@ pub fn perform_tests() {
                 cycles: 0,
                 mem
             };
-            //println!("{}", emu.cpu.fde.decoded_opcode.unwrap());
+            println!("{i}");
             run_json_test(&mut emu);
             if let Some(e) = check_identical(&emu.cpu, &end_cpu) {
                 println!("{}", serde_json::to_string_pretty(test).unwrap());

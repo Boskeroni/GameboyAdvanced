@@ -2,7 +2,7 @@ use crate::memory::Memory;
 use crate::memory::Memoriable;
 use super::{Ppu, PpuRegisters, PALETTE_BASE, VRAM_BASE};
 
-pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Box<Memory>, line: u32) {
+pub fn bg_mode_0(ppu: &mut Ppu, memory: &Box<Memory>, line: u32) {
     let backgrounds = get_background_priorities(memory, vec![0, 1, 2, 3]);
     if backgrounds.is_empty() {
         return;
@@ -29,7 +29,7 @@ pub fn bg_mode_0(ppu: &mut Ppu, memory: &mut Box<Memory>, line: u32) {
     }
 }
 
-pub fn bg_mode_1(ppu: &mut Ppu, memory: &mut Box<Memory>, line: u32) { 
+pub fn bg_mode_1(ppu: &mut Ppu, memory: &Box<Memory>, line: u32) { 
     let backgrounds = get_background_priorities(memory, vec![0, 1, 2]);
     if backgrounds.is_empty() {
         return;
@@ -82,58 +82,85 @@ fn get_background_priorities(memory: &Box<Memory>, available_bgs: Vec<u32>) -> V
 
 fn rotation_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
     let bg_cnt = memory.read_u16(PpuRegisters::BGCnt as u32 + bg * 2);
+    let (width, height) = match (bg_cnt >> 14) & 0b11 {
+        0 => (128, 128),
+        1 => (256, 256),
+        2 => (512, 512),
+        3 => (1024, 1024),
+        _ => unreachable!(),
+    };
 
     let base = PpuRegisters::BgRotationBase as u32 + (bg - 2) * 0x10;
-    let x_coord = {
-        let lower = memory.read_u16(base + 0x8) as u32;
-        let higher = memory.read_u16(base + 0xA) as u32 & 0x0FFF;
-        higher << 16 | lower
+    let x0 = {
+        let lower = memory.read_u16(base + 0x8) as i64;
+        let mut higher = memory.read_u16(base + 0xA) as i64 & 0x0FFF;
+        if (higher >> 11) & 1 == 1 {
+            higher &= 0x800;
+            higher = -higher;
+        }
+        let combine = (higher << 16 | lower) << 8;
+        combine as f64 / 256.
     };
-    let y_coord = {
-        let lower = memory.read_u16(base + 0xC) as u32;
-        let higher = memory.read_u16(base + 0xE) as u32 & 0x0FFF;
-        higher << 16 | lower
+    let y0 = {
+        let lower = memory.read_u16(base + 0xC) as i64;
+        let mut higher = memory.read_u16(base + 0xE) as i64 & 0x0FFF;
+        if (higher >> 11) & 1 == 1 {
+            higher &= 0x800;
+            higher = -higher
+        }
+        let combine = (higher << 16 | lower) << 8;
+        combine as f64 / 256.
     };
 
-    let dx = memory.read_u16(base + 0x0);
-    let dmx = memory.read_u16(base + 0x2);
-    let dy = memory.read_u16(base + 0x4);
-    let dmy = memory.read_u16(base + 0x6);
+    let pa = (memory.read_u16(base + 0x0) as f64) / 256.; // the scale factor for x
+    let pb = (memory.read_u16(base + 0x2) as f64) / 256.; // the scale factor for y
+    let pc = (memory.read_u16(base + 0x4) as f64) / 256.; // the shear for x
+    let pd = (memory.read_u16(base + 0x6) as f64) / 256.; // the shear for y
 
-    // TODO: fix this extremely inefficient implementation    
-    // it practically creates a whole screen just for one line
-    
+    let determinant = 1. / (pa * pd - pc * pb);
+    for x2 in 0..240 {
+        // have to calculate both the x and the y coords
+        let x1_float = determinant * (pd * (x2 as f64 - x0) - pb * (line as f64 - y0)) + x0;
+        let y1_float = determinant * (pc * (x2 as f64 - x0) + pa * (line as f64 - y0)) + y0;
 
-
-
-
-
-
+        let (x1, y1) = (x1_float as u32, y1_float as u32);
+        if x1 >= width || y1 >= height {
+            panic!("just checking if this is the wrapping this they were on about");
+        }
+        let row = y1 / 8;
+        let col = x1 / 8;
+        
+        // assuming that it is 1-d mapping, not 2-d mapping
+        let tile_address = VRAM_BASE + (col * 0x40) + (row * (width / 8) * 0x40);
+        // let tile_index = memory.re
+    }
 
 
     todo!();
 }
+
+const SCREEN_SIZE: [(u32, u32); 4] = [
+    (256, 256),
+    (512, 256),
+    (256, 512),
+    (512, 512),
+];
+
 // when i remember what this does, i will put a comment here
 fn text_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
     let bg_cnt = memory.read_u16(PpuRegisters::BGCnt as u32 + bg * 2);
 
     // all the variables stored within the bg_cnt register
-    // (not all of their functionality have been implemented yet)
     let char_block = (bg_cnt >> 2) & 0x3;
     let mosaic = (bg_cnt >> 6) & 1 == 1;
     let is_8_bit = (bg_cnt >> 7) & 1 == 1;
     let screen_base = (bg_cnt >> 8) & 0x1F;
-    let wrap_around = (bg_cnt >> 13) & 1 == 1 && bg != 0 && bg != 1;
+
+    // bg modes 0-1 do not implement wrap arounds
+    let wrap_around = (bg_cnt >> 13) & 1 == 1 && bg >= 2; 
     let screen_size = (bg_cnt >> 14) & 0x3;
 
-    let (width, height) = match screen_size {
-        0 => (256, 256),
-        1 => (512, 256),
-        2 => (256, 512),
-        3 => (512, 512),
-        _ => unreachable!(),
-    };
-
+    let (width, height) = SCREEN_SIZE[screen_size as usize];
     let sc0_address = VRAM_BASE + (screen_base as u32 * 0x800);
     let char_address = VRAM_BASE + (char_block as u32 * 0x4000);
 

@@ -5,7 +5,6 @@ pub mod joypad;
 mod bus; 
 
 use cpu::{
-    decode::*, 
     execute_arm::execute_arm, 
     execute_thumb::execute_thumb, 
     handle_interrupts, 
@@ -14,6 +13,8 @@ use cpu::{
 use joypad::init_joypad;
 use memory::*;
 use ppu::*;
+
+use crate::cpu::assemblify;
 
 const FROM_BIOS: bool = false;
 pub struct Emulator {
@@ -69,8 +70,14 @@ pub fn run_single_step(emu: &mut Emulator) -> bool {
     // Execute
     if let Some(instruction) = emu.cpu.fde.decoded_opcode {        
         match emu.cpu.cpsr.t {
-            true => execute_thumb(instruction as u16, &mut emu.cpu, &mut emu.mem),
-            false => execute_arm(instruction, &mut emu.cpu, &mut emu.mem),
+            true => {
+                println!("{}", assemblify::to_arm_assembly(instruction));
+                execute_thumb(instruction as u16, &mut emu.cpu, &mut emu.mem)
+            }
+            false => {
+                println!("{}", assemblify::to_thumb_assembly(instruction as u16));
+                execute_arm(instruction, &mut emu.cpu, &mut emu.mem)
+            },
         };
 
         if emu.mem.should_halt_cpu() {

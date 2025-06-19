@@ -464,6 +464,25 @@ fn push_pop<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
     let r_bit = (opcode >> 8) & 1 == 1;
 
     let sp = cpu.get_register(13);
+    if rlist == 0 && !r_bit {
+        if l_bit {
+            let new_pc = memory.read_u32(sp);
+            let pc = cpu.get_register_mut(15);
+            *pc = new_pc;
+            cpu.clear_pipeline();
+        }
+        let sp_mut = cpu.get_register_mut(13);
+        *sp_mut = match l_bit {
+            true => sp + 0x40,
+            false => sp - 0x40,
+        };
+        if !l_bit {
+            let pc = cpu.get_register(15);
+            memory.write_u32(sp - 0x40, pc + 2);
+        }
+        return;
+    }
+
     let address;
     match l_bit {
         true => { 
@@ -639,6 +658,7 @@ fn long_branch_link(opcode: u16, cpu: &mut Cpu) {
 fn software_interrupt(cpu: &mut Cpu) {
     cpu.set_specific_spsr(cpu.cpsr, ProcessorMode::Supervisor);
     cpu.cpsr.mode = ProcessorMode::Supervisor;
+    cpu.cpsr.i = true;
 
     let pc = cpu.get_register(15);
     let lr = cpu.get_register_mut(14);

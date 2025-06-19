@@ -15,7 +15,7 @@ use std::sync::{mpsc, Arc};
 use std::env;
 use std::thread;
 
-const JSON_TESTS: bool = false;
+const JSON_TESTS: bool = true;
 fn main() {
     if JSON_TESTS {
         json_tests::perform_tests();
@@ -82,12 +82,12 @@ impl eframe::App for EmulatorApp {
         }
     
         // check if a redraw needs to happen
-        if let Ok(screen) = self.redraw_recv.try_recv() {
-            draw(&screen, ctx);
+        // scroll through all of them until it is up to the most recent
+        while let Ok(screen) = self.redraw_recv.try_recv() {
             self.previous_screen = screen;
-        } else {
-            draw(&self.previous_screen, ctx);
         }
+        draw(&self.previous_screen, ctx);
+
 
         ctx.input(|i| {
             for event in &i.events {

@@ -1,5 +1,5 @@
 use gba_core::{joypad::{self, joypad_press, joypad_release}, run_single_step, Emulator};
-use std::{sync::{mpsc::{Receiver, SyncSender}, Arc}, thread, time::{Duration, Instant}};
+use std::{sync::{mpsc::{Receiver, SyncSender}, Arc}, thread, time::Duration};
 use egui::Key;
 use parking_lot::RwLock;
 
@@ -30,7 +30,6 @@ pub enum EmulatorState {
     Run(u32), // the delay (in milliseconds) each tick should wait
     Pause,
     Step,
-    End,
 }
 
 pub fn run_emulator(
@@ -58,7 +57,6 @@ pub fn run_emulator(
                         false => joypad_release(button, &mut emulator.mem),
                     }
                 }
-                EmulatorSend::StateUpdate(EmulatorState::End) => return,
                 EmulatorSend::StateUpdate(new_state) => state = new_state,
             }
         }
@@ -89,7 +87,6 @@ fn update_emulator(emulator_arc: &Arc<RwLock<Emulator>>, state: &mut EmulatorSta
             run_single_step(&mut emulator)
         }
         Pause => false,
-        _ => unreachable!(),
     };
 
     return redraw_needed;

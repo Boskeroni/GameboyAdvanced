@@ -3,7 +3,7 @@ mod memory_widget;
 mod instruction_widget;
 mod cpu_widget;
 
-use std::{sync::{mpsc::Sender, Arc}, time::Instant};
+use std::sync::{mpsc::Sender, Arc};
 use cpu_widget::CpuWidget;
 use egui::{ViewportBuilder, ViewportClass, ViewportId};
 use instruction_widget::InstructionWidget;

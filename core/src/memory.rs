@@ -138,7 +138,9 @@ impl Memory {
 
             // just mirrors it up and down
             // since should be recursive as is_8_bit will be set to false
-            self.write_io(address & !1, (data as u16) * 0x101);
+            let halfword_aligned = address & !0b1;
+            self.checked_write_u8(halfword_aligned + 0, data, false);
+            self.checked_write_u8(halfword_aligned + 1, data, false);
             return;
         }
 

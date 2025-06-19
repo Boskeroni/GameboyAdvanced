@@ -3,7 +3,7 @@ use gba_core::memory::{self, Memoriable};
 
 use egui::{Label, TextEdit};
 use gba_core::memory::{DMABaseAddress, Memory};
-use std::{cmp::min, time::Instant};
+use std::cmp::min;
 use std::ops::Range;
 use egui::{scroll_area::ScrollBarVisibility, vec2, RichText, ViewportBuilder, ViewportClass, ViewportId, Widget};
 
