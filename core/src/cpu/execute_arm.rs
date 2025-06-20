@@ -73,7 +73,7 @@ fn branch_exchange(opcode: u32, cpu: &mut Cpu) {
             cpu.cpsr.t = true;
         }
         false => {
-            *pc &= !(0x3);
+            *pc &= !(0x1);
             cpu.cpsr.t = false; // not fully needed but safe
         },
     }
@@ -481,7 +481,10 @@ fn halfword_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) 
             assert!(!s_bit, "s-bit must be false");
             assert!(h_bit, "h-bit must be set");
 
-            let rd = cpu.get_register(rd_index);
+            let rd = match rd_index {
+                15 => cpu.get_register(rd_index) + 4,
+                _ => cpu.get_register(rd_index),
+            };
             memory.write_u16(address, rd as u16);
         }
         true => {
@@ -549,6 +552,12 @@ fn halfword_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) 
     }
 }
 fn block_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
+    let l_bit = (opcode >> 20) & 1 == 1;
+    let w_bit = (opcode >> 21) & 1 == 1;
+    let s_bit = (opcode >> 22) & 1 == 1;
+    let u_bit = (opcode >> 23) & 1 == 1;
+    let p_bit = (opcode >> 24) & 1 == 1;
+
     let mut rlist = opcode & 0xFFFF;
     let r15_in_list = (rlist >> 15) & 1 == 1;
     let started_empty = rlist == 0;
@@ -556,52 +565,69 @@ fn block_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
         rlist |= 0x8000;
     }
 
-    let l_bit = (opcode >> 20) & 1 == 1;
-    let w_bit = (opcode >> 21) & 1 == 1;
-    let s_bit = (opcode >> 22) & 1 == 1;
-    let u_bit = (opcode >> 23) & 1 == 1;
-    let p_bit = (opcode >> 24) & 1 == 1;
-
     let rn_index = (opcode >> 16) & 0xF;
-    let rn = cpu.get_register(rn_index as u8);
+    if rn_index == 15 {
+        panic!("i am not dealing with this shit");
+    }
+    let rn = cpu.get_register(rn_index as u8); // shouldn't be R15
 
     let used_mode = match (s_bit, r15_in_list, l_bit) {
         (true, true, false) => ProcessorMode::User, // STM with R15 in transfer and S bit set
         (true, false, _) => ProcessorMode::User, // R15 not in list and S bit set
         _ => cpu.cpsr.mode, // All others
     };
-    let mut current_address;
-    match started_empty {
-        true => {
-            current_address = match u_bit {
-                true => rn,
-                false => rn - 0x40,
-            };
+
+    if started_empty {
+        if l_bit {
+            let new_pc = memory.read_u32(rn);
+            let pc = cpu.get_register_mut(15);
+            *pc = new_pc;
+            cpu.clear_pipeline();
         }
-        false => {
-            current_address = match u_bit {
-                true => rn,
-                false => rn - (rlist.count_ones() * 4),
-            };
+        let rn_mut = cpu.get_register_mut_specific(rn_index as u8, used_mode);
+        *rn_mut = match l_bit {
+            true => rn + 0x40,
+            false => rn - 0x40,
+        };
+        if !l_bit {
+            let pc = cpu.get_register(15);
+            memory.write_u32(rn - 0x40, pc + 4);
         }
+        return;
     }
 
-    let starting_base = current_address;
-    let ending_base = match u_bit {
-        true => starting_base + (rlist.count_ones() * 4),
-        false => current_address,
+    // this is the lowest address that all the STMs/LDMs should work off
+    let bottom_address = match started_empty {
+        true => {
+            match u_bit {
+                true => rn,
+                false => rn - 0x40,
+            }
+        }
+        false => {
+            match u_bit {
+                true => rn,
+                false => rn - (rlist.count_ones() * 4),
+            }
+        }
     };
+
+    let ending_address = match u_bit {
+        true => bottom_address + (rlist.count_ones() * 4),
+        false => bottom_address,
+    };
+    let mut extra = 0;
 
     match l_bit {
         true => {
             while rlist != 0 {
                 if p_bit == u_bit {
-                    current_address += 4;
+                    extra += 4;
                 }
 
                 let next_r = rlist.trailing_zeros();
                 let rb = cpu.get_register_mut_specific(next_r as u8, used_mode);
-                *rb = memory.read_u32(current_address & !(0b11));
+                *rb = memory.read_u32(bottom_address + extra);
 
                 // LDM with r15 in transfer list and s bit set (mode changes)
                 if next_r == 15 {
@@ -612,7 +638,7 @@ fn block_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
                 }
 
                 if p_bit != u_bit {
-                    current_address += 4;
+                    extra += 4;
                 }
                 rlist &= !(1<<next_r);
             }
@@ -624,25 +650,25 @@ fn block_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
                 // why do the docs not make a mention of this???
                 if !first_run && (rlist >> rn_index) & 1 == 1 && w_bit {
                     let rn_mut = cpu.get_register_mut_specific(rn_index as u8, used_mode);
-                    *rn_mut = ending_base;
+                    *rn_mut = ending_address;
                 }
+                first_run = false;
 
                 if p_bit == u_bit {
-                    current_address += 4;
+                    extra += 4;
                 }
 
                 let next_r = rlist.trailing_zeros();
-                let rb = match next_r {
-                    15 => cpu.get_register_specific(15, used_mode) + 4,
+                let rb = match (next_r, rn_index == 15) {
+                    (15, false) => cpu.get_register_specific(15, used_mode) + 4,
                     _ => cpu.get_register_specific(next_r as u8, used_mode),
                 };
 
-                memory.write_u32(current_address & !(0b11), rb);
+                memory.write_u32(bottom_address + extra, rb);
                 if p_bit != u_bit {
-                    current_address += 4;
+                    extra += 4;
                 }
 
-                first_run = false;
                 rlist &= !(1<<next_r);
             }
         }
@@ -658,19 +684,7 @@ fn block_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
             cpu.clear_pipeline();
         }
         let rn_mut = cpu.get_register_mut_specific(rn_index as u8, used_mode);
-
-        if started_empty {
-            match u_bit {
-                true => *rn_mut = starting_base + 0x40,
-                false => *rn_mut = starting_base, // this one has already been accounted for
-            }
-            return;
-        }
-
-        match u_bit {
-            true => *rn_mut = current_address,
-            false => *rn_mut = starting_base,
-        }
+        *rn_mut = ending_address;
     }
 }
 fn single_swap<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {

@@ -60,7 +60,7 @@ pub fn bg_mode_1(ppu: &mut Ppu, memory: &Box<Memory>, line: u32) {
 }
 
 pub fn bg_mode_2(_ppu: &mut Ppu, _memory: &mut Memory, _line: u16) { 
-    todo!()
+    //todo!()
 }
 
 /// returns all the backgrounds in order of priority

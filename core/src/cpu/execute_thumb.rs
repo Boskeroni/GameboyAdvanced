@@ -260,14 +260,14 @@ fn hi_ops(opcode: u16, cpu: &mut Cpu) {
         },
         0b10 => result = rs,
         0b11 => {
-            assert!(!h1, "H1=1 for this instruction is undefined");
+            // assert!(!h1, "H1=1 for this instruction is undefined");
 
             let pc = cpu.get_register_mut(15);
             match rs & 1 == 1 {
                 true => *pc = rs & !(0x1),
                 false => {
                     // swapping to arm mode
-                    *pc = rs & !(0x3);
+                    *pc = rs & !(0x1);
                     cpu.cpsr.t = false;
                 },
             }

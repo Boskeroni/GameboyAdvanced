@@ -1,4 +1,4 @@
-use gba_core::{cpu::{check_condition, convert_u32_psr, execute_arm::execute_arm, execute_thumb::execute_thumb, Cpu, Fde}, memory::Memoriable};
+use gba_core::{cpu::{convert_u32_psr, execute_arm::execute_arm, execute_thumb::execute_thumb, Cpu, Fde}, handle_cpu, memory::Memoriable};
 use serde_json::{self, Value};
 
 pub struct JsonEmulator {
@@ -42,7 +42,7 @@ impl JsonMemory {
                 continue;
             }
             if transaction["data"].as_u64().unwrap() != data {
-                println!("wrong data supplied {data} at {addr}");
+                println!("wrong data supplied {data} at {addr} should be {}", transaction["data"].as_u64().unwrap());
                 break;
             }
             return;
@@ -76,14 +76,16 @@ pub fn perform_tests() {
         let name = file.file_name();
         let filename = name.to_str().unwrap();
         if filename.ends_with(".py") { continue; }
-        
+        if filename.contains("cdp") {continue; }
+
+
         println!("{}", file.file_name().to_str().unwrap());
         let read_file = std::fs::read_to_string(file.path()).unwrap();
         let json: Value = serde_json::from_str(&read_file).unwrap();
         let all_tests = json.as_array().unwrap();
         for test in all_tests {
-            let (cpu, fde) = init_single_test(true, test);
-            let (end_cpu, _end_fde) = init_single_test(false, test);
+            let cpu = init_single_test(true, test);
+            let end_cpu = init_single_test(false, test);
             let mem = init_mem(test);
 
             let mut emu = JsonEmulator {
@@ -91,11 +93,11 @@ pub fn perform_tests() {
                 cycles: 0,
                 mem
             };
-            println!("{i}");
-            run_json_test(&mut emu);
+            run_test(&mut emu.cpu, &mut emu.mem);
             if let Some(e) = check_identical(&emu.cpu, &end_cpu) {
                 println!("{}", serde_json::to_string_pretty(test).unwrap());
                 println!("{e}");
+                println!("{:?}", emu.cpu.fde);
                 panic!("{i}");
             }
             i += 1;
@@ -103,7 +105,7 @@ pub fn perform_tests() {
     }
 }
 
-fn init_single_test(start: bool, test: &Value) -> (Cpu, Fde) {
+fn init_single_test(start: bool, test: &Value) -> Cpu {
     let location = match start {
         true => "initial",
         false => "final"
@@ -160,53 +162,15 @@ fn init_single_test(start: bool, test: &Value) -> (Cpu, Fde) {
         barrel_shifter: false,
         fde,
     };
-    return (cpu, fde);
+    return cpu
 }
 
 fn init_mem(test: &Value) -> JsonMemory {    
     JsonMemory { 
         transactions: test["transactions"].clone(),
-        base_addr: test["base_addr"].as_array().unwrap()[0].as_u64().unwrap() as u32,
+        base_addr: test["base_addr"].as_u64().unwrap() as u32,
         test_opcode: test["opcode"].as_u64().unwrap() as u32,
     }
-}
-
-fn run_json_test(emu: &mut JsonEmulator) {
-    // this will always be a thing
-    let opcode = emu.cpu.fde.decoded_opcode.unwrap();
-    match emu.cpu.cpsr.t {
-        true => {
-            execute_thumb(opcode as u16, &mut emu.cpu, &mut emu.mem);
-            let addition = match emu.cpu.cpsr.t {
-                true => 2,
-                false => 4,
-            };
-
-            match emu.cpu.fde.fetched_opcode.is_none() {
-                true => emu.cpu.pc = emu.cpu.pc.wrapping_add(addition * 2),
-                false => emu.cpu.pc = emu.cpu.pc.wrapping_add(addition),
-            }
-        }
-        false => {
-            let runs = check_condition(opcode >> 28, &emu.cpu.cpsr);
-            if !runs {
-                emu.cpu.pc = emu.cpu.pc.wrapping_add(4);
-            }
-            execute_arm(opcode, &mut emu.cpu, &mut emu.mem);
-
-            let addition = match emu.cpu.cpsr.t {
-                true => 2,
-                false => 4,
-            };
-
-            if runs {
-                match emu.cpu.fde.fetched_opcode.is_none() {
-                    true => emu.cpu.pc = emu.cpu.pc.wrapping_add(addition * 2),
-                    false => emu.cpu.pc = emu.cpu.pc.wrapping_add(addition),
-                }
-            }
-        }
-    };
 }
 
 fn check_identical(test: &Cpu, correct: &Cpu) -> Option<String> {
@@ -251,5 +215,45 @@ fn check_identical(test: &Cpu, correct: &Cpu) -> Option<String> {
         return Some(format!("PC {:X} != {:X}", test.pc, correct.pc));
     }
 
+    // compare the fetched and decoded instructions
+    if test.fde.decoded_opcode.unwrap() != correct.fde.decoded_opcode.unwrap() {
+        return Some(format!("decoded doesn't match"));
+    }
+    if test.fde.fetched_opcode.unwrap() != correct.fde.fetched_opcode.unwrap() {
+        return Some(format!("fetched doesn't match"));
+    }
+
     return None;
+}
+fn run_test(cpu: &mut Cpu, mem: &mut JsonMemory) {
+    // Execute
+    if let Some(instruction) = cpu.fde.decoded_opcode {        
+        match cpu.cpsr.t {
+            true => {
+                // println!("{}", assemblify::to_arm_assembly(instruction));
+                execute_thumb(instruction as u16, cpu, mem)
+            }
+            false => {
+                // println!("{}", assemblify::to_thumb_assembly(instruction as u16));
+                execute_arm(instruction, cpu, mem)
+            },
+        };
+    }
+    
+    // if there was a clear, need to get new fetched
+    if let None = cpu.fde.fetched_opcode {
+        let fetch = match cpu.cpsr.t {
+            true => mem.read_instruction(cpu.get_pc_thumb()) & 0xFFFF,
+            false => mem.read_instruction(cpu.get_pc_arm()),
+        };
+        cpu.fde.fetched_opcode = Some(fetch);
+    }
+    
+    // move the fetched to decoded
+    cpu.fde.decoded_opcode = cpu.fde.fetched_opcode.clone();
+    let fetch = match cpu.cpsr.t {
+        true => mem.read_instruction(cpu.get_pc_thumb()) & 0xFFFF,
+        false => mem.read_instruction(cpu.get_pc_arm()),
+    };
+    cpu.fde.fetched_opcode = Some(fetch);
 }

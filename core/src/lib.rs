@@ -14,9 +14,7 @@ use joypad::init_joypad;
 use memory::*;
 use ppu::*;
 
-use crate::cpu::assemblify;
-
-const FROM_BIOS: bool = false;
+const FROM_BIOS: bool = true;
 pub struct Emulator {
     pub cpu: Cpu,
     pub ppu: Ppu,
@@ -67,40 +65,42 @@ pub fn run_single_step(emu: &mut Emulator) -> bool {
         return false;
     }
 
+    handle_cpu(&mut emu.cpu, &mut emu.mem);
+    if emu.mem.should_halt_cpu() {
+        emu.cpu.halted = true;
+    }
+    return false;
+}
+
+pub fn handle_cpu<M: Memoriable>(cpu: &mut Cpu, mem: &mut M) {
     // Execute
-    if let Some(instruction) = emu.cpu.fde.decoded_opcode {        
-        match emu.cpu.cpsr.t {
+    if let Some(instruction) = cpu.fde.decoded_opcode {        
+        match cpu.cpsr.t {
             true => {
-                println!("{}", assemblify::to_arm_assembly(instruction));
-                execute_thumb(instruction as u16, &mut emu.cpu, &mut emu.mem)
+                // println!("{}", assemblify::to_arm_assembly(instruction));
+                execute_thumb(instruction as u16, cpu, mem)
             }
             false => {
-                println!("{}", assemblify::to_thumb_assembly(instruction as u16));
-                execute_arm(instruction, &mut emu.cpu, &mut emu.mem)
+                // println!("{}", assemblify::to_thumb_assembly(instruction as u16));
+                execute_arm(instruction, cpu, mem)
             },
         };
-
-        if emu.mem.should_halt_cpu() {
-            emu.cpu.halted = true;
-        }
     }
-
+    
     // if there was a clear, need to get new fetched
-    if let None = emu.cpu.fde.fetched_opcode {
-        let fetch = match emu.cpu.cpsr.t {
-            true => emu.mem.read_u16(emu.cpu.get_pc_thumb()) as u32,
-            false => emu.mem.read_u32(emu.cpu.get_pc_arm()),
+    if let None = cpu.fde.fetched_opcode {
+        let fetch = match cpu.cpsr.t {
+            true => mem.read_u16(cpu.get_pc_thumb()) as u32,
+            false => mem.read_u32(cpu.get_pc_arm()),
         };
-        emu.cpu.fde.fetched_opcode = Some(fetch);
+        cpu.fde.fetched_opcode = Some(fetch);
     }
-
+    
     // move the fetched to decoded
-    emu.cpu.fde.decoded_opcode = emu.cpu.fde.fetched_opcode.clone();
-    let fetch = match emu.cpu.cpsr.t {
-        true => emu.mem.read_u16(emu.cpu.get_pc_thumb()) as u32,
-        false => emu.mem.read_u32(emu.cpu.get_pc_arm()),
+    cpu.fde.decoded_opcode = cpu.fde.fetched_opcode.clone();
+    let fetch = match cpu.cpsr.t {
+        true => mem.read_u16(cpu.get_pc_thumb()) as u32,
+        false => mem.read_u32(cpu.get_pc_arm()),
     };
-    emu.cpu.fde.fetched_opcode = Some(fetch);
-
-    return false;
+    cpu.fde.fetched_opcode = Some(fetch);
 }

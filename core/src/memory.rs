@@ -145,7 +145,7 @@ impl Memory {
         }
 
         match upp_add {
-            0x0 => panic!("cannot make a write to the BIOS"),
+            0x0 => {} //panic!("cannot make a write to the BIOS"),
             0x2 => self.ewram[low_add % EWRAM_LENGTH] = data,
             0x3 => self.iwram[low_add % IWRAM_LENGTH] = data,
             0x4 => self.io_reg[low_add % IO_REG_LENGTH] = data,
