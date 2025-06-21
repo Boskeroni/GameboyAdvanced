@@ -343,8 +343,8 @@ impl Cpu {
         (self.pc & !(0b11)).wrapping_sub(4)
     }
     pub fn get_pc_thumb(&mut self) -> u32 {
-        self.pc += 2;
-        (self.pc & !(0b1)) - 2
+        self.pc = self.pc.wrapping_add(2);
+        (self.pc & !(0b1)).wrapping_sub(2)
     }
 
     // CPSR stuff

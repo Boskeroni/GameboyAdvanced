@@ -245,8 +245,12 @@ fn psr_transfer(opcode: u32, cpu: &mut Cpu) {
                     cpu.get_register(rm_index)
                 }
             };
+            let cpsr_clone = cpu.cpsr.clone();
             let psr = match psr_bit {
                 true => {
+                    if let ProcessorMode::User|ProcessorMode::System = cpsr_clone.mode {
+                        return;
+                    }
                     cpu.get_spsr_mut()
                 }
                 false => &mut cpu.cpsr,
@@ -254,6 +258,9 @@ fn psr_transfer(opcode: u32, cpu: &mut Cpu) {
 
             if f_bit {
                 psr.set_flags(operand);
+            }
+            if let ProcessorMode::User = cpsr_clone.mode {
+                return;
             }
             if c_bit {
                 psr.set_control(operand);
@@ -270,6 +277,10 @@ fn psr_transfer(opcode: u32, cpu: &mut Cpu) {
             let rd_index = (opcode >> 12) as u8 & 0xF;
             let rd = cpu.get_register_mut(rd_index);
             *rd = result;
+
+            if rd_index == 15 {
+                cpu.clear_pipeline();
+            }
         }
     }
 }
@@ -396,7 +407,7 @@ fn data_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
         true => {
             let data = match b_bit {
                 true => memory.read_u8(address) as u32,
-                false => memory.read_u32(address),
+                false => memory.read_u32(address)
             };
             let rd = cpu.get_register_mut(rd_index);
             *rd = data;
@@ -561,9 +572,6 @@ fn block_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
     let mut rlist = opcode & 0xFFFF;
     let r15_in_list = (rlist >> 15) & 1 == 1;
     let started_empty = rlist == 0;
-    if started_empty {
-        rlist |= 0x8000;
-    }
 
     let rn_index = (opcode >> 16) & 0xF;
     if rn_index == 15 {
@@ -597,19 +605,9 @@ fn block_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
     }
 
     // this is the lowest address that all the STMs/LDMs should work off
-    let bottom_address = match started_empty {
-        true => {
-            match u_bit {
-                true => rn,
-                false => rn - 0x40,
-            }
-        }
-        false => {
-            match u_bit {
-                true => rn,
-                false => rn - (rlist.count_ones() * 4),
-            }
-        }
+    let bottom_address = match u_bit {
+        true => rn,
+        false => rn - (rlist.count_ones() * 4),
     };
 
     let ending_address = match u_bit {

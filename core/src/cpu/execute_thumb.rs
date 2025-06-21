@@ -463,88 +463,103 @@ fn push_pop<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
     let l_bit = (opcode >> 11) & 1 == 1;
     let r_bit = (opcode >> 8) & 1 == 1;
 
-    let sp = cpu.get_register(13);
+    let rn = cpu.get_register(13);
     if rlist == 0 && !r_bit {
         if l_bit {
-            let new_pc = memory.read_u32(sp);
+            let new_pc = memory.read_u32(rn).rotate_left((rn & 0b11) * 8);
             let pc = cpu.get_register_mut(15);
             *pc = new_pc;
             cpu.clear_pipeline();
         }
         let sp_mut = cpu.get_register_mut(13);
         *sp_mut = match l_bit {
-            true => sp + 0x40,
-            false => sp - 0x40,
+            true => rn + 0x40,
+            false => rn - 0x40,
         };
         if !l_bit {
             let pc = cpu.get_register(15);
-            memory.write_u32(sp - 0x40, pc + 2);
+            memory.write_u32(rn - 0x40, pc + 2);
         }
         return;
     }
 
-    let address;
+    let mut extra: u32 = 0;
     match l_bit {
         true => { 
-            // pop
-            // increments
-            let mut base_address = sp;
+            // pop increments
             while rlist != 0 {
                 let next_r = rlist.trailing_zeros();
 
                 let reg = cpu.get_register_mut(next_r as u8);
-                let change = memory.read_u32(base_address);
+                let change = memory.read_u32(rn + extra).rotate_left((rn & 0b11) * 8);
                 *reg = change;
                 
-                base_address += 4;
+                extra += 4;
                 rlist &= !(1<<next_r); // clear it for next time
             }
             if r_bit {
-                let change = memory.read_u32(base_address);
+                let change = memory.read_u32(rn + extra).rotate_left((rn & 0b11) * 8);
 
                 let reg = cpu.get_register_mut(15);
                 *reg = change & !(1);
                 cpu.clear_pipeline();
 
-                base_address += 4;
+                extra += 4;
             }
-            address = base_address; // updates to the end state
         }
         false => {
             // push
-            let total_increments = rlist.count_ones() + r_bit as u32;
+            let saved = (rlist.count_ones() + r_bit as u32) * 4;
+            extra = saved;
 
-            let mut base_address = sp - (total_increments * 4);
-            address = base_address; // updates to the start state
             while rlist != 0 {
                 let next_r = rlist.trailing_zeros();
                 let reg = cpu.get_register(next_r as u8);
-                memory.write_u32(base_address, reg);
+                memory.write_u32(rn - extra, reg);
                 rlist &= !(1<<next_r);
-                base_address += 4;
+                extra -= 4;
             }
             if r_bit {
                 let reg = cpu.get_register(14);
-                memory.write_u32(base_address, reg);
+                memory.write_u32(rn - extra, reg);
+                extra -= 4;
             }
+            extra = saved;
         }
     }
 
     let sp = cpu.get_register_mut(13);
-    *sp = address;
+    *sp = match l_bit {
+        true => *sp + extra,
+        false => *sp - extra,
+    };
 }
 fn mem_multiple<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
     let mut rlist = opcode & 0xFF;
     let started_empty = rlist == 0;
 
-    let rb_index = (opcode >> 8) as u8 & 0b111;
-    let rb = cpu.get_register(rb_index);
-
-    let rb_in_rlist = (rlist >> rb_index) & 1 == 1;
+    let rn_index = (opcode >> 8) as u8 & 0b111;
+    let rn = cpu.get_register(rn_index);
 
     let l_bit = (opcode >> 11) & 1 == 1;
-    let mut curr_address = rb;
-    let end_result = curr_address + (rlist.count_ones() * 4);
+        if started_empty {
+        if l_bit {
+            let new_pc = memory.read_u32(rn).rotate_left((rn & 0b11) * 8); // unrotate
+            let pc = cpu.get_register_mut(15);
+            *pc = new_pc;
+            cpu.clear_pipeline();
+        }
+        let rn_mut = cpu.get_register_mut(rn_index);
+        *rn_mut = rn + 0x40;
+        if !l_bit {
+            let pc = cpu.get_register(15);
+            memory.write_u32(rn, pc + 2);
+        }
+        return;
+    }
+
+    let mut extra = 0;
+    let end_result = rn + (rlist.count_ones() * 4);
 
     match l_bit {
         true => { // load
@@ -552,53 +567,40 @@ fn mem_multiple<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
                 let next_r = rlist.trailing_zeros();
 
                 let reg = cpu.get_register_mut(next_r as u8);
-                let change = memory.read_u32(curr_address);
+                let change = memory.read_u32(rn + extra).rotate_left((rn & 0b11) * 8); // have to not rotate?
                 *reg = change;
                 
-                curr_address += 4;
+                extra += 4;
                 rlist &= !(1<<next_r);
-            }
-            if started_empty {
-                let reg = cpu.get_register_mut(15);
-                let change = memory.read_u32(curr_address);
-                *reg = change;
-                cpu.clear_pipeline();
-
-                curr_address += 0x40;
             }
         }
         false => {
+            // store
             let mut first_run = true;
 
             while rlist != 0 {
                 let next_r = rlist.trailing_zeros();
-                if !first_run && (next_r as u8 == rb_index) {
+                if !first_run && (next_r as u8 == rn_index) {
                     // need to calculate the end
-                    let rb_mut = cpu.get_register_mut(rb_index);
+                    let rb_mut = cpu.get_register_mut(rn_index);
                     *rb_mut = end_result;
                 }
 
                 let reg = cpu.get_register(next_r as u8);
-                memory.write_u32(curr_address, reg);
-                curr_address += 4;
+                memory.write_u32(rn + extra, reg);
+                extra += 4;
 
                 rlist &= !(1<<next_r);
                 first_run = false;
             }
-            if started_empty {
-                let reg = cpu.get_register(15) + 2;
-                memory.write_u32(curr_address, reg);
-
-                curr_address += 0x40;
-            }
         }
     }
-    if rb_in_rlist && l_bit {
+    if (opcode >> rn_index) & 1 == 1 && l_bit {
         return;
     }
 
-    let rb_mut = cpu.get_register_mut(rb_index);
-    *rb_mut = curr_address;
+    let rb_mut = cpu.get_register_mut(rn_index);
+    *rb_mut = end_result;
 }
 fn unconditional_branch(opcode: u16, cpu: &mut Cpu) {
     let mut offset = (opcode as u32 & 0x3FF) << 1;
