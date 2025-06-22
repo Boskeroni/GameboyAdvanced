@@ -407,7 +407,7 @@ pub fn handle_interrupts(memory: &mut Box<Memory>, cpu: &mut Cpu) {
         return;
     }
 
-    let interrupt_allowed = memory.read_u32(CpuMemoryRegisters::Ime as u32) & 1 == 1;
+    let interrupt_allowed = memory.read_u32_unrotated(CpuMemoryRegisters::Ime as u32) & 1 == 1;
     if !interrupt_allowed && !cpu.halted {
         return;
     }

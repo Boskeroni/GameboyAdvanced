@@ -14,7 +14,9 @@ use joypad::init_joypad;
 use memory::*;
 use ppu::*;
 
-const FROM_BIOS: bool = true;
+use crate::cpu::assemblify;
+
+const FROM_BIOS: bool = false;
 pub struct Emulator {
     pub cpu: Cpu,
     pub ppu: Ppu,
@@ -77,11 +79,11 @@ pub fn handle_cpu<M: Memoriable>(cpu: &mut Cpu, mem: &mut M) {
     if let Some(instruction) = cpu.fde.decoded_opcode {        
         match cpu.cpsr.t {
             true => {
-                // println!("{}", assemblify::to_arm_assembly(instruction));
+                // println!("{}", assemblify::to_thumb_assembly(instruction as u16));
                 execute_thumb(instruction as u16, cpu, mem)
             }
             false => {
-                // println!("{}", assemblify::to_thumb_assembly(instruction as u16));
+                // println!("{}", assemblify::to_arm_assembly(instruction));
                 execute_arm(instruction, cpu, mem)
             },
         };
@@ -91,7 +93,7 @@ pub fn handle_cpu<M: Memoriable>(cpu: &mut Cpu, mem: &mut M) {
     if let None = cpu.fde.fetched_opcode {
         let fetch = match cpu.cpsr.t {
             true => mem.read_u16(cpu.get_pc_thumb()) as u32,
-            false => mem.read_u32(cpu.get_pc_arm()),
+            false => mem.read_u32_unrotated(cpu.get_pc_arm()),
         };
         cpu.fde.fetched_opcode = Some(fetch);
     }
@@ -100,7 +102,7 @@ pub fn handle_cpu<M: Memoriable>(cpu: &mut Cpu, mem: &mut M) {
     cpu.fde.decoded_opcode = cpu.fde.fetched_opcode.clone();
     let fetch = match cpu.cpsr.t {
         true => mem.read_u16(cpu.get_pc_thumb()) as u32,
-        false => mem.read_u32(cpu.get_pc_arm()),
+        false => mem.read_u32_unrotated(cpu.get_pc_arm()),
     };
     cpu.fde.fetched_opcode = Some(fetch);
 }

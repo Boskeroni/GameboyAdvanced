@@ -10,8 +10,6 @@ const TILE_CHAR_BLOCK: u32 = 0x6010000;
 /// function that I have had to split it into so many subfunctions just to make it somewhat coherent
 /// (which it really isn't).
 pub fn oam_scan(ppu: &mut Ppu, mem: &Box<Memory>, vcount: u16, dispcnt: u16) {
-    let two_dimensional_mapping = (dispcnt >> 6) & 1 == 0;
-
     for obj in 0..=127 {
         // all of the attributes held by the OAMs (the 4th one isn't used yet)
         let obj_attr0 = mem.read_u16(OAM + (obj * 8) + 0);
@@ -31,7 +29,7 @@ pub fn oam_scan(ppu: &mut Ppu, mem: &Box<Memory>, vcount: u16, dispcnt: u16) {
             mem, 
             obj_attr0, obj_attr1, obj_attr2, 
             vcount, 
-            two_dimensional_mapping
+            dispcnt
         );
 
         for i in 0..new.len() {
@@ -65,15 +63,20 @@ fn load_obj(
     mem: &Box<Memory>, 
     obj0: u16, obj1: u16, obj2: u16, 
     vcount: u16,
-    two_dimensional: bool
+    dispcnt: u16,
 ) -> Vec<u16> {
+    let two_dimensional = (dispcnt >> 6) & 1 == 0;
     let rotation_flag = (obj0 >> 8) & 1 == 1;
-    let obj_mosaic = (obj0 >> 12) & 1 == 1;
+    let _obj_mosaic = (obj0 >> 12) & 1 == 1;
     let is_8_bit = (obj0 >> 13) & 1 == 1;
 
-    let obj_mode = (obj0 >> 10) & 0x3;
+    let _obj_mode = (obj0 >> 10) & 0x3;
 
     let mut tile_number = obj2 & 0x3FF;
+    let bg_mode = dispcnt & 0b111;
+    if tile_number <= 512 && bg_mode >= 3 && bg_mode <= 5 {
+        return Vec::new();
+    }
     if is_8_bit { // the lowest bit is ignored in 8-bit depth
         tile_number &= !(0b1);
     }
@@ -95,7 +98,7 @@ fn load_obj(
         true => {
             let double_size = (obj0 >> 9) & 1 == 1;
             let rotation_param = (obj1 >> 9) & 0x1F;
-            todo!("AFFINE sprites aint supported");
+            println!("AFFINE sprites aint supported");
         }
         false => {
             // just not being drawn
@@ -111,7 +114,7 @@ fn load_obj(
 
             // not this lines responsibility to draw
             // y_coord represents the top of the sprite's tile
-            if y_coord > vcount || y_coord + height < vcount {
+            if y_coord > vcount || y_coord + height <= vcount {
                 return Vec::new();
             }
 
@@ -128,7 +131,7 @@ fn load_obj(
             // where each 32 or whatever it is the tile below
             let tile_wanted = tile_number + 
                 match two_dimensional {
-                    true => 0x20 * tile_row,
+                    true => 0x1F * tile_row,
                     false => tile_row * ((width / 8) - 1),
                 };// if the obj is several tiles wide, then this is the earliest one
             
@@ -161,13 +164,13 @@ fn load_obj(
                             let left = formatted_data & 0xF;
                             match left {
                                 0 => row_of_pixels.push(0),
-                                _ => row_of_pixels.push((palette_number * 0x20) + left as u16)
+                                _ => row_of_pixels.push((palette_number * 0x20) + (left * 2) as u16)
                             }
         
                             let right = (formatted_data >> 4) & 0xF;
                             match right {
                                 0 => row_of_pixels.push(0),
-                                _ => row_of_pixels.push((palette_number * 0x20) + right as u16)
+                                _ => row_of_pixels.push((palette_number * 0x20) + (right * 2) as u16)
                             }
                         }
                     }

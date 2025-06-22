@@ -79,18 +79,18 @@ impl MemoryWidget {
                                 });
 
                                 ui.horizontal(|ui| {
-                                    let src = mem.read_u32(DMABaseAddress::SAD as u32 + dma*0xC) & 0x0FFFFFFF;
+                                    let src = mem.read_u32_unrotated(DMABaseAddress::SAD as u32 + dma*0xC) & 0x0FFFFFFF;
                                     let mut src_text = format!("{:08X}", src);
                                     ui.label(format!("source:"));
                                     ui.add(TextEdit::singleline(&mut src_text));
                                 });
                                 ui.horizontal(|ui| {
-                                    let dst = mem.read_u32(DMABaseAddress::DAD as u32 + dma*0xC) & 0x0FFFFFFF;
+                                    let dst = mem.read_u32_unrotated(DMABaseAddress::DAD as u32 + dma*0xC) & 0x0FFFFFFF;
                                     let mut dst_text = format!("{:08X}", dst);
                                     ui.label(format!("destination:"));
                                     ui.add(TextEdit::singleline(&mut dst_text));
                                 });ui.horizontal(|ui| {
-                                    let amount = mem.read_u32(DMABaseAddress::Amount as u32 + dma*0xC) & 0x0FFFFFFF;
+                                    let amount = mem.read_u32_unrotated(DMABaseAddress::Amount as u32 + dma*0xC) & 0x0FFFFFFF;
                                     let mut amount_text = format!("{:08X}", amount);
                                     ui.label(format!("amount:"));
                                     ui.add(TextEdit::singleline(&mut amount_text));

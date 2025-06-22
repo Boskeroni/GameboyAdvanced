@@ -59,7 +59,8 @@ impl JsonMemory {
 }
 impl Memoriable for JsonMemory {
     fn read_u16(&self, address: u32) -> u16 { self.read(2, address) as u16 }
-    fn read_u32(&self, address: u32) -> u32 { self.read(4, address).rotate_right((address & 0b11) * 8) }
+    fn read_u32_rotated(&self, address: u32) -> u32 { self.read(4, address).rotate_right((address & 0b11) * 8) }
+    fn read_u32_unrotated(&self, address: u32) -> u32 { self.read(4, address) }
     fn read_u8(&self, address: u32) ->  u8  { self.read(1, address) as u8  }
     fn write_u16(&mut self, address: u32, data: u16) { self.write(2, address, data as u64); }
     fn write_u32(&mut self, address: u32, data: u32) { self.write(4, address, data as u64); }

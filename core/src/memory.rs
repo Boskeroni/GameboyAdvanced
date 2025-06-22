@@ -47,7 +47,8 @@ const SRAM_MAX_LENGTH: usize = 0x10000;
 pub trait Memoriable {
     fn read_u8(&self, address: u32) -> u8;
     fn read_u16(&self, address: u32) -> u16;
-    fn read_u32(&self, address: u32) -> u32;
+    fn read_u32_unrotated(&self, address: u32) -> u32;
+    fn read_u32_rotated(&self, address: u32) -> u32;
 
     fn write_u8(&mut self, address: u32, data: u8);
     fn write_u16(&mut self, address: u32, data: u16);
@@ -145,7 +146,7 @@ impl Memory {
         }
 
         match upp_add {
-            0x0 => {} //panic!("cannot make a write to the BIOS"),
+            0x0 => panic!("cannot make a write to the BIOS"),
             0x2 => self.ewram[low_add % EWRAM_LENGTH] = data,
             0x3 => self.iwram[low_add % IWRAM_LENGTH] = data,
             0x4 => self.io_reg[low_add % IO_REG_LENGTH] = data,
@@ -188,13 +189,11 @@ impl Memoriable for Box<Memory> {
             _ => { // assuming this is just ROM
                 // deals with the mirrors
                 // this will be more important once I start dealing with timings
-                // let unmirrored_address = (address % 0x2000000) + 0x8000000;
-
-                // this is just cause some games store this in prefetch but don't use it
-                if low_add >= self.gp_rom.len() {
+                let unmirrored_address = address as usize % 0x2000000;
+                if unmirrored_address >= self.gp_rom.len() {
                     return 0x00;
                 }
-                self.gp_rom[low_add]
+                self.gp_rom[unmirrored_address]
             },
         }
     }
@@ -206,15 +205,17 @@ impl Memoriable for Box<Memory> {
             self.read_u8(base_address + 1)
         )
     }
-    fn read_u32(&self, address: u32) -> u32 {
+    fn read_u32_rotated(&self, address: u32) -> u32 {
+        self.read_u32_unrotated(address).rotate_right((address & 0b11) * 8)
+    }
+    fn read_u32_unrotated(&self, address: u32) -> u32 {
         let base_address = address & !(0b11);
-
         lil_end_combine_u32(
             self.read_u8(base_address + 0), 
             self.read_u8(base_address + 1), 
             self.read_u8(base_address + 2), 
             self.read_u8(base_address + 3),
-        ).rotate_right((address & 0b11) * 8)
+        )
     }
 
     fn write_u8(&mut self, address: u32, data: u8) {
@@ -292,8 +293,8 @@ pub fn dma_tick(mem: &mut Box<Memory>) -> bool {
     }
     let (i, cnt) = dma_transfer.unwrap();
 
-    let base_src_address = mem.read_u32(SAD as u32 + i*0xC) & 0x0FFFFFFF; // top bits ignored
-    let base_dst_address = mem.read_u32(DAD as u32 + i*0xC) & 0x0FFFFFFF; // top bits ignored
+    let base_src_address = mem.read_u32_unrotated(SAD as u32 + i*0xC) & 0x0FFFFFFF; // top bits ignored
+    let base_dst_address = mem.read_u32_unrotated(DAD as u32 + i*0xC) & 0x0FFFFFFF; // top bits ignored
     let cnt_l = mem.read_u16(Amount as u32 + i *0xC) as u32;
     let amount = match i {
         3 => match cnt_l {
@@ -350,7 +351,7 @@ pub fn dma_tick(mem: &mut Box<Memory>) -> bool {
     match quantities {
         true => {
             // 32-bit
-            let read = mem.read_u32(src_address);
+            let read = mem.read_u32_unrotated(src_address);
             mem.write_u32(dst_address, read);
 
             mem.dma_completions[i as usize] += 4;

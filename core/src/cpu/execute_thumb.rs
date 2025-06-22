@@ -291,7 +291,7 @@ fn pc_relative_load<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
 
     let pc = cpu.get_register(15) & 0xFFFFFFFC;
     let address = pc.wrapping_add(imm as u32);
-    let read = memory.read_u32(address);
+    let read = memory.read_u32_rotated(address);
 
     let rd = cpu.get_register_mut(rd_index);
     *rd = read;
@@ -328,7 +328,7 @@ fn mem_offset<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M, uses_im
             let rd = cpu.get_register_mut(rd_index);
             match b_bit {
                 true => *rd = memory.read_u8(address) as u32,
-                false => *rd = memory.read_u32(address),
+                false => *rd = memory.read_u32_rotated(address),
             }
         }
         false => {
@@ -425,7 +425,7 @@ fn mem_sp_relative<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
     match l_bit {
         true => {
             let rd = cpu.get_register_mut(rd_index);
-            *rd = memory.read_u32(address);
+            *rd = memory.read_u32_rotated(address);
         }
         false => {
             let rd = cpu.get_register(rd_index);
@@ -466,7 +466,7 @@ fn push_pop<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
     let rn = cpu.get_register(13);
     if rlist == 0 && !r_bit {
         if l_bit {
-            let new_pc = memory.read_u32(rn).rotate_left((rn & 0b11) * 8);
+            let new_pc = memory.read_u32_unrotated(rn);
             let pc = cpu.get_register_mut(15);
             *pc = new_pc;
             cpu.clear_pipeline();
@@ -491,14 +491,14 @@ fn push_pop<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
                 let next_r = rlist.trailing_zeros();
 
                 let reg = cpu.get_register_mut(next_r as u8);
-                let change = memory.read_u32(rn + extra).rotate_left((rn & 0b11) * 8);
+                let change = memory.read_u32_unrotated(rn + extra);
                 *reg = change;
                 
                 extra += 4;
                 rlist &= !(1<<next_r); // clear it for next time
             }
             if r_bit {
-                let change = memory.read_u32(rn + extra).rotate_left((rn & 0b11) * 8);
+                let change = memory.read_u32_unrotated(rn + extra);
 
                 let reg = cpu.get_register_mut(15);
                 *reg = change & !(1);
@@ -544,7 +544,7 @@ fn mem_multiple<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
     let l_bit = (opcode >> 11) & 1 == 1;
         if started_empty {
         if l_bit {
-            let new_pc = memory.read_u32(rn).rotate_left((rn & 0b11) * 8); // unrotate
+            let new_pc = memory.read_u32_unrotated(rn); // unrotate
             let pc = cpu.get_register_mut(15);
             *pc = new_pc;
             cpu.clear_pipeline();
@@ -567,7 +567,7 @@ fn mem_multiple<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
                 let next_r = rlist.trailing_zeros();
 
                 let reg = cpu.get_register_mut(next_r as u8);
-                let change = memory.read_u32(rn + extra).rotate_left((rn & 0b11) * 8); // have to not rotate?
+                let change = memory.read_u32_unrotated(rn + extra);
                 *reg = change;
                 
                 extra += 4;

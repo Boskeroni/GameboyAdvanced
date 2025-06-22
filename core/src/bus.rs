@@ -21,7 +21,7 @@ impl Bus {
             }
         }
 
-        let last_fetched = mem.read_u32(0x00DC + 8);
+        let last_fetched = mem.read_u32_unrotated(0x00DC + 8);
         Self {
             last_bios_fetch: last_fetched, // not sure why it is done like this (probably some pre-fetching thing)
             is_in_bios: false,
