@@ -10,6 +10,9 @@ const TILE_CHAR_BLOCK: u32 = 0x6010000;
 /// function that I have had to split it into so many subfunctions just to make it somewhat coherent
 /// (which it really isn't).
 pub fn oam_scan(ppu: &mut Ppu, mem: &Box<Memory>, vcount: u16, dispcnt: u16) {
+    let mut obj_line = vec![0; 240];
+    let mut priorities = vec![4; 240];
+
     for obj in 0..=127 {
         // all of the attributes held by the OAMs (the 4th one isn't used yet)
         let obj_attr0 = mem.read_u16(OAM + (obj * 8) + 0);
@@ -22,7 +25,7 @@ pub fn oam_scan(ppu: &mut Ppu, mem: &Box<Memory>, vcount: u16, dispcnt: u16) {
         // these are defined here as they don't impact the reading of the tile
         // just impact if / where it is placed
         let priority = (obj_attr2 >> 10) & 0x3;
-        let x_coord = obj_attr1 as usize & 0x1FF;
+        let x_coord: u16 = obj_attr1 & 0x1FF;
 
         // this can be any amount of lines
         let new = load_obj(
@@ -33,19 +36,27 @@ pub fn oam_scan(ppu: &mut Ppu, mem: &Box<Memory>, vcount: u16, dispcnt: u16) {
         );
 
         for i in 0..new.len() {
-            // its not going to be shown
-            // (and will cause an out of bounds error)
-            if x_coord + i >= 240 {
-                break
+            let loc = x_coord.wrapping_add(i as u16) as usize % 512;
+            if loc >= 240 {
+                continue;
             }
 
             let pixel = new[i];
             if pixel == 0 {
-                continue
+                continue;
             }
-            let pixel = mem.read_u16(OBJ_PALL + pixel as u32);
-            ppu.worked_on_line[x_coord + i] = pixel;
+            if priorities[loc] <= priority {
+                continue;
+            }
+
+            obj_line[loc] = mem.read_u16(OBJ_PALL + pixel as u32);
+            priorities[loc] = priority;
         }
+    }
+
+    for i in 0..240 {
+        if priorities[i] == 4 { continue; }
+        ppu.worked_on_line[i] = obj_line[i];
     }
 }
 

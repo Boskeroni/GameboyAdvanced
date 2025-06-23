@@ -30,16 +30,16 @@ pub fn joypad_press(input: Button, mem: &mut Box<Memory>) {
 
     use Button::*;
     match input {
-        A => joypad &= !(1 << 0), // BUTTON A
-        B => joypad &= !(1 << 1), // BUTTON B
-        Select => joypad &= !(1 << 2), // SELECT
-        Start => joypad &= !(1 << 3), // START
-        Right => joypad &= !(1 << 4), // RIGHT
-        Left => joypad &= !(1 << 5), // LEFT
-        Up => joypad &= !(1 << 6), // UP
-        Down => joypad &= !(1 << 7), // DOWN
-        R => joypad &= !(1 << 8), // BUTTON R
-        L => joypad &= !(1 << 9), // BUTTON L
+        A => joypad &= !(1 << 0),
+        B => joypad &= !(1 << 1),
+        Select => joypad &= !(1 << 2),
+        Start => joypad &= !(1 << 3),
+        Right => joypad &= !(1 << 4),
+        Left => joypad &= !(1 << 5),
+        Up => joypad &= !(1 << 6),
+        Down => joypad &= !(1 << 7),
+        R => joypad &= !(1 << 8),
+        L => joypad &= !(1 << 9),
         Other => return,
     }
     mem.write_io(JPRegisters::KeyInput as u32, joypad);
