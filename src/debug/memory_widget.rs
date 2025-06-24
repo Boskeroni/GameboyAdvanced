@@ -2,7 +2,7 @@
 use gba_core::memory::{self, Memoriable};
 
 use egui::{Label, TextEdit};
-use gba_core::memory::{DMABaseAddress, Memory};
+use gba_core::memory::{DMARegisters, Memory};
 use std::cmp::min;
 use std::ops::Range;
 use egui::{scroll_area::ScrollBarVisibility, vec2, RichText, ViewportBuilder, ViewportClass, ViewportId, Widget};
@@ -58,7 +58,7 @@ impl MemoryWidget {
 
                         ui.heading("DMA registers");
                         for dma in 0..4 {
-                            let dma_control = mem.read_u16(DMABaseAddress::Control as u32 + dma*0xC);
+                            let dma_control = mem.read_u16(DMARegisters::Control as u32 + dma*0xC);
                             let is_running = (dma_control >> 15) & 1 == 1;
                             let headline_run_text = match is_running {
                                 true => "running",
@@ -79,18 +79,18 @@ impl MemoryWidget {
                                 });
 
                                 ui.horizontal(|ui| {
-                                    let src = mem.read_u32_unrotated(DMABaseAddress::SAD as u32 + dma*0xC) & 0x0FFFFFFF;
+                                    let src = mem.read_u32_unrotated(DMARegisters::SAD as u32 + dma*0xC) & 0x0FFFFFFF;
                                     let mut src_text = format!("{:08X}", src);
                                     ui.label(format!("source:"));
                                     ui.add(TextEdit::singleline(&mut src_text));
                                 });
                                 ui.horizontal(|ui| {
-                                    let dst = mem.read_u32_unrotated(DMABaseAddress::DAD as u32 + dma*0xC) & 0x0FFFFFFF;
+                                    let dst = mem.read_u32_unrotated(DMARegisters::DAD as u32 + dma*0xC) & 0x0FFFFFFF;
                                     let mut dst_text = format!("{:08X}", dst);
                                     ui.label(format!("destination:"));
                                     ui.add(TextEdit::singleline(&mut dst_text));
                                 });ui.horizontal(|ui| {
-                                    let amount = mem.read_u32_unrotated(DMABaseAddress::Amount as u32 + dma*0xC) & 0x0FFFFFFF;
+                                    let amount = mem.read_u32_unrotated(DMARegisters::Amount as u32 + dma*0xC) & 0x0FFFFFFF;
                                     let mut amount_text = format!("{:08X}", amount);
                                     ui.label(format!("amount:"));
                                     ui.add(TextEdit::singleline(&mut amount_text));

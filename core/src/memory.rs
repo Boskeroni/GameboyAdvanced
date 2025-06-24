@@ -78,14 +78,33 @@ impl Memory {
 
     /// avoids all of the checks, used just by the other sub-systems
     pub fn write_io(&mut self, address: u32, data: u16) {
-        let address = (address as usize - 0x4000000) & !(0b1);
+        let address = split_memory_address(address).1 as usize;
         let split = lil_end_split_u16(data);
 
         self.io_reg[address + 0] = split.0;
         self.io_reg[address + 1] = split.1;
     }
+    pub fn read_u16_io(&self, address: u32) -> u16 {
+        let address = split_memory_address(address).1 as usize;
+        lil_end_combine_u16(
+            self.io_reg[address + 0], 
+            self.io_reg[address + 1],
+        )
+    }
+    pub fn read_u32_io(&self, address: u32) -> u32 {
+        let address = split_memory_address(address).1 as usize;
+        lil_end_combine_u32(
+            self.io_reg[address + 0], 
+            self.io_reg[address + 1],
+            self.io_reg[address + 2],
+            self.io_reg[address + 3],
+        )
+    }
 
     pub fn checked_write_u8(&mut self, address: u32, data: u8, is_8_bit: bool) {
+        if has_write_lock(address) {
+            return;
+        }
         if address == 0x4000202 || address == 0x4000203 {
             self.io_reg[address as usize - 0x4000000] &= !data;
             return;
@@ -168,6 +187,9 @@ impl Memory {
 }
 impl Memoriable for Box<Memory> {
     fn read_u8(&self, address: u32) -> u8 {
+        if has_read_lock(address) {
+            return 0;
+        }
         let (upp_add, low_add) = split_memory_address(address);
 
         match upp_add {
@@ -250,6 +272,30 @@ impl Memoriable for Box<Memory> {
 fn is_in_video_memory(upp_add: u32) -> bool {
     return (upp_add == 0x5) | (upp_add == 0x6) | (upp_add == 0x7);
 }
+fn has_read_lock(address: u32) -> bool {
+    let (hi, lo) = split_memory_address(address);
+    if hi != 4 { return false; }
+    match lo & !(0b1) {
+        0x10..=0x46 => return true,
+        0x4C        => return true,
+        0x54        => return true,
+        0xA0..=0xB8 => return true,
+        0xBC..=0xC4 => return true,
+        0xC8..=0xD0 => return true,
+        0xD4..=0xDC => return true,
+        0x301       => return true,
+        _           => return false,
+    }
+}
+fn has_write_lock(address: u32) -> bool {
+    let (hi, lo) = split_memory_address(address);
+    if hi != 4 { return false; }
+    match lo & !(0b1) { // remove final bit as not important
+        0x6   => return true,
+        0x130 => return true,
+        _     => return false,
+    }
+}
 
 pub const fn get_memory_ranges() -> [std::ops::Range<u32>; 9] {
     return [
@@ -266,18 +312,16 @@ pub const fn get_memory_ranges() -> [std::ops::Range<u32>; 9] {
 }
 
 // since DMA takes several cycles, its best to just have it be its own thing
-pub enum DMABaseAddress {
+pub enum DMARegisters {
     SAD = 0x40000B0,
     DAD = 0x40000B4,
     Amount = 0x40000B8,
     Control = 0x40000BA,
 }
 pub fn dma_tick(mem: &mut Box<Memory>) -> bool {
-    use DMABaseAddress::*;
-
     let mut dma_transfer = None;
     for i in 0..=3 {
-        let cnt = mem.read_u16(Control as u32 + i*0xC);
+        let cnt = mem.read_u16_io(DMARegisters::Control as u32 + i*0xC);
         let is_on = (cnt >> 15) & 1 == 1;
 
         // highest priority goes 0 -> 3
@@ -293,9 +337,9 @@ pub fn dma_tick(mem: &mut Box<Memory>) -> bool {
     }
     let (i, cnt) = dma_transfer.unwrap();
 
-    let base_src_address = mem.read_u32_unrotated(SAD as u32 + i*0xC) & 0x0FFFFFFF; // top bits ignored
-    let base_dst_address = mem.read_u32_unrotated(DAD as u32 + i*0xC) & 0x0FFFFFFF; // top bits ignored
-    let cnt_l = mem.read_u16(Amount as u32 + i *0xC) as u32;
+    let base_src_address = mem.read_u32_io(DMARegisters::SAD as u32 + i*0xC) & 0x0FFFFFFF; // top bits ignored
+    let base_dst_address = mem.read_u32_io(DMARegisters::DAD as u32 + i*0xC) & 0x0FFFFFFF; // top bits ignored
+    let cnt_l = mem.read_u16_io(DMARegisters::Amount as u32 + i *0xC) as u32;
     let amount = match i {
         3 => match cnt_l {
             0 => 0x10000,
@@ -326,7 +370,7 @@ pub fn dma_tick(mem: &mut Box<Memory>) -> bool {
             // special so must be false
             assert!(base_dst_address == 0x40000A0 || base_dst_address == 0x40000A4);
             // turn that shit off :P
-            mem.write_io(Control as u32 + i*0xC, cnt & 0x7FFF);
+            mem.write_io(DMARegisters::Control as u32 + i*0xC, cnt & 0x7FFF);
             return false;
         }
         _ => unreachable!(),
@@ -384,7 +428,7 @@ pub fn dma_tick(mem: &mut Box<Memory>) -> bool {
         }
 
         // clear the top bit
-        mem.write_io(Control as u32 + i*0xC, cnt & 0x7FFF);
+        mem.write_io(DMARegisters::Control as u32 + i*0xC, cnt & 0x7FFF);
         return false;
     }
 

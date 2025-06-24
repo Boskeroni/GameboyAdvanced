@@ -66,7 +66,7 @@ pub fn bg_mode_2(_ppu: &mut Ppu, _memory: &mut Memory, _line: u16) {
 /// returns all the backgrounds in order of priority
 /// first number is the background number, second is its priority
 fn get_background_priorities(memory: &Box<Memory>, available_bgs: Vec<u32>) -> Vec<(u8, u8)> {
-    let disp_cnt = memory.read_u16(PpuRegisters::DispCnt as u32);
+    let disp_cnt = memory.read_u16_io(PpuRegisters::DispCnt as u32);
 
     let mut priorities = vec![Vec::new(); 4];
     for bg in available_bgs {
@@ -74,7 +74,7 @@ fn get_background_priorities(memory: &Box<Memory>, available_bgs: Vec<u32>) -> V
             continue;
         } 
 
-        let bg_cnt = memory.read_u16(PpuRegisters::BGCnt as u32 + bg*2) & 0b11;
+        let bg_cnt = memory.read_u16_io(PpuRegisters::BGCnt as u32 + bg*2) & 0b11;
         priorities[bg_cnt as usize].push((bg as u8, bg_cnt as u8));
     }
     priorities.into_iter().flatten().collect()
@@ -148,7 +148,7 @@ const SCREEN_SIZE: [(u32, u32); 4] = [
 
 // when i remember what this does, i will put a comment here
 fn text_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
-    let bg_cnt = memory.read_u16(PpuRegisters::BGCnt as u32 + bg * 2);
+    let bg_cnt = memory.read_u16_io(PpuRegisters::BGCnt as u32 + bg * 2);
 
     // all the variables stored within the bg_cnt register
     let char_block = (bg_cnt >> 2) & 0x3;
@@ -168,8 +168,8 @@ fn text_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
     // x_tile and y_tile are 0->32, offsets are 0->8
     let (mut x_tile, x_tile_offset, y_tile, y_tile_offset);
     {
-        let x_offset = memory.read_u16(PpuRegisters::BgHOffset as u32 + (bg * 4)) as u32 & 0x1FF % width;
-        let y_offset = memory.read_u16(PpuRegisters::BgVOffset as u32 + (bg * 4)) as u32 & 0x1FF % height;
+        let x_offset = memory.read_u16_io(PpuRegisters::BgHOffset as u32 + (bg * 4)) as u32 & 0x1FF % width;
+        let y_offset = memory.read_u16_io(PpuRegisters::BgVOffset as u32 + (bg * 4)) as u32 & 0x1FF % height;
 
         x_tile = x_offset / 8;
         x_tile_offset = x_offset % 8;
