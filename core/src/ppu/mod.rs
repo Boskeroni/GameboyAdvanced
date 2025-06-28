@@ -9,46 +9,6 @@ use bitmaps::*;
 use obj::oam_scan;
 use tiles::*;
 
-const LCD_HEIGHT: usize = 160;
-const LCD_WIDTH: usize = 240;
-const VRAM_BASE: u32 = 0x6000000;
-const PALETTE_BASE: u32 = 0x5000000;
-const DOTS_PER_FRAME: usize = (LCD_WIDTH + 68) * (LCD_HEIGHT + 68);
-
-enum PpuRegisters {
-    DispCnt = 0x4000000,
-    _GreenSwap = 0x4000002,
-    DispStat = 0x4000004,
-    VCount = 0x4000006,
-    BGCnt = 0x4000008,
-    BgHOffset = 0x4000010,
-    BgVOffset = 0x4000012,
-    BgRotationBase = 0x4000020,
-    _Mosaic = 0x400004C,
-}
-pub struct Ppu {
-    pub new_screen: bool,
-    elapsed_time: usize, // represents the number of dots elapsed
-    pub stored_screen: Vec<u16>,
-    worked_on_line: [u16; 240],
-}
-impl Ppu {
-    pub fn new() -> Self {
-        Self { 
-            new_screen: false,
-            elapsed_time: 0,
-            stored_screen: Vec::new(),
-
-            worked_on_line: [0; 240],
-        }
-    }
-    pub fn acknowledge_frame(&mut self) {
-        self.new_screen = false;
-        self.elapsed_time = 0;
-        self.stored_screen.clear();
-    }
-}
-
 fn get_rotation_scaling(bg: u32, memory: &Box<Memory>) -> (u32, u32, u16, u16, u16, u16) {
     let base = PpuRegisters::BgRotationBase as u32 + (bg - 2) * 0x10;
     let x0 = {
@@ -69,6 +29,70 @@ fn get_rotation_scaling(bg: u32, memory: &Box<Memory>) -> (u32, u32, u16, u16, u
 
     return (x0, y0, dx, dmx, dy, dmy);
 }
+fn blend_pixels(x1: u16, x2: u16, eva: f32, evb: f32) -> u16 {
+    let (old_r, old_g, old_b) = (x2 & 0x1F, (x2 >> 5) & 0x1F, (x2 >> 10) & 0x1F);
+    let (new_r, new_g, new_b) = (x1 & 0x1F, (x1 >> 5) & 0x1F, (x1 >> 10) & 0x1F);
+
+    let mut combo_r = new_r as f32 * eva + old_r as f32 * evb;
+    if combo_r > 31. {
+        combo_r = 31.;
+    }
+    let mut combo_g = new_g as f32 * eva + old_g as f32 * evb;
+    if combo_g > 31. {
+        combo_g = 31.;
+    }
+    let mut combo_b = new_b as f32 * eva + old_b as f32 * evb;
+    if combo_b > 31. {
+        combo_b = 31.;
+    }
+
+    let combined_pixel = (combo_r as u16) | (combo_g as u16) << 5 | (combo_b as u16) << 10;
+    return combined_pixel;
+}
+
+const LCD_HEIGHT: usize = 160;
+const LCD_WIDTH: usize = 240;
+const VRAM_BASE: u32 = 0x6000000;
+const PALETTE_BASE: u32 = 0x5000000;
+const DOTS_PER_FRAME: usize = (LCD_WIDTH + 68) * (LCD_HEIGHT + 68);
+
+enum PpuRegisters {
+    DispCnt = 0x4000000,
+    _GreenSwap = 0x4000002,
+    DispStat = 0x4000004,
+    VCount = 0x4000006,
+    BGCnt = 0x4000008,
+    BgHOffset = 0x4000010,
+    BgVOffset = 0x4000012,
+    BgRotationBase = 0x4000020,
+    _Mosaic = 0x400004C,
+    BldCnt = 0x4000050,
+    BldAlpha = 0x4000052,
+    BldY = 0x4000054,
+}
+pub struct Ppu {
+    pub new_screen: bool,
+    elapsed_time: usize, // represents the number of dots elapsed
+    pub stored_screen: Vec<u16>,
+    worked_on_line: [u16; LCD_WIDTH],
+}
+impl Ppu {
+    pub fn new() -> Self {
+        Self { 
+            new_screen: false,
+            elapsed_time: 0,
+            stored_screen: Vec::new(),
+
+            worked_on_line: [0; LCD_WIDTH],
+        }
+    }
+    pub fn acknowledge_frame(&mut self) {
+        self.new_screen = false;
+        self.elapsed_time = 0;
+        self.stored_screen.clear();
+    }
+}
+
 fn update_registers(ppu: &mut Ppu, memory: &mut Box<Memory>, mut dispstat: u16, vcount: u16) {
     // work in progress
     ppu.elapsed_time += 1;
@@ -99,7 +123,6 @@ fn update_registers(ppu: &mut Ppu, memory: &mut Box<Memory>, mut dispstat: u16, 
         true => dispstat |= 1<<2,
         false => dispstat &= !(1<<2),
     }  
-
 
     let mut ie = memory.read_u16_io(0x4000202);
     ie &= !0b111;
@@ -138,6 +161,7 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Box<Memory>) {
             let combo = accumulate(
                 bg_scan, obj_scan, win_scan, 
                 bg_prio, obj_prio, win_prio,
+                &memory,
             );
             ppu.stored_screen.extend(combo);
         }
@@ -156,19 +180,25 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Box<Memory>) {
 fn accumulate(
     bg: Vec<u16>, obj: Vec<u16>, win: Vec<u16>,
     bg_prio: Vec<u16>, obj_prio: Vec<u16>, win_prio: Vec<u16>,
+    memory: &Box<Memory>
 ) -> Vec<u16> {
-    let mut combo = vec![0; 240];
-    for i in 0..240 {
-        // for now just ignore the window as im not displaying it
-        let highest_priority_pixel = {
-            // 0 vs 0 has 
-            if bg_prio[i] < obj_prio[i] {
-                bg[i]
-            } else {
-                obj[i]
-            }
-        };
-        combo[i] = highest_priority_pixel;
+    let blend_cnt = memory.read_u16_io(PpuRegisters::BldCnt as u32);
+    let blend_alpha = memory.read_u16_io(PpuRegisters::BldAlpha as u32);
+    let blend_y = memory.read_u16_io(PpuRegisters::BldY as u32);
+
+    let first_target = blend_cnt & 0x3F;
+    let second_target = (blend_cnt >> 8) & 0x3F;
+
+    let eva = blend_alpha & 0x1F;
+    let evb = (blend_alpha >> 8) & 0x1F;
+
+    let mut combo = vec![0; LCD_WIDTH];
+    for i in 0..LCD_WIDTH {
+        if bg_prio[i] < obj_prio[i] {
+            combo[i] = bg[i];
+        } else {
+            combo[i] = obj[i];
+        }
     }
     return combo
 }

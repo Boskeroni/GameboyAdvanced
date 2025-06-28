@@ -1,37 +1,91 @@
 use crate::memory::Memory; 
 use crate::memory::Memoriable;
+use crate::ppu::blend_pixels;
+use crate::ppu::LCD_WIDTH;
 use super::{PpuRegisters, PALETTE_BASE, VRAM_BASE};
 
 pub fn bg_mode_0(memory: &Box<Memory>, line: u32) -> (Vec<u16>, Vec<u16>) {
-    let mut scanline = vec![0; 240];
-    let mut pixel_priorities = vec![3; 240];
+    let mut scanline = vec![0; LCD_WIDTH];
+    let mut pixel_priorities = vec![4; LCD_WIDTH];
 
     let backgrounds = get_background_priorities(memory, vec![0, 1, 2, 3]);
     if backgrounds.is_empty() {
         return (scanline, pixel_priorities);
     }
 
+    // all of the blending and whatnot
+    let (eva, evb, evy);
+    {
+        let blend_alpha = memory.read_u16_io(PpuRegisters::BldAlpha as u32);
+        let blend_y = memory.read_u16_io(PpuRegisters::BldY as u32);
+
+        eva = std::cmp::min(16, blend_alpha & 0x1F) as f32 / 16.;
+        evb = std::cmp::min(16, (blend_alpha >> 8) & 0x1F) as f32 / 16.;
+        evy = std::cmp::min(16, blend_y & 0x1F) as f32 / 16.;
+    }
+
+    let blend_cnt = memory.read_u16_io(PpuRegisters::BldCnt as u32);
+    let color_effect = (blend_cnt >> 6) & 0x3;
+
     // all of the backgrounds it displays in order of priority
-    for (bg, priority) in backgrounds {
-        let read_line = text_mode_scanline(line, bg as u32, memory);
-        for i in 0..240 {
-            if scanline[i] != 0 { continue; } // already been drawn
-            pixel_priorities[i] = priority as u16;
-            scanline[i] = read_line[i] as u16;
+    for (bg, priority) in backgrounds.iter().rev() {
+        // read the scanline
+        let read_line = text_mode_scanline(line, *bg as u32, memory);
+        let source = (blend_cnt >> bg) & 1 == 1;
+        let target = (blend_cnt >> (8 + bg)) & 1 == 1;
+        
+        for i in 0..LCD_WIDTH {
+            // transparent
+            if read_line[i] == 0 { continue; }
+
+            let current_priority = pixel_priorities[i];
+            let x1 = memory.read_u16(PALETTE_BASE + (read_line[i] as u32 * 2));
+
+            // nothing to blend, not source blending, not right blend target, no blending
+            if current_priority == 4 || !source || !target || color_effect == 0 {
+                if pixel_priorities[i] < *priority as u16 {
+                    continue;
+                }
+                pixel_priorities[i] = *priority as u16;
+                scanline[i] = x1;
+                continue;
+            }
+
+            // blending is needed
+            let correct_color = match color_effect {
+                1 => {
+                    let old_pixel_color = scanline[i];
+                    blend_pixels(x1, old_pixel_color, eva, evb)
+                }
+                2 => {
+                    let (r1, g1, b1) = (x1 & 0x1F, (x1 >> 5) & 0x1F, (x1 >> 10) & 0x1F);
+                    let (r1_f, g1_f, b1_f) = (r1 as f32, g1 as f32, b1 as f32);
+                    let (r2_f, g2_f, b2_f) = (r1_f + (31. - r1_f) * evy, g1_f + (31. - g1_f) * evy, b1_f + (31. - b1_f) * evy);
+                    let (r2, g2, b2) = (r2_f as u16, g2_f as u16, b2_f as u16);
+                    let combine = (r2 & 0x1F) | ((g2 & 0x1F) << 5) | ((b2 & 0x1F) << 10);
+                    combine
+                }
+                3 => {
+                    let (r1, g1, b1) = (x1 & 0x1F, (x1 >> 5) & 0x1F, (x1 >> 10) & 0x1F);
+                    let (r1_f, g1_f, b1_f) = (r1 as f32, g1 as f32, b1 as f32);
+                    let (r2_f, g2_f, b2_f) = (r1_f - r1_f*evy, g1_f - g1_f*evy, b1_f - b1_f*evy);
+                    let (r2, g2, b2) = (r2_f as u16, g2_f as u16, b2_f as u16);
+                    let combine = (r2 & 0x1F) | ((g2 & 0x1F) << 5) | ((b2 & 0x1F) << 10);
+                    combine
+                }
+                _ => unreachable!(),
+            };
+            pixel_priorities[i] = *priority as u16;
+            scanline[i] = correct_color;
         }
     }
 
-    for i in 0..240 {
-        let palette_index = scanline[i];
-        let pixel = memory.read_u16(PALETTE_BASE + (palette_index as u32 * 2));
-        scanline[i] = pixel;
-    }
     return (scanline, pixel_priorities)
 }
 
 pub fn bg_mode_1(memory: &Box<Memory>, line: u32) -> (Vec<u16>, Vec<u16>) { 
-    let mut scanline = vec![0; 240];
-    let mut pixel_priorities = vec![3; 240]; // better to assume its lowest priority
+    let mut scanline = vec![0; LCD_WIDTH];
+    let mut pixel_priorities = vec![3; LCD_WIDTH]; // better to assume its lowest priority
 
     let backgrounds = get_background_priorities(memory, vec![0, 1, 2]);
     if backgrounds.is_empty() {
@@ -45,14 +99,14 @@ pub fn bg_mode_1(memory: &Box<Memory>, line: u32) -> (Vec<u16>, Vec<u16>) {
             2 => rotation_mode_scanline(line, bg as u32, memory),
             _ => unreachable!(),
         };
-        for i in 0..240 {
+        for i in 0..LCD_WIDTH {
             if scanline[i] != 0 || read_scanline[i] == 0 { continue; }
             pixel_priorities[i] = priority as u16;
             scanline[i] = read_scanline[i] as u16;
         }
     }
 
-    for i in 0..240 {
+    for i in 0..LCD_WIDTH {
         let palette_index = scanline[i];
         let pixel = memory.read_u16(PALETTE_BASE + (palette_index as u32 * 2));
         scanline[i] = pixel;
@@ -119,7 +173,7 @@ fn rotation_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
     let pd = (memory.read_u16_io(base + 0x6) as f64) / 256.; // the shear for y
 
     let determinant = 1. / (pa * pd - pc * pb);
-    for x2 in 0..240 {
+    for x2 in 0..LCD_WIDTH {
         // have to calculate both the x and the y coords
         let x1_float = determinant * (pd * (x2 as f64 - x0) - pb * (line as f64 - y0)) + x0;
         let y1_float = determinant * (pc * (x2 as f64 - x0) + pa * (line as f64 - y0)) + y0;
@@ -280,6 +334,6 @@ fn text_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
         x_tile %= width / 8;
     }
 
-    scanline = scanline[(x_tile_offset as usize)..(x_tile_offset as usize + 240)].to_vec();
+    scanline = scanline[(x_tile_offset as usize)..(x_tile_offset as usize + LCD_WIDTH)].to_vec();
     return scanline
 }

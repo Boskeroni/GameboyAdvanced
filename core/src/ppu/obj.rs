@@ -1,5 +1,4 @@
-use crate::memory::{Memoriable, Memory};
-use super::Ppu;
+use crate::{memory::{Memoriable, Memory}, ppu::LCD_WIDTH};
 
 const OAM: u32 = 0x7000000;
 const OBJ_PALL: u32 = 0x5000200;
@@ -10,8 +9,8 @@ const TILE_CHAR_BLOCK: u32 = 0x6010000;
 /// function that I have had to split it into so many subfunctions just to make it somewhat coherent
 /// (which it really isn't).
 pub fn oam_scan(mem: &Box<Memory>, vcount: u16, dispcnt: u16) -> (Vec<u16>, Vec<u16>) {
-    let mut obj_line = vec![0; 240];
-    let mut priorities = vec![4; 240];
+    let mut obj_line = vec![0; LCD_WIDTH];
+    let mut priorities = vec![4; LCD_WIDTH];
 
     for obj in 0..=127 {
         // all of the attributes held by the OAMs (the 4th one isn't used yet)
@@ -37,7 +36,7 @@ pub fn oam_scan(mem: &Box<Memory>, vcount: u16, dispcnt: u16) -> (Vec<u16>, Vec<
 
         for i in 0..new.len() {
             let loc = x_coord.wrapping_add(i as u16) as usize % 512;
-            if loc >= 240 {
+            if loc >= LCD_WIDTH {
                 continue;
             }
 
@@ -105,7 +104,7 @@ fn load_obj(
         true => {
             let double_size = (obj0 >> 9) & 1 == 1;
             let rotation_param = (obj1 >> 9) & 0x1F;
-            println!("AFFINE sprites aint supported");
+            // println!("AFFINE sprites aint supported");
         }
         false => {
             // just not being drawn
