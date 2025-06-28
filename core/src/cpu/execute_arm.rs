@@ -245,8 +245,12 @@ fn psr_transfer(opcode: u32, cpu: &mut Cpu) {
                     cpu.get_register(rm_index)
                 }
             };
+            let mode_clone = cpu.cpsr.mode.clone();
             let psr = match psr_bit {
                 true => {
+                    if let ProcessorMode::User|ProcessorMode::System = cpu.cpsr.mode {
+                        return;
+                    }
                     cpu.get_spsr_mut()
                 }
                 false => &mut cpu.cpsr,
@@ -254,6 +258,9 @@ fn psr_transfer(opcode: u32, cpu: &mut Cpu) {
 
             if f_bit {
                 psr.set_flags(operand);
+            }
+            if let ProcessorMode::User = mode_clone {
+                return;
             }
             if c_bit {
                 psr.set_control(operand);
@@ -272,7 +279,7 @@ fn psr_transfer(opcode: u32, cpu: &mut Cpu) {
             *rd = result;
 
             if rd_index == 15 {
-                cpu.clear_pipeline();
+                // cpu.clear_pipeline();
             }
         }
     }

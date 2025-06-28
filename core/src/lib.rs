@@ -14,8 +14,6 @@ use joypad::init_joypad;
 use memory::*;
 use ppu::*;
 
-use crate::cpu::assemblify;
-
 const FROM_BIOS: bool = false;
 pub struct Emulator {
     pub cpu: Cpu,

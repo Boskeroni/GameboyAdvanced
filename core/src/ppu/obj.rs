@@ -9,7 +9,7 @@ const TILE_CHAR_BLOCK: u32 = 0x6010000;
 /// on priorities) to the PPU's worked_on_line. Honestly, so much stuff is happening in this
 /// function that I have had to split it into so many subfunctions just to make it somewhat coherent
 /// (which it really isn't).
-pub fn oam_scan(ppu: &mut Ppu, mem: &Box<Memory>, vcount: u16, dispcnt: u16) {
+pub fn oam_scan(mem: &Box<Memory>, vcount: u16, dispcnt: u16) -> (Vec<u16>, Vec<u16>) {
     let mut obj_line = vec![0; 240];
     let mut priorities = vec![4; 240];
 
@@ -53,11 +53,7 @@ pub fn oam_scan(ppu: &mut Ppu, mem: &Box<Memory>, vcount: u16, dispcnt: u16) {
             priorities[loc] = priority;
         }
     }
-
-    for i in 0..240 {
-        if priorities[i] == 4 { continue; }
-        ppu.worked_on_line[i] = obj_line[i];
-    }
+    return (obj_line, priorities);
 }
 
 const SIZE_GRIDS: [[(u16, u16); 3]; 4] = [

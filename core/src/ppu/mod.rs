@@ -1,49 +1,20 @@
-use crate::memory::{Memoriable, Memory};
-
-const LCD_HEIGHT: usize = 160;
-const LCD_WIDTH: usize = 240;
-
 mod bitmaps;
 mod tiles;
 mod obj;
 mod window;
 
+use crate::memory::Memory;
 use window::window_line;
 use bitmaps::*;
 use obj::oam_scan;
 use tiles::*;
 
+const LCD_HEIGHT: usize = 160;
+const LCD_WIDTH: usize = 240;
 const VRAM_BASE: u32 = 0x6000000;
 const PALETTE_BASE: u32 = 0x5000000;
+const DOTS_PER_FRAME: usize = (LCD_WIDTH + 68) * (LCD_HEIGHT + 68);
 
-fn get_rotation_scaling(bg: u32, memory: &Box<Memory>) -> (u32, u32, u16, u16, u16, u16) {
-    let base = PpuRegisters::BgRotationBase as u32 + (bg - 2) * 0x10;
-    let x0 = {
-        let lower = memory.read_u16(base + 0x8) as u32;
-        let higher = memory.read_u16(base + 0xA) as u32 & 0x0FFF;
-        higher << 16 | lower
-    };
-    let y0 = {
-        let lower = memory.read_u16(base + 0xC) as u32;
-        let higher = memory.read_u16(base + 0xE) as u32 & 0x0FFF;
-        higher << 16 | lower
-    };
-
-    let dx = memory.read_u16(base + 0x0);
-    let dmx = memory.read_u16(base + 0x2);
-    let dy = memory.read_u16(base + 0x4);
-    let dmy = memory.read_u16(base + 0x6);
-
-    return (x0, y0, dx, dmx, dy, dmy);
-}
-
-fn convert_palette_winit(palette: u16) -> u32 {
-    let (r, g, b) = (palette & 0x1F, (palette >> 5) & 0x1F, (palette >> 10) & 0x1F);
-    let (float_r, float_g, float_b) = (r as f32 / 31., g as f32 / 31., b as f32 / 31.);
-    let (pixel_r, pixel_g, pixel_b) = (float_r * 255., float_g * 255., float_b * 255.);
-    let color = (pixel_r as u32) << 16 | (pixel_g as u32) << 8 | (pixel_b as u32);
-    return color 
-}
 enum PpuRegisters {
     DispCnt = 0x4000000,
     _GreenSwap = 0x4000002,
@@ -55,15 +26,11 @@ enum PpuRegisters {
     BgRotationBase = 0x4000020,
     _Mosaic = 0x400004C,
 }
-
 pub struct Ppu {
     pub new_screen: bool,
     elapsed_time: usize, // represents the number of dots elapsed
-    pub stored_screen: Vec<u32>,
-
-    pixel_priorities: Vec<u16>, // the priorities of all the pixels on the screen
+    pub stored_screen: Vec<u16>,
     worked_on_line: [u16; 240],
-
 }
 impl Ppu {
     pub fn new() -> Self {
@@ -72,59 +39,35 @@ impl Ppu {
             elapsed_time: 0,
             stored_screen: Vec::new(),
 
-            pixel_priorities: Vec::new(),
             worked_on_line: [0; 240],
         }
     }
     pub fn acknowledge_frame(&mut self) {
         self.new_screen = false;
         self.elapsed_time = 0;
-        self.pixel_priorities.clear();
         self.stored_screen.clear();
     }
 }
-const DOTS_PER_FRAME: usize = (LCD_WIDTH + 68) * (LCD_HEIGHT + 68);
-pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Box<Memory>) {
-    let dispcnt = memory.read_u16(PpuRegisters::DispCnt as u32);
 
-    // the line count we had last time, doesnt match the one this time
-    let dispstat = memory.read_u16(PpuRegisters::DispStat as u32);
-    let mut vcount = memory.read_u16(PpuRegisters::VCount as u32);
+fn get_rotation_scaling(bg: u32, memory: &Box<Memory>) -> (u32, u32, u16, u16, u16, u16) {
+    let base = PpuRegisters::BgRotationBase as u32 + (bg - 2) * 0x10;
+    let x0 = {
+        let lower = memory.read_u16_io(base + 0x8) as u32;
+        let higher = memory.read_u16_io(base + 0xA) as u32 & 0x0FFF;
+        higher << 16 | lower
+    };
+    let y0 = {
+        let lower = memory.read_u16_io(base + 0xC) as u32;
+        let higher = memory.read_u16_io(base + 0xE) as u32 & 0x0FFF;
+        higher << 16 | lower
+    };
 
-    let new_line = ppu.elapsed_time / (LCD_WIDTH + 68) != vcount as usize;
-    if new_line {
-        if vcount < LCD_HEIGHT as u16 {
-            // clear it for the new line
-            ppu.worked_on_line = [0; LCD_WIDTH];
-            let bg_mode = dispcnt & 0b111;
-            match bg_mode {
-                0 => bg_mode_0(ppu, memory, vcount as u32),
-                1 => bg_mode_1(ppu, memory, vcount as u32),
-                2 => bg_mode_2(ppu, memory, vcount),
-                3 => bg_mode_3(ppu, memory, vcount),
-                4 => bg_mode_4(ppu, memory, vcount),
-                5 => bg_mode_5(ppu, memory, vcount),
-                _ => panic!("you can't set the bg_mode to {bg_mode}"),
-            }
+    let dx = memory.read_u16_io(base + 0x0);
+    let dmx = memory.read_u16_io(base + 0x2);
+    let dy = memory.read_u16_io(base + 0x4);
+    let dmy = memory.read_u16_io(base + 0x6);
 
-            oam_scan(ppu, memory, vcount, dispcnt);
-            window_line();
-
-            // should probably just have an accumulate step
-            let new_line: Vec<u32> = ppu.worked_on_line.iter().map(
-                |c| convert_palette_winit(*c)
-            ).collect();
-            ppu.stored_screen.extend(new_line);
-        }
-        vcount += 1;
-        if vcount as usize >= (LCD_HEIGHT + 68) {
-            vcount = 0;
-            ppu.new_screen = true;
-        }
-        memory.write_io(PpuRegisters::VCount as u32, vcount as u16);
-    }
-
-    update_registers(ppu, memory, dispstat, vcount);
+    return (x0, y0, dx, dmx, dy, dmy);
 }
 fn update_registers(ppu: &mut Ppu, memory: &mut Box<Memory>, mut dispstat: u16, vcount: u16) {
     // work in progress
@@ -158,7 +101,7 @@ fn update_registers(ppu: &mut Ppu, memory: &mut Box<Memory>, mut dispstat: u16, 
     }  
 
 
-    let mut ie = memory.read_u16(0x4000202);
+    let mut ie = memory.read_u16_io(0x4000202);
     ie &= !0b111;
     ie |= dispstat & 0b111;
 
@@ -166,3 +109,66 @@ fn update_registers(ppu: &mut Ppu, memory: &mut Box<Memory>, mut dispstat: u16, 
     memory.write_io(PpuRegisters::DispStat as u32, dispstat);
 }
 
+pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Box<Memory>) {
+    let dispcnt = memory.read_u16_io(PpuRegisters::DispCnt as u32);
+
+    // the line count we had last time, doesnt match the one this time
+    let dispstat = memory.read_u16_io(PpuRegisters::DispStat as u32);
+    let mut vcount = memory.read_u16_io(PpuRegisters::VCount as u32);
+
+    let new_line = ppu.elapsed_time / (LCD_WIDTH + 68) != vcount as usize;
+    if new_line {
+        if vcount < LCD_HEIGHT as u16 {
+            // clear it for the new line
+            ppu.worked_on_line = [0; LCD_WIDTH];
+            let bg_mode = dispcnt & 0b111;
+            let (bg_scan, bg_prio) = match bg_mode {
+                0 => bg_mode_0(memory, vcount as u32),
+                1 => bg_mode_1(memory, vcount as u32),
+                2 => bg_mode_2(memory, vcount),
+                3 => bg_mode_3(memory, vcount),
+                4 => bg_mode_4(memory, vcount),
+                5 => bg_mode_5(memory, vcount),
+                _ => panic!("you can't set the bg_mode to {bg_mode}"),
+            };
+
+            let (obj_scan, obj_prio) = oam_scan(memory, vcount, dispcnt);
+            let (win_scan, win_prio) = window_line();
+
+            let combo = accumulate(
+                bg_scan, obj_scan, win_scan, 
+                bg_prio, obj_prio, win_prio,
+            );
+            ppu.stored_screen.extend(combo);
+        }
+        vcount += 1;
+        if vcount as usize >= (LCD_HEIGHT + 68) {
+            vcount = 0;
+            ppu.new_screen = true;
+        }
+        memory.write_io(PpuRegisters::VCount as u32, vcount as u16);
+    }
+
+    update_registers(ppu, memory, dispstat, vcount);
+}
+
+// just more convenient to mix them all together in one location
+fn accumulate(
+    bg: Vec<u16>, obj: Vec<u16>, win: Vec<u16>,
+    bg_prio: Vec<u16>, obj_prio: Vec<u16>, win_prio: Vec<u16>,
+) -> Vec<u16> {
+    let mut combo = vec![0; 240];
+    for i in 0..240 {
+        // for now just ignore the window as im not displaying it
+        let highest_priority_pixel = {
+            // 0 vs 0 has 
+            if bg_prio[i] < obj_prio[i] {
+                bg[i]
+            } else {
+                obj[i]
+            }
+        };
+        combo[i] = highest_priority_pixel;
+    }
+    return combo
+}

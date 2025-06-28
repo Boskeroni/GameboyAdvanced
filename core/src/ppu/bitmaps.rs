@@ -1,22 +1,30 @@
 use crate::memory::Memory;
 use crate::memory::Memoriable;
-use crate::ppu::get_rotation_scaling;
-use super::{Ppu, PpuRegisters, PALETTE_BASE};
+use super::{PpuRegisters, PALETTE_BASE};
 
-pub fn bg_mode_3(ppu: &mut Ppu, memory: &mut Box<Memory>, line: u16) {
-    // offsetting purposes
-    let (x_offset, y_offset, _, _, _, _) = get_rotation_scaling(2, memory);
+pub fn bg_mode_3(memory: &mut Box<Memory>, line: u16) -> (Vec<u16>, Vec<u16>) {
+    let mut scanline = vec![0; 240];
+    // let (x_offset, y_offset, _, _, _, _) = get_rotation_scaling(2, memory);
 
     let start = 0x6000000 + (line as u32 * 480); // screen width * 2
     for i in 0..240 {
         let pixel = memory.read_u16(start + i*2);
-        ppu.worked_on_line[i as usize] = pixel;
+        scanline[i as usize] = pixel;
     }
-    ppu.pixel_priorities = vec![0; 240];
+    let priorities = {
+        let priority = memory.read_u16_io(PpuRegisters::BGCnt as u32 + 0x4) & 0b11;
+        vec![priority; 240]
+    };
+    return (scanline, priorities);
 }
 
 // TODO: this isn't always displaying text for some reason, maybe not a mode_4 issue
-pub fn bg_mode_4(ppu: &mut Ppu, memory: &mut Box<Memory>, line: u16) {
+pub fn bg_mode_4(memory: &mut Box<Memory>, line: u16) -> (Vec<u16>, Vec<u16>) {
+    let mut scanline = vec![0; 240];
+    let priorities = {
+        let priority = memory.read_u16_io(PpuRegisters::BGCnt as u32 + 0x4) & 0b11;
+        vec![priority; 240]
+    };
     let dispcnt = memory.read_u16(PpuRegisters::DispCnt as u32);
     let displayed_frame = (dispcnt >> 4) & 1 == 1;
 
@@ -29,20 +37,26 @@ pub fn bg_mode_4(ppu: &mut Ppu, memory: &mut Box<Memory>, line: u16) {
     for i in 0..240 {
         let palette_index = memory.read_u8(address);
         let pixel = memory.read_u16(PALETTE_BASE + (palette_index as u32 * 2));
-        ppu.worked_on_line[i] = pixel;
+        scanline[i] = pixel;
         address += 1;
     }
-    ppu.pixel_priorities = vec![0; 240];
+    return (scanline, priorities);
 }
 
-pub fn bg_mode_5(ppu: &mut Ppu, memory: &mut Box<Memory>, line: u16) {
-    let (width, height) = (160, 128);
-    if line >= height {
-        ppu.worked_on_line = [0; 240];
-        return;
+const MODE_5_HEIGHT: u16 = 128;
+const MODE_5_WIDTH: u32 = 160;
+pub fn bg_mode_5(memory: &mut Box<Memory>, line: u16) -> (Vec<u16>, Vec<u16>) {
+    let mut scanline = vec![0; 240];
+    let priorities = {
+        let priority = memory.read_u16_io(PpuRegisters::BGCnt as u32 + 0x4) & 0b11;
+        vec![priority; 240]
+    };
+
+    if line >= MODE_5_HEIGHT {
+        return (scanline, priorities);
     }
 
-    let dispcnt = memory.read_u16(PpuRegisters::DispCnt as u32);
+    let dispcnt = memory.read_u16_io(PpuRegisters::DispCnt as u32);
     let displayed_frame = (dispcnt >> 4) & 1 == 1;
 
     let mut address;
@@ -50,11 +64,11 @@ pub fn bg_mode_5(ppu: &mut Ppu, memory: &mut Box<Memory>, line: u16) {
         true => address = 0x600A000,
         false => address = 0x6000000,
     }
-    address += line as u32 * 2 * width;
+    address += line as u32 * 2 * MODE_5_WIDTH;
 
-    for i in 0..width {
+    for i in 0..MODE_5_WIDTH {
         let pixel = memory.read_u16(address + i*2);
-        ppu.worked_on_line[i as usize] = pixel;
+        scanline[i as usize] = pixel;
     }
-    ppu.pixel_priorities = vec![0; 240];
+    return (scanline, priorities);
 }

@@ -34,7 +34,7 @@ pub enum EmulatorState {
 
 pub fn run_emulator(
     emulator_arc: Arc<RwLock<Emulator>>,
-    redraw_send: SyncSender<Vec<u32>>,
+    redraw_send: SyncSender<Vec<u16>>,
     inp_recv: Receiver<EmulatorSend>,
 ) {
     let mut state = EmulatorState::Pause;

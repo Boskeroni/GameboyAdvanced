@@ -1,42 +1,42 @@
 use crate::memory::Memory; 
 use crate::memory::Memoriable;
-use super::{Ppu, PpuRegisters, PALETTE_BASE, VRAM_BASE};
+use super::{PpuRegisters, PALETTE_BASE, VRAM_BASE};
 
-pub fn bg_mode_0(ppu: &mut Ppu, memory: &Box<Memory>, line: u32) {
+pub fn bg_mode_0(memory: &Box<Memory>, line: u32) -> (Vec<u16>, Vec<u16>) {
+    let mut scanline = vec![0; 240];
+    let mut pixel_priorities = vec![3; 240];
+
     let backgrounds = get_background_priorities(memory, vec![0, 1, 2, 3]);
     if backgrounds.is_empty() {
-        return;
+        return (scanline, pixel_priorities);
     }
 
-    // now have a list of the order of the backgrounds
-    let mut scanline = vec![0; 240];
-    let mut pixel_priorities = vec![0; 240];
+    // all of the backgrounds it displays in order of priority
     for (bg, priority) in backgrounds {
         let read_line = text_mode_scanline(line, bg as u32, memory);
         for i in 0..240 {
-            // something has already been displayed to the scanline
-            if scanline[i] != 0 || read_line[i] == 0 { continue; }
+            if scanline[i] != 0 { continue; } // already been drawn
             pixel_priorities[i] = priority as u16;
-            scanline[i] = read_line[i];
+            scanline[i] = read_line[i] as u16;
         }
     }
-    ppu.pixel_priorities = pixel_priorities;
 
     for i in 0..240 {
         let palette_index = scanline[i];
         let pixel = memory.read_u16(PALETTE_BASE + (palette_index as u32 * 2));
-        ppu.worked_on_line[i] = pixel;
+        scanline[i] = pixel;
     }
+    return (scanline, pixel_priorities)
 }
 
-pub fn bg_mode_1(ppu: &mut Ppu, memory: &Box<Memory>, line: u32) { 
-    let backgrounds = get_background_priorities(memory, vec![0, 1, 2]);
-    if backgrounds.is_empty() {
-        return;
-    }
-
+pub fn bg_mode_1(memory: &Box<Memory>, line: u32) -> (Vec<u16>, Vec<u16>) { 
     let mut scanline = vec![0; 240];
     let mut pixel_priorities = vec![3; 240]; // better to assume its lowest priority
+
+    let backgrounds = get_background_priorities(memory, vec![0, 1, 2]);
+    if backgrounds.is_empty() {
+        return (scanline, pixel_priorities);
+    }
     for (bg, priority) in backgrounds {
         // bgs 0, 1 are text
         // bg 2 is rotation
@@ -48,19 +48,20 @@ pub fn bg_mode_1(ppu: &mut Ppu, memory: &Box<Memory>, line: u32) {
         for i in 0..240 {
             if scanline[i] != 0 || read_scanline[i] == 0 { continue; }
             pixel_priorities[i] = priority as u16;
-            scanline[i] = read_scanline[i];
+            scanline[i] = read_scanline[i] as u16;
         }
     }
 
     for i in 0..240 {
         let palette_index = scanline[i];
         let pixel = memory.read_u16(PALETTE_BASE + (palette_index as u32 * 2));
-        ppu.worked_on_line[i] = pixel;
+        scanline[i] = pixel;
     }
+    return (scanline, pixel_priorities);
 }
 
-pub fn bg_mode_2(_ppu: &mut Ppu, _memory: &mut Memory, _line: u16) { 
-    //todo!()
+pub fn bg_mode_2(_memory: &mut Memory, _line: u16) -> (Vec<u16>, Vec<u16>) { 
+    todo!()
 }
 
 /// returns all the backgrounds in order of priority
@@ -81,7 +82,7 @@ fn get_background_priorities(memory: &Box<Memory>, available_bgs: Vec<u32>) -> V
 }
 
 fn rotation_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
-    let bg_cnt = memory.read_u16(PpuRegisters::BGCnt as u32 + bg * 2);
+    let bg_cnt = memory.read_u16_io(PpuRegisters::BGCnt as u32 + bg * 2);
     let (width, height) = match (bg_cnt >> 14) & 0b11 {
         0 => (128, 128),
         1 => (256, 256),
@@ -92,8 +93,8 @@ fn rotation_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
 
     let base = PpuRegisters::BgRotationBase as u32 + (bg - 2) * 0x10;
     let x0 = {
-        let lower = memory.read_u16(base + 0x8) as i64;
-        let mut higher = memory.read_u16(base + 0xA) as i64 & 0x0FFF;
+        let lower = memory.read_u16_io(base + 0x8) as i64;
+        let mut higher = memory.read_u16_io(base + 0xA) as i64 & 0x0FFF;
         if (higher >> 11) & 1 == 1 {
             higher &= 0x800;
             higher = -higher;
@@ -102,8 +103,8 @@ fn rotation_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
         combine as f64 / 256.
     };
     let y0 = {
-        let lower = memory.read_u16(base + 0xC) as i64;
-        let mut higher = memory.read_u16(base + 0xE) as i64 & 0x0FFF;
+        let lower = memory.read_u16_io(base + 0xC) as i64;
+        let mut higher = memory.read_u16_io(base + 0xE) as i64 & 0x0FFF;
         if (higher >> 11) & 1 == 1 {
             higher &= 0x800;
             higher = -higher
@@ -112,10 +113,10 @@ fn rotation_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
         combine as f64 / 256.
     };
 
-    let pa = (memory.read_u16(base + 0x0) as f64) / 256.; // the scale factor for x
-    let pb = (memory.read_u16(base + 0x2) as f64) / 256.; // the scale factor for y
-    let pc = (memory.read_u16(base + 0x4) as f64) / 256.; // the shear for x
-    let pd = (memory.read_u16(base + 0x6) as f64) / 256.; // the shear for y
+    let pa = (memory.read_u16_io(base + 0x0) as f64) / 256.; // the scale factor for x
+    let pb = (memory.read_u16_io(base + 0x2) as f64) / 256.; // the scale factor for y
+    let pc = (memory.read_u16_io(base + 0x4) as f64) / 256.; // the shear for x
+    let pd = (memory.read_u16_io(base + 0x6) as f64) / 256.; // the shear for y
 
     let determinant = 1. / (pa * pd - pc * pb);
     for x2 in 0..240 {

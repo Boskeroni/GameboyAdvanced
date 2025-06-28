@@ -27,7 +27,7 @@ fn main() {
     let emulator_ref = Arc::new(RwLock::new(Emulator::new(&rom_path)));
 
     let (emu_send, emu_recv) = mpsc::channel::<EmulatorSend>();
-    let (draw_send, draw_recv) = mpsc::sync_channel::<Vec<u32>>(1);
+    let (draw_send, draw_recv) = mpsc::sync_channel::<Vec<u16>>(1);
 
     let emulator = emulator_ref.clone();
     thread::Builder::new().name("emulator_thread".into()).spawn(|| {
@@ -56,14 +56,14 @@ fn main() {
 }
 
 struct EmulatorApp {
-    redraw_recv: Receiver<Vec<u32>>,
+    redraw_recv: Receiver<Vec<u16>>,
     inp_send: Sender<EmulatorSend>,
     debugger: Option<Debugger>,
     previous_screen: Vec<u32>,
 }
 impl EmulatorApp {
     fn new(
-        redraw_recv: Receiver<Vec<u32>>, 
+        redraw_recv: Receiver<Vec<u16>>, 
         inp_send: Sender<EmulatorSend>,
         debugger: Option<Debugger>,
     ) -> Self {
@@ -83,7 +83,8 @@ impl eframe::App for EmulatorApp {
     
         // check if a redraw needs to happen
         // scroll through all of them until it is up to the most recent
-        while let Ok(screen) = self.redraw_recv.try_recv() {
+        while let Ok(unconverted_screen) = self.redraw_recv.try_recv() {
+            let screen = convert_gba_winit(unconverted_screen);
             self.previous_screen = screen;
         }
         draw(&self.previous_screen, ctx);
@@ -101,6 +102,18 @@ impl eframe::App for EmulatorApp {
     }
 }
 
+fn convert_gba_winit(screen: Vec<u16>) -> Vec<u32> {
+    let mut converted = vec![0; screen.len()];
+    for i in 0..screen.len() {
+        let palette = screen[i];
+        let (r, g, b) = (palette & 0x1F, (palette >> 5) & 0x1F, (palette >> 10) & 0x1F);
+        let (float_r, float_g, float_b) = (r as f32 / 31., g as f32 / 31., b as f32 / 31.);
+        let (pixel_r, pixel_g, pixel_b) = (float_r * 255., float_g * 255., float_b * 255.);
+        let color = (pixel_r as u32) << 16 | (pixel_g as u32) << 8 | (pixel_b as u32);
+        converted[i] = color;
+    }
+    return converted 
+}
 const SCREEN_WIDTH: usize = 240;
 const SCREEN_HEIGHT: usize = 160;
 const SCREEN_RATIO: f32 = 2.0;
