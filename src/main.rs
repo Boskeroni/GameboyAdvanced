@@ -23,7 +23,8 @@ fn main() {
 
     let file = env::args().nth(1).unwrap();
     let rom_path = format!("roms/{file}");
-    let emulator_ref = Arc::new(RwLock::new(Emulator::new(&rom_path)));
+    let from_bios = cfg!(feature = "from-bios");
+    let emulator_ref = Arc::new(RwLock::new(Emulator::new(&rom_path, from_bios)));
 
     let (emu_send, emu_recv) = mpsc::channel::<EmulatorSend>();
     let (draw_send, draw_recv) = mpsc::sync_channel::<Vec<u16>>(1);

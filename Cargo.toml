@@ -19,4 +19,5 @@ serde_json = "1.0"
 [features]
 debug = []
 json-test = []
-default = ["debug", "json-test"]
+from-bios = []
+default = ["debug"]

@@ -14,7 +14,6 @@ use joypad::init_joypad;
 use memory::*;
 use ppu::*;
 
-const FROM_BIOS: bool = false;
 pub struct Emulator {
     pub cpu: Cpu,
     pub ppu: Ppu,
@@ -23,8 +22,8 @@ pub struct Emulator {
     pub cycles: u32,
 }
 impl Emulator {
-    pub fn new(filename: &str) -> Self {
-        let cpu = match FROM_BIOS {
+    pub fn new(filename: &str, from_bios: bool) -> Self {
+        let cpu = match from_bios {
             true => Cpu::from_bios(),
             false => Cpu::new(),
         };

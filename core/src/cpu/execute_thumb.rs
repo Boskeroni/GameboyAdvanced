@@ -522,7 +522,6 @@ fn push_pop<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
             if r_bit {
                 let reg = cpu.get_register(14);
                 memory.write_u32(rn - extra, reg);
-                extra -= 4;
             }
             extra = saved;
         }
