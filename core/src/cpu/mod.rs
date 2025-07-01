@@ -142,6 +142,7 @@ impl Cpsr {
     pub fn set_control(&mut self, bits: u32) {
         self.i = (bits >> 7) & 1 == 1;
         self.f = (bits >> 6) & 1 == 1;
+        self.t = (bits >> 5) & 1 == 1;
         self.mode = ProcessorMode::from_bits(bits);
     }
 }

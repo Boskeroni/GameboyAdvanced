@@ -1,138 +1,34 @@
 use crate::memory::Memory; 
 use crate::memory::Memoriable;
-use crate::ppu::blend_pixels;
+use crate::ppu::accumulate::LineLayers;
 use crate::ppu::LCD_WIDTH;
-use super::{PpuRegisters, PALETTE_BASE, VRAM_BASE};
+use super::{PpuRegisters, VRAM_BASE};
 
-pub fn bg_mode_0(memory: &Box<Memory>, line: u32) -> (Vec<u16>, Vec<u16>) {
-    let mut scanline = vec![0; LCD_WIDTH];
-    let mut pixel_priorities = vec![4; LCD_WIDTH];
-
-    let backgrounds = get_background_priorities(memory, vec![0, 1, 2, 3]);
-    if backgrounds.is_empty() {
-        return (scanline, pixel_priorities);
-    }
-
-    // all of the blending and whatnot
-    let (eva, evb, evy);
-    {
-        let blend_alpha = memory.read_u16_io(PpuRegisters::BldAlpha as u32);
-        let blend_y = memory.read_u16_io(PpuRegisters::BldY as u32);
-
-        eva = std::cmp::min(16, blend_alpha & 0x1F) as f32 / 16.;
-        evb = std::cmp::min(16, (blend_alpha >> 8) & 0x1F) as f32 / 16.;
-        evy = std::cmp::min(16, blend_y & 0x1F) as f32 / 16.;
-    }
-
-    let blend_cnt = memory.read_u16_io(PpuRegisters::BldCnt as u32);
-    let color_effect = (blend_cnt >> 6) & 0x3;
-
-    // all of the backgrounds it displays in order of priority
-    for (bg, priority) in backgrounds.iter().rev() {
-        // read the scanline
-        let read_line = text_mode_scanline(line, *bg as u32, memory);
-        let source = (blend_cnt >> bg) & 1 == 1;
-        let target = (blend_cnt >> (8 + bg)) & 1 == 1;
-        
+pub fn bg_mode_0(layers: &mut LineLayers, memory: &Box<Memory>, line: u32) {
+    // go through each background adding it to the layers
+    for bg in 0..=3 {
+        let read_line = text_mode_scanline(line, bg as u32, memory);
         for i in 0..LCD_WIDTH {
-            // transparent
-            if read_line[i] == 0 { continue; }
-
-            let current_priority = pixel_priorities[i];
-            let x1 = memory.read_u16(PALETTE_BASE + (read_line[i] as u32 * 2));
-
-            // nothing to blend, not source blending, not right blend target, no blending
-            if current_priority == 4 || !source || !target || color_effect == 0 {
-                if pixel_priorities[i] < *priority as u16 {
-                    continue;
-                }
-                pixel_priorities[i] = *priority as u16;
-                scanline[i] = x1;
-                continue;
-            }
-
-            // blending is needed
-            let correct_color = match color_effect {
-                1 => {
-                    let old_pixel_color = scanline[i];
-                    blend_pixels(x1, old_pixel_color, eva, evb)
-                }
-                2 => {
-                    let (r1, g1, b1) = (x1 & 0x1F, (x1 >> 5) & 0x1F, (x1 >> 10) & 0x1F);
-                    let (r1_f, g1_f, b1_f) = (r1 as f32, g1 as f32, b1 as f32);
-                    let (r2_f, g2_f, b2_f) = (r1_f + (31. - r1_f) * evy, g1_f + (31. - g1_f) * evy, b1_f + (31. - b1_f) * evy);
-                    let (r2, g2, b2) = (r2_f as u16, g2_f as u16, b2_f as u16);
-                    let combine = (r2 & 0x1F) | ((g2 & 0x1F) << 5) | ((b2 & 0x1F) << 10);
-                    combine
-                }
-                3 => {
-                    let (r1, g1, b1) = (x1 & 0x1F, (x1 >> 5) & 0x1F, (x1 >> 10) & 0x1F);
-                    let (r1_f, g1_f, b1_f) = (r1 as f32, g1 as f32, b1 as f32);
-                    let (r2_f, g2_f, b2_f) = (r1_f - r1_f*evy, g1_f - g1_f*evy, b1_f - b1_f*evy);
-                    let (r2, g2, b2) = (r2_f as u16, g2_f as u16, b2_f as u16);
-                    let combine = (r2 & 0x1F) | ((g2 & 0x1F) << 5) | ((b2 & 0x1F) << 10);
-                    combine
-                }
-                _ => unreachable!(),
-            };
-            pixel_priorities[i] = *priority as u16;
-            scanline[i] = correct_color;
+            layers.bgs[bg as usize][i] = read_line[i] as u16;
         }
     }
-
-    return (scanline, pixel_priorities)
 }
 
-pub fn bg_mode_1(memory: &Box<Memory>, line: u32) -> (Vec<u16>, Vec<u16>) { 
-    let mut scanline = vec![0; LCD_WIDTH];
-    let mut pixel_priorities = vec![3; LCD_WIDTH]; // better to assume its lowest priority
-
-    let backgrounds = get_background_priorities(memory, vec![0, 1, 2]);
-    if backgrounds.is_empty() {
-        return (scanline, pixel_priorities);
-    }
-    for (bg, priority) in backgrounds {
-        // bgs 0, 1 are text
-        // bg 2 is rotation
-        let read_scanline = match bg {
+pub fn bg_mode_1(layers: &mut LineLayers, memory: &Box<Memory>, line: u32) { 
+    for bg in 0..=3 {
+        let read_line = match bg {
             0|1 => text_mode_scanline(line, bg as u32, memory),
             2 => rotation_mode_scanline(line, bg as u32, memory),
             _ => unreachable!(),
         };
         for i in 0..LCD_WIDTH {
-            if scanline[i] != 0 || read_scanline[i] == 0 { continue; }
-            pixel_priorities[i] = priority as u16;
-            scanline[i] = read_scanline[i] as u16;
+            layers.bgs[bg as usize][i] = read_line[i] as u16;
         }
     }
-
-    for i in 0..LCD_WIDTH {
-        let palette_index = scanline[i];
-        let pixel = memory.read_u16(PALETTE_BASE + (palette_index as u32 * 2));
-        scanline[i] = pixel;
-    }
-    return (scanline, pixel_priorities);
 }
 
-pub fn bg_mode_2(_memory: &mut Memory, _line: u16) -> (Vec<u16>, Vec<u16>) { 
+pub fn bg_mode_2(layers: &mut LineLayers, _memory: &mut Memory, _line: u16) { 
     todo!()
-}
-
-/// returns all the backgrounds in order of priority
-/// first number is the background number, second is its priority
-fn get_background_priorities(memory: &Box<Memory>, available_bgs: Vec<u32>) -> Vec<(u8, u8)> {
-    let disp_cnt = memory.read_u16_io(PpuRegisters::DispCnt as u32);
-
-    let mut priorities = vec![Vec::new(); 4];
-    for bg in available_bgs {
-        if (disp_cnt >> (8 + bg)) & 1 == 0 {
-            continue;
-        } 
-
-        let bg_cnt = memory.read_u16_io(PpuRegisters::BGCnt as u32 + bg*2) & 0b11;
-        priorities[bg_cnt as usize].push((bg as u8, bg_cnt as u8));
-    }
-    priorities.into_iter().flatten().collect()
 }
 
 fn rotation_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
@@ -207,7 +103,7 @@ fn text_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
 
     // all the variables stored within the bg_cnt register
     let char_block = (bg_cnt >> 2) & 0x3;
-    let mosaic = (bg_cnt >> 6) & 1 == 1;
+    let _mosaic = (bg_cnt >> 6) & 1 == 1;
     let is_8_bit = (bg_cnt >> 7) & 1 == 1;
     let screen_base = (bg_cnt >> 8) & 0x1F;
 

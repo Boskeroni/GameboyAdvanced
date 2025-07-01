@@ -1,17 +1,13 @@
-use crate::{memory::{Memoriable, Memory}, ppu::LCD_WIDTH};
+use crate::{memory::{Memoriable, Memory}, ppu::{accumulate::LineLayers, LCD_WIDTH}};
 
 const OAM: u32 = 0x7000000;
-const OBJ_PALL: u32 = 0x5000200;
 const TILE_CHAR_BLOCK: u32 = 0x6010000;
 
 /// runs through all of the objects inside OAM and writes them (or doesn't depending
 /// on priorities) to the PPU's worked_on_line. Honestly, so much stuff is happening in this
 /// function that I have had to split it into so many subfunctions just to make it somewhat coherent
 /// (which it really isn't).
-pub fn oam_scan(mem: &Box<Memory>, vcount: u16, dispcnt: u16) -> (Vec<u16>, Vec<u16>) {
-    let mut obj_line = vec![0; LCD_WIDTH];
-    let mut priorities = vec![4; LCD_WIDTH];
-
+pub fn oam_scan(layers: &mut LineLayers, mem: &Box<Memory>, vcount: u16, dispcnt: u16) {
     for obj in 0..=127 {
         // all of the attributes held by the OAMs (the 4th one isn't used yet)
         let obj_attr0 = mem.read_u16(OAM + (obj * 8) + 0);
@@ -23,7 +19,8 @@ pub fn oam_scan(mem: &Box<Memory>, vcount: u16, dispcnt: u16) -> (Vec<u16>, Vec<
         }
         // these are defined here as they don't impact the reading of the tile
         // just impact if / where it is placed
-        let priority = (obj_attr2 >> 10) & 0x3;
+        let priority = ((obj_attr2 >> 10) & 0x3) as u8;
+        let obj_mode = ((obj_attr0 >> 10) & 0x3) as u8;
         let x_coord: u16 = obj_attr1 & 0x1FF;
 
         // this can be any amount of lines
@@ -44,15 +41,14 @@ pub fn oam_scan(mem: &Box<Memory>, vcount: u16, dispcnt: u16) -> (Vec<u16>, Vec<
             if pixel == 0 {
                 continue;
             }
-            if priorities[loc] <= priority {
+            if layers.obj_priorities[loc] <= priority {
                 continue;
             }
 
-            obj_line[loc] = mem.read_u16(OBJ_PALL + pixel as u32);
-            priorities[loc] = priority;
+            layers.obj[loc] = pixel;
+            layers.obj_priorities[loc] = priority | (obj_mode << 2);
         }
     }
-    return (obj_line, priorities);
 }
 
 const SIZE_GRIDS: [[(u16, u16); 3]; 4] = [
@@ -70,13 +66,11 @@ fn load_obj(
     obj0: u16, obj1: u16, obj2: u16, 
     vcount: u16,
     dispcnt: u16,
-) -> Vec<u16> {
+) -> Vec<u8> {
     let two_dimensional = (dispcnt >> 6) & 1 == 0;
     let rotation_flag = (obj0 >> 8) & 1 == 1;
     let _obj_mosaic = (obj0 >> 12) & 1 == 1;
     let is_8_bit = (obj0 >> 13) & 1 == 1;
-
-    let _obj_mode = (obj0 >> 10) & 0x3;
 
     let mut tile_number = obj2 & 0x3FF;
     let bg_mode = dispcnt & 0b111;
@@ -87,7 +81,7 @@ fn load_obj(
         tile_number &= !(0b1);
     }
 
-    let palette_number = (obj2 >> 12) & 0xF;
+    let palette_number = ((obj2 >> 12) & 0xF) as u8;
     let y_coord = obj0 & 0xFF;
 
     let (width, height) = {
@@ -151,7 +145,7 @@ fn load_obj(
                         
                         for pixel in 0..8 {
                             let palette_index = mem.read_u8(line_address + pixel);
-                            row_of_pixels.push(palette_index as u16);
+                            row_of_pixels.push(palette_index);
                         }
                     }
                 }
@@ -170,13 +164,13 @@ fn load_obj(
                             let left = formatted_data & 0xF;
                             match left {
                                 0 => row_of_pixels.push(0),
-                                _ => row_of_pixels.push((palette_number * 0x20) + (left * 2) as u16)
+                                _ => row_of_pixels.push((palette_number * 0x20) + (left * 2))
                             }
         
                             let right = (formatted_data >> 4) & 0xF;
                             match right {
                                 0 => row_of_pixels.push(0),
-                                _ => row_of_pixels.push((palette_number * 0x20) + (right * 2) as u16)
+                                _ => row_of_pixels.push((palette_number * 0x20) + (right * 2))
                             }
                         }
                     }

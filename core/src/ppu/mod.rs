@@ -1,10 +1,9 @@
 mod bitmaps;
 mod tiles;
 mod obj;
-mod window;
+mod accumulate;
 
-use crate::memory::Memory;
-use window::window_line;
+use crate::{memory::Memory, ppu::accumulate::{accumulate_and_palette, LineLayers}};
 use bitmaps::*;
 use obj::oam_scan;
 use tiles::*;
@@ -65,6 +64,10 @@ enum PpuRegisters {
     BgHOffset = 0x4000010,
     BgVOffset = 0x4000012,
     BgRotationBase = 0x4000020,
+    Win0H = 0x4000040,
+    Win0V = 0x4000044,
+    WinIn = 0x4000048,
+    WinOut = 0x400004A,
     _Mosaic = 0x400004C,
     BldCnt = 0x4000050,
     BldAlpha = 0x4000052,
@@ -74,7 +77,6 @@ pub struct Ppu {
     pub new_screen: bool,
     elapsed_time: usize, // represents the number of dots elapsed
     pub stored_screen: Vec<u16>,
-    worked_on_line: [u16; LCD_WIDTH],
 }
 impl Ppu {
     pub fn new() -> Self {
@@ -82,8 +84,6 @@ impl Ppu {
             new_screen: false,
             elapsed_time: 0,
             stored_screen: Vec::new(),
-
-            worked_on_line: [0; LCD_WIDTH],
         }
     }
     pub fn acknowledge_frame(&mut self) {
@@ -91,6 +91,45 @@ impl Ppu {
         self.elapsed_time = 0;
         self.stored_screen.clear();
     }
+}
+
+pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Box<Memory>) {
+    let dispcnt = memory.read_u16_io(PpuRegisters::DispCnt as u32);
+
+    // the line count we had last time, doesnt match the one this time
+    let dispstat = memory.read_u16_io(PpuRegisters::DispStat as u32);
+    let mut vcount = memory.read_u16_io(PpuRegisters::VCount as u32);
+
+    let new_line = ppu.elapsed_time / (LCD_WIDTH + 68) != vcount as usize;
+    if new_line {
+        if vcount < LCD_HEIGHT as u16 {
+            let mut layers = LineLayers::blank();
+
+            // clear it for the new line
+            let bg_mode = dispcnt & 0b111;
+            match bg_mode {
+                0 => bg_mode_0(&mut layers, memory, vcount as u32),
+                1 => bg_mode_1(&mut layers, memory, vcount as u32),
+                2 => bg_mode_2(&mut layers, memory, vcount),
+                3 => bg_mode_3(&mut layers, memory, vcount),
+                4 => bg_mode_4(&mut layers, memory, vcount),
+                5 => bg_mode_5(&mut layers, memory, vcount),
+                _ => panic!("you can't set the bg_mode to {bg_mode}"),
+            };
+            oam_scan(&mut layers, memory, vcount, dispcnt);
+
+            let combo = accumulate_and_palette(&layers, &memory);
+            ppu.stored_screen.extend(combo);
+        }
+        vcount += 1;
+        if vcount as usize >= (LCD_HEIGHT + 68) {
+            vcount = 0;
+            ppu.new_screen = true;
+        }
+        memory.write_io(PpuRegisters::VCount as u32, vcount as u16);
+    }
+
+    update_registers(ppu, memory, dispstat, vcount);
 }
 
 fn update_registers(ppu: &mut Ppu, memory: &mut Box<Memory>, mut dispstat: u16, vcount: u16) {
@@ -130,75 +169,4 @@ fn update_registers(ppu: &mut Ppu, memory: &mut Box<Memory>, mut dispstat: u16, 
 
     memory.write_io(0x4000202, ie);
     memory.write_io(PpuRegisters::DispStat as u32, dispstat);
-}
-
-pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Box<Memory>) {
-    let dispcnt = memory.read_u16_io(PpuRegisters::DispCnt as u32);
-
-    // the line count we had last time, doesnt match the one this time
-    let dispstat = memory.read_u16_io(PpuRegisters::DispStat as u32);
-    let mut vcount = memory.read_u16_io(PpuRegisters::VCount as u32);
-
-    let new_line = ppu.elapsed_time / (LCD_WIDTH + 68) != vcount as usize;
-    if new_line {
-        if vcount < LCD_HEIGHT as u16 {
-            // clear it for the new line
-            ppu.worked_on_line = [0; LCD_WIDTH];
-            let bg_mode = dispcnt & 0b111;
-            let (bg_scan, bg_prio) = match bg_mode {
-                0 => bg_mode_0(memory, vcount as u32),
-                1 => bg_mode_1(memory, vcount as u32),
-                2 => bg_mode_2(memory, vcount),
-                3 => bg_mode_3(memory, vcount),
-                4 => bg_mode_4(memory, vcount),
-                5 => bg_mode_5(memory, vcount),
-                _ => panic!("you can't set the bg_mode to {bg_mode}"),
-            };
-
-            let (obj_scan, obj_prio) = oam_scan(memory, vcount, dispcnt);
-            let (win_scan, win_prio) = window_line();
-
-            let combo = accumulate(
-                bg_scan, obj_scan, win_scan, 
-                bg_prio, obj_prio, win_prio,
-                &memory,
-            );
-            ppu.stored_screen.extend(combo);
-        }
-        vcount += 1;
-        if vcount as usize >= (LCD_HEIGHT + 68) {
-            vcount = 0;
-            ppu.new_screen = true;
-        }
-        memory.write_io(PpuRegisters::VCount as u32, vcount as u16);
-    }
-
-    update_registers(ppu, memory, dispstat, vcount);
-}
-
-// just more convenient to mix them all together in one location
-fn accumulate(
-    bg: Vec<u16>, obj: Vec<u16>, win: Vec<u16>,
-    bg_prio: Vec<u16>, obj_prio: Vec<u16>, win_prio: Vec<u16>,
-    memory: &Box<Memory>
-) -> Vec<u16> {
-    let blend_cnt = memory.read_u16_io(PpuRegisters::BldCnt as u32);
-    let blend_alpha = memory.read_u16_io(PpuRegisters::BldAlpha as u32);
-    let blend_y = memory.read_u16_io(PpuRegisters::BldY as u32);
-
-    let first_target = blend_cnt & 0x3F;
-    let second_target = (blend_cnt >> 8) & 0x3F;
-
-    let eva = blend_alpha & 0x1F;
-    let evb = (blend_alpha >> 8) & 0x1F;
-
-    let mut combo = vec![0; LCD_WIDTH];
-    for i in 0..LCD_WIDTH {
-        if bg_prio[i] < obj_prio[i] {
-            combo[i] = bg[i];
-        } else {
-            combo[i] = obj[i];
-        }
-    }
-    return combo
 }

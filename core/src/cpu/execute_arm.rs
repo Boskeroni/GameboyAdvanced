@@ -245,7 +245,7 @@ fn psr_transfer(opcode: u32, cpu: &mut Cpu) {
                     cpu.get_register(rm_index)
                 }
             };
-            let mode_clone = cpu.cpsr.mode.clone();
+            let starting_cpsr = cpu.cpsr.clone();
             let psr = match psr_bit {
                 true => {
                     if let ProcessorMode::User|ProcessorMode::System = cpu.cpsr.mode {
@@ -259,11 +259,14 @@ fn psr_transfer(opcode: u32, cpu: &mut Cpu) {
             if f_bit {
                 psr.set_flags(operand);
             }
-            if let ProcessorMode::User = mode_clone {
+            if let ProcessorMode::User = starting_cpsr.mode {
                 return;
             }
             if c_bit {
                 psr.set_control(operand);
+            }
+            if starting_cpsr.t != cpu.cpsr.t {
+                cpu.clear_pipeline();
             }
         }
         false => {
@@ -312,6 +315,10 @@ fn multiply(opcode: u32, cpu: &mut Cpu) {
         cpu.cpsr.n = (result >> 31) == 1;
         cpu.cpsr.c = false;
     }
+
+    if rd_index == 15 {
+        cpu.clear_pipeline();
+    }
 }
 fn multiply_long(opcode: u32, cpu: &mut Cpu) {
     let rm_index = opcode          as u8 & 0xF;
@@ -350,7 +357,6 @@ fn multiply_long(opcode: u32, cpu: &mut Cpu) {
 
     let rdl = cpu.get_register_mut(rdl_index);
     *rdl = result as u32;
-
     let rdh = cpu.get_register_mut(rdh_index);
     *rdh = (result >> 32) as u32;
 
