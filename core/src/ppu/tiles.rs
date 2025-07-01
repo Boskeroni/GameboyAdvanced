@@ -27,7 +27,7 @@ pub fn bg_mode_1(layers: &mut LineLayers, memory: &Box<Memory>, line: u32) {
     }
 }
 
-pub fn bg_mode_2(layers: &mut LineLayers, _memory: &mut Memory, _line: u16) { 
+pub fn bg_mode_2(_layers: &mut LineLayers, _memory: &mut Memory, _line: u16) { 
     todo!()
 }
 
@@ -82,7 +82,7 @@ fn rotation_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
         let col = x1 / 8;
         
         // assuming that it is 1-d mapping, not 2-d mapping
-        let tile_address = VRAM_BASE + (col * 0x40) + (row * (width / 8) * 0x40);
+        let _tile_address = VRAM_BASE + (col * 0x40) + (row * (width / 8) * 0x40);
         // let tile_index = memory.re
     }
 

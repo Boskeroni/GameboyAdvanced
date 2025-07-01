@@ -8,7 +8,7 @@ use bitmaps::*;
 use obj::oam_scan;
 use tiles::*;
 
-fn get_rotation_scaling(bg: u32, memory: &Box<Memory>) -> (u32, u32, u16, u16, u16, u16) {
+fn _get_rotation_scaling(bg: u32, memory: &Box<Memory>) -> (u32, u32, u16, u16, u16, u16) {
     let base = PpuRegisters::BgRotationBase as u32 + (bg - 2) * 0x10;
     let x0 = {
         let lower = memory.read_u16_io(base + 0x8) as u32;
@@ -28,7 +28,7 @@ fn get_rotation_scaling(bg: u32, memory: &Box<Memory>) -> (u32, u32, u16, u16, u
 
     return (x0, y0, dx, dmx, dy, dmy);
 }
-fn blend_pixels(x1: u16, x2: u16, eva: f32, evb: f32) -> u16 {
+fn _blend_pixels(x1: u16, x2: u16, eva: f32, evb: f32) -> u16 {
     let (old_r, old_g, old_b) = (x2 & 0x1F, (x2 >> 5) & 0x1F, (x2 >> 10) & 0x1F);
     let (new_r, new_g, new_b) = (x1 & 0x1F, (x1 >> 5) & 0x1F, (x1 >> 10) & 0x1F);
 
@@ -64,14 +64,14 @@ enum PpuRegisters {
     BgHOffset = 0x4000010,
     BgVOffset = 0x4000012,
     BgRotationBase = 0x4000020,
-    Win0H = 0x4000040,
-    Win0V = 0x4000044,
-    WinIn = 0x4000048,
-    WinOut = 0x400004A,
+    _Win0H = 0x4000040,
+    _Win0V = 0x4000044,
+    _WinIn = 0x4000048,
+    _WinOut = 0x400004A,
     _Mosaic = 0x400004C,
-    BldCnt = 0x4000050,
-    BldAlpha = 0x4000052,
-    BldY = 0x4000054,
+    _BldCnt = 0x4000050,
+    _BldAlpha = 0x4000052,
+    _BldY = 0x4000054,
 }
 pub struct Ppu {
     pub new_screen: bool,

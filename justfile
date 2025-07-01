@@ -9,7 +9,7 @@ bios-test:
     ./target/debug/gameboy-advanced "games/golden-sun.gba"
 
 test TEST:
-    cargo build
+    cargo build -q
     ./target/debug/gameboy-advanced {{TEST}}
 
 play GAME:

@@ -96,8 +96,8 @@ fn load_obj(
 
     match rotation_flag {
         true => {
-            let double_size = (obj0 >> 9) & 1 == 1;
-            let rotation_param = (obj1 >> 9) & 0x1F;
+            let _double_size = (obj0 >> 9) & 1 == 1;
+            let _rotation_param = (obj1 >> 9) & 0x1F;
             // println!("AFFINE sprites aint supported");
         }
         false => {

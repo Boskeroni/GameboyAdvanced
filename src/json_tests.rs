@@ -1,9 +1,10 @@
-use gba_core::{cpu::{convert_u32_psr, execute_arm::execute_arm, execute_thumb::execute_thumb, Cpu, Fde}, handle_cpu, memory::Memoriable};
+use gba_core::cpu::{convert_u32_psr, execute_arm::execute_arm, execute_thumb::execute_thumb, Cpu, Fde};
+use gba_core::memory::Memoriable;
 use serde_json::{self, Value};
 
 pub struct JsonEmulator {
     cpu: Cpu,
-    cycles: u32,
+    _cycles: u32,
     mem: JsonMemory,
 }
 
@@ -87,7 +88,7 @@ pub fn perform_tests() {
         // if !filename.contains("mrs") {continue; }
         // if filename.contains("mul") {continue; }
 
-        println!("{}", file.file_name().to_str().unwrap());
+        println!("{filename}");
         let read_file = std::fs::read_to_string(file.path()).unwrap();
         let json: Value = serde_json::from_str(&read_file).unwrap();
         let all_tests = json.as_array().unwrap();
@@ -98,11 +99,12 @@ pub fn perform_tests() {
 
             let mut emu = JsonEmulator {
                 cpu,
-                cycles: 0,
+                _cycles: 0,
                 mem
             };
             run_test(&mut emu.cpu, &mut emu.mem);
-            if let Some(e) = check_identical(&emu.cpu, &end_cpu) {
+
+            if let Some(e) = check_identical(&emu.cpu, &end_cpu, filename) {
                 println!("{}", serde_json::to_string_pretty(test).unwrap());
                 println!("{e}");
                 println!("{:?}", emu.cpu.fde);
@@ -181,7 +183,7 @@ fn init_mem(test: &Value) -> JsonMemory {
     }
 }
 
-fn check_identical(test: &Cpu, correct: &Cpu) -> Option<String> {
+fn check_identical(test: &Cpu, correct: &Cpu, filename: &str) -> Option<String> {
     for i in 0..8 {
         let a = test.unbanked_registers[i];
         let b = correct.unbanked_registers[i];
@@ -209,8 +211,8 @@ fn check_identical(test: &Cpu, correct: &Cpu) -> Option<String> {
     }
 
     if test.cpsr != correct.cpsr { 
-        // the c bit is so weird that i will usually just ignore it if wrong
-        if test.cpsr.c == correct.cpsr.c {
+        // the c bit for the multiply is so odd i will just ignore it
+        if !(filename.contains("mul") && test.cpsr.c != correct.cpsr.c) {
             return Some(format!("{:?} != {:?}", test.cpsr, correct.cpsr)); 
         }
     }
@@ -224,12 +226,14 @@ fn check_identical(test: &Cpu, correct: &Cpu) -> Option<String> {
     }
 
     // compare the fetched and decoded instructions
-    // if test.fde.decoded_opcode.unwrap() != correct.fde.decoded_opcode.unwrap() {
-    //     return Some(format!("decoded doesn't match {:?} {:?}", test.fde, correct.fde));
-    // }
-    // if test.fde.fetched_opcode.unwrap() != correct.fde.fetched_opcode.unwrap() {
-    //     return Some(format!("fetched doesn't match {:?} {:?}", test.fde, correct.fde));
-    // }
+    if !filename.contains("mrs") && !filename.contains("msr") {
+        if test.fde.decoded_opcode.unwrap() != correct.fde.decoded_opcode.unwrap() {
+            return Some(format!("decoded doesn't match {:?} {:?}", test.fde, correct.fde));
+        }
+        if test.fde.fetched_opcode.unwrap() != correct.fde.fetched_opcode.unwrap() {
+            return Some(format!("fetched doesn't match {:?} {:?}", test.fde, correct.fde));
+        }
+    }
 
     return None;
 }
