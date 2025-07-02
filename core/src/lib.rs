@@ -2,6 +2,7 @@ pub mod cpu;
 pub mod memory;
 pub mod ppu;
 pub mod joypad;
+pub mod apu;
 mod bus; 
 
 use cpu::{
@@ -13,6 +14,8 @@ use cpu::{
 use joypad::init_joypad;
 use memory::*;
 use ppu::*;
+
+use crate::apu::tick_apu;
 
 pub struct Emulator {
     pub cpu: Cpu,
@@ -50,6 +53,7 @@ pub fn run_single_step(emu: &mut Emulator) -> bool {
     update_timer(&mut emu.mem, &mut emu.cycles, 1);
     let active_dma = dma_tick(&mut emu.mem);
 
+    tick_apu();
     tick_ppu(&mut emu.ppu, &mut emu.mem);
     if emu.ppu.new_screen {
         emu.ppu.new_screen = false;

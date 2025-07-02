@@ -65,7 +65,7 @@ pub struct Memory {
     gp_rom: Vec<u8>,
     sram: [u8; SRAM_MAX_LENGTH],
 
-    timer_resets: [u16; 4],
+    timer_reload_values: [u16; 4],
     dma_completions: [u32; 4],
     should_halt_cpu: bool,
 }
@@ -115,16 +115,25 @@ impl Memory {
         }
 
         // writing to a timer register
-        if address >= 0x4000100 && address <= 0x400010E && address % 4 < 2 {
-            // this rounds down anyways which is good
+        if address >= 0x4000100 && address <= 0x400010E {
             let timer_specified = (address - 0x4000100) / 4;
-            let write_upper_byte = address & 1 == 1;
-            let data = data as u16;
+            // check if its enabling the timer
+            if address % 4 == 2 {
+                let enable_bit = data >> 7 & 1 == 1;
+                if enable_bit {
+                    self.write_io(address - 2, self.timer_reload_values[timer_specified as usize]);
+                }
+                self.write_io(address, data as u16);
+            } else if address % 4 < 2 {
+                // this rounds down anyways which is good
+                let write_upper_byte = address & 1 == 1;
+                let data = data as u16;
 
-            let timer_reset = &mut self.timer_resets[timer_specified as usize];
-            match write_upper_byte {
-                true => {*timer_reset &= 0x00FF; *timer_reset |= data << 8},
-                false => {*timer_reset &= 0xFF00; *timer_reset |= data},
+                let timer_reset = &mut self.timer_reload_values[timer_specified as usize];
+                match write_upper_byte {
+                    true => {*timer_reset &= 0x00FF; *timer_reset |= data << 8},
+                    false => {*timer_reset &= 0xFF00; *timer_reset |= data},
+                }
             }
             return;
         }
@@ -361,7 +370,7 @@ pub fn dma_tick(mem: &mut Box<Memory>) -> bool {
     let dma_start = (cnt >> 12) & 0x3;
     let irq_call = (cnt >> 14) & 1 == 1;
 
-    let dispstat = mem.read_u16(0x4000004);
+    let dispstat = mem.read_u16_io(0x4000004);
     match dma_start {
         0 => {}
         1 => if (dispstat >> 0) & 1 == 0 { return false; }
@@ -416,10 +425,10 @@ pub fn dma_tick(mem: &mut Box<Memory>) -> bool {
 
     if mem.dma_completions[i as usize] >= final_amount {
         if irq_call {
-            let mut i_flag = mem.read_u16(0x4000202);
+            let mut i_flag = mem.read_u16_io(0x4000202);
             i_flag |= 1 << (8 + i);
 
-            mem.write_u16(0x4000202, i_flag);
+            mem.write_io(0x4000202, i_flag);
         }
 
         mem.dma_completions[i as usize] = 0;
@@ -437,37 +446,37 @@ pub fn dma_tick(mem: &mut Box<Memory>) -> bool {
 
 
 const BASE_TIMER_ADDRESS: u32 = 0x4000100;
+const FREQUENCY: [u32; 4] = [1, 64, 256, 1024];
 pub fn update_timer(memory: &mut Box<Memory>, old_cycles: &mut u32, new_cycles: u32) {
     let total_cycles = *old_cycles + new_cycles;
     let mut prev_cascade = false;
 
     for timer in 0..=3 {
+        // the address
         let timer_address = BASE_TIMER_ADDRESS + (timer * 4);
-        let control = memory.read_u16(timer_address + 2);
+        let control = memory.read_u16_io(timer_address + 2);
 
+        // its not turned on
         let timer_enable = (control >> 7) & 1 == 1;
         if !timer_enable {
             prev_cascade = false;
             continue;
         }
 
+        // get the frequency
         let frequency_bits = control & 0b11;
-        let frequency = match frequency_bits {
-            0b00 => 1,
-            0b01 => 64,
-            0b10 => 256,
-            0b11 => 1024,
-            _ => unreachable!()
-        };
+        let frequency = FREQUENCY[frequency_bits as usize];
 
-        let timer_cycles = memory.read_u16(timer_address) as u32;
+        // cycles already done
+        let timer_cycles = memory.read_u16_io(timer_address);
 
-        let cascade_timer = (control >> 2) & 1 == 1;
-        let (new_timer_cycles, overflow) = match cascade_timer {
-            true => old_cycles.overflowing_add(prev_cascade as u32),
+        let count_up_timer = (control >> 2) & 1 == 1;
+        let (new_timer_cycles, overflow) = match count_up_timer {
+            true => timer_cycles.overflowing_add(prev_cascade as u16),
             false => {
-                let cycles_to_add = (timer_cycles / frequency).wrapping_sub(total_cycles / frequency);
-                old_cycles.overflowing_add(cycles_to_add as u32)
+                // everytime the total cycles passes a multiple of the frequency, then add 1 no?
+                let cycles_to_add = total_cycles/frequency - *old_cycles/frequency;
+                timer_cycles.overflowing_add(cycles_to_add as u16)
             }
         };
         prev_cascade = overflow;
@@ -476,14 +485,14 @@ pub fn update_timer(memory: &mut Box<Memory>, old_cycles: &mut u32, new_cycles: 
         
         // we need to call the interrupt
         if overflow && interrupt_flag {
-            let mut interrupt_flag = memory.read_u16(0x4000202);
+            let mut interrupt_flag = memory.read_u16_io(0x4000202);
             interrupt_flag |= 1 << (timer + 3);
 
             memory.write_io(0x4000202, interrupt_flag);
         }
 
         match overflow {
-            true => memory.write_io(timer_address, memory.timer_resets[timer as usize]),
+            true => memory.write_io(timer_address, memory.timer_reload_values[timer as usize]),
             false => memory.write_io(timer_address, new_timer_cycles as u16),
         }
     }
@@ -507,7 +516,7 @@ pub fn create_memory(file_name: &str) -> Box<Memory> {
         gp_rom: file,
         sram: [0; SRAM_MAX_LENGTH],
 
-        timer_resets: [0; 4],
+        timer_reload_values: [0; 4],
         dma_completions: [0; 4],
         should_halt_cpu: false,
     })
