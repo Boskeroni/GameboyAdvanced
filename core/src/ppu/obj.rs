@@ -113,21 +113,26 @@ fn load_obj(
             let ver_flip = (obj1 >> 13) & 1 == 1;
 
             // the the object would have already finished drawing by this point
-            let final_line = (y_coord + height) % 255;
-            if final_line < vcount {
+            let highest_line = (y_coord + height) % 0x100;
+            if highest_line < vcount {
                 return Vec::new();
             }
             // the object won't need to be drawn yet
             // also takes wrapping into account
-            let lowest_line = final_line as i16 - height as i16;
+            let lowest_line = highest_line as i16 - height as i16;
+            let wraps = lowest_line < 0;
             if vcount as i16 <= lowest_line {
                 return Vec::new();
             }
 
-            // its being rendered (even if offscreen x-wise)
+            let unflipped_row_needed = match wraps {
+                true => (0x100 - y_coord) + vcount,
+                false => vcount - y_coord,
+            };
+
             let row_needed = match ver_flip {
-                true => height - ((vcount - y_coord) % 255),
-                false => vcount - (y_coord % 255),
+                true => height - unflipped_row_needed,
+                false => unflipped_row_needed,
             };
 
             // the tile it needs to complete the row

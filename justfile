@@ -10,8 +10,8 @@ bios-test:
 
 test TEST:
     cargo build -q
-    ./target/debug/gameboy-advanced {{TEST}}
+    ./target/debug/gameboy-advanced "{{TEST}}.gba"
 
 play GAME:
     cargo build -q
-    ./target/debug/gameboy-advanced "games/{{GAME}}"
+    ./target/debug/gameboy-advanced "games/{{GAME}}.gba"

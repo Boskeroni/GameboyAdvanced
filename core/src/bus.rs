@@ -2,14 +2,14 @@
 use crate::memory::Memory;
 use crate::memory::Memoriable;
 
-struct Bus {
+struct DataBus {
     last_bios_fetch: u32,
     is_in_bios: bool,
 
     last_fetched_opcode: u32,
 }
 
-impl Bus {
+impl DataBus {
     pub fn new(mem: &Box<Memory>, from_bios: bool) -> Self {
         // starting from the bios
         if from_bios {

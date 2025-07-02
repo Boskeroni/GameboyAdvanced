@@ -50,7 +50,7 @@ impl Emulator {
 pub fn run_single_step(emu: &mut Emulator) -> bool {
     // update the timer
     // add 1 for now, make it more accurate later
-    update_timer(&mut emu.mem, &mut emu.cycles, 1);
+    update_timer(&mut emu.mem, &mut emu.cycles, 20);
     let active_dma = dma_tick(&mut emu.mem);
 
     tick_apu();

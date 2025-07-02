@@ -8,6 +8,15 @@ use bitmaps::*;
 use obj::oam_scan;
 use tiles::*;
 
+fn convert_to_float(px: u16) -> f64 {
+    let unsigned_u16 = px & 0x7FFF;
+    let unsigned_float = unsigned_u16 as f64 / 256.;
+    if (px >> 15) & 1 == 1 {
+        return -unsigned_float;
+    }
+    return unsigned_float;
+}
+
 fn _get_rotation_scaling(bg: u32, memory: &Box<Memory>) -> (u32, u32, u16, u16, u16, u16) {
     let base = PpuRegisters::BgRotationBase as u32 + (bg - 2) * 0x10;
     let x0 = {
@@ -110,7 +119,7 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Box<Memory>) {
             match bg_mode {
                 0 => bg_mode_0(&mut layers, memory, vcount as u32),
                 1 => bg_mode_1(&mut layers, memory, vcount as u32),
-                2 => bg_mode_2(&mut layers, memory, vcount),
+                2 => bg_mode_2(&mut layers, memory, vcount as u32),
                 3 => bg_mode_3(&mut layers, memory, vcount),
                 4 => bg_mode_4(&mut layers, memory, vcount),
                 5 => bg_mode_5(&mut layers, memory, vcount),

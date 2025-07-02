@@ -1,4 +1,4 @@
-enum ApuRegisters {
+enum _ApuRegisters {
     Sound1CntL = 0x4000060,
     Sound1CntH = 0x4000062,
     Sound2CntX = 0x4000064,
@@ -29,5 +29,5 @@ enum ApuRegisters {
 }
 
 pub fn tick_apu() {
-    
+
 }

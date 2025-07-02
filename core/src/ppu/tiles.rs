@@ -1,11 +1,13 @@
 use crate::memory::Memory; 
 use crate::memory::Memoriable;
 use crate::ppu::accumulate::LineLayers;
+use crate::ppu::convert_to_float;
 use crate::ppu::LCD_WIDTH;
 use super::{PpuRegisters, VRAM_BASE};
 
+
+
 pub fn bg_mode_0(layers: &mut LineLayers, memory: &Box<Memory>, line: u32) {
-    // go through each background adding it to the layers
     for bg in 0..=3 {
         let read_line = text_mode_scanline(line, bg as u32, memory);
         for i in 0..LCD_WIDTH {
@@ -15,10 +17,10 @@ pub fn bg_mode_0(layers: &mut LineLayers, memory: &Box<Memory>, line: u32) {
 }
 
 pub fn bg_mode_1(layers: &mut LineLayers, memory: &Box<Memory>, line: u32) { 
-    for bg in 0..=3 {
+    for bg in 0..=2 {
         let read_line = match bg {
-            0|1 => text_mode_scanline(line, bg as u32, memory),
-            2 => rotation_mode_scanline(line, bg as u32, memory),
+            0|1 => text_mode_scanline(line, bg, memory),
+            2 => rotation_mode_scanline(line, bg, memory),
             _ => unreachable!(),
         };
         for i in 0..LCD_WIDTH {
@@ -27,12 +29,20 @@ pub fn bg_mode_1(layers: &mut LineLayers, memory: &Box<Memory>, line: u32) {
     }
 }
 
-pub fn bg_mode_2(_layers: &mut LineLayers, _memory: &mut Memory, _line: u16) { 
-    todo!()
+pub fn bg_mode_2(layers: &mut LineLayers, memory: &Box<Memory>, line: u32) { 
+    for bg in 2..=3 {
+        let read_line = rotation_mode_scanline(line, bg, memory);
+        for i in 0..LCD_WIDTH {
+            layers.bgs[bg as usize][i] = read_line[i] as u16;
+        }
+    }
 }
 
 fn rotation_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
+    let mut scanline = Vec::new();
     let bg_cnt = memory.read_u16_io(PpuRegisters::BGCnt as u32 + bg * 2);
+    let char_address = VRAM_BASE + ((bg_cnt >> 2) & 0x3) as u32 * 0x4000;
+
     let (width, height) = match (bg_cnt >> 14) & 0b11 {
         0 => (128, 128),
         1 => (256, 256),
@@ -63,10 +73,10 @@ fn rotation_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
         combine as f64 / 256.
     };
 
-    let pa = (memory.read_u16_io(base + 0x0) as f64) / 256.; // the scale factor for x
-    let pb = (memory.read_u16_io(base + 0x2) as f64) / 256.; // the scale factor for y
-    let pc = (memory.read_u16_io(base + 0x4) as f64) / 256.; // the shear for x
-    let pd = (memory.read_u16_io(base + 0x6) as f64) / 256.; // the shear for y
+    let pa = convert_to_float(memory.read_u16_io(base + 0x0)); // the scale factor for x
+    let pb = convert_to_float(memory.read_u16_io(base + 0x2)); // the scale factor for y
+    let pc = convert_to_float(memory.read_u16_io(base + 0x4)); // the shear for x
+    let pd = convert_to_float(memory.read_u16_io(base + 0x6)); // the shear for y
 
     let determinant = 1. / (pa * pd - pc * pb);
     for x2 in 0..LCD_WIDTH {
@@ -74,20 +84,25 @@ fn rotation_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
         let x1_float = determinant * (pd * (x2 as f64 - x0) - pb * (line as f64 - y0)) + x0;
         let y1_float = determinant * (pc * (x2 as f64 - x0) + pa * (line as f64 - y0)) + y0;
 
-        let (x1, y1) = (x1_float as u32, y1_float as u32);
+        let (x1, y1) = (x1_float.floor() as u32, y1_float.floor() as u32);
         if x1 >= width || y1 >= height {
-            panic!("just checking if this is the wrapping this they were on about");
+            //println!("just checking if this is the wrapping this they were on about");
         }
         let row = y1 / 8;
         let col = x1 / 8;
-        
+        let tile_row = y1 % 8;
+        let tile_col = x1 % 8;
         // assuming that it is 1-d mapping, not 2-d mapping
-        let _tile_address = VRAM_BASE + (col * 0x40) + (row * (width / 8) * 0x40);
-        // let tile_index = memory.re
+        let tile_address = VRAM_BASE + (col * 0x40) + (row * (width / 8) * 0x40);
+        let tile = memory.read_u8(tile_address);
+
+        let line_address = char_address +
+            (tile as u32 * 0x40) +
+            (tile_row as u32 * 0x8);
+        let pixel = memory.read_u8(line_address + tile_col);
+        scanline.push(pixel);
     }
-
-
-    todo!();
+    return scanline;
 }
 
 const SCREEN_SIZE: [(u32, u32); 4] = [

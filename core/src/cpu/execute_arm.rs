@@ -259,9 +259,6 @@ fn psr_transfer(opcode: u32, cpu: &mut Cpu) {
             if f_bit {
                 psr.set_flags(operand);
             }
-            if let ProcessorMode::User = starting_cpsr.mode {
-                return;
-            }
             if c_bit {
                 psr.set_control(operand);
             }
@@ -293,18 +290,9 @@ fn multiply(opcode: u32, cpu: &mut Cpu) {
     let rs_index = (opcode >> 8)  as u8 & 0xF;
     let rm_index = opcode         as u8 & 0xF;
 
-    let rn = match rn_index {
-        15 => cpu.get_register(rn_index) + 4,
-        _ => cpu.get_register(rn_index),
-    };
-    let rs = match rs_index {
-        15 => cpu.get_register(rs_index) + 4,
-        _ => cpu.get_register(rs_index),
-    };
-    let rm = match rm_index {
-        15 => cpu.get_register(rm_index) + 4,
-        _ => cpu.get_register(rm_index),
-    };
+    let rn = cpu.get_register(rn_index);
+    let rs = cpu.get_register(rs_index);
+    let rm = cpu.get_register(rm_index);
 
     let mut result = rm.wrapping_mul(rs);
     let acc_bit = (opcode >> 21) & 1 == 1;
@@ -332,14 +320,8 @@ fn multiply_long(opcode: u32, cpu: &mut Cpu) {
     let rdl_index = (opcode >> 12) as u8 & 0xF;
     let rdh_index = (opcode >> 16) as u8 & 0xF;
 
-    let rm = match rm_index == 15 {
-        true => cpu.get_register(rm_index) + 4,
-        false => cpu.get_register(rm_index),
-    };
-    let rs = match rs_index == 15 {
-        true => cpu.get_register(rs_index) + 4,
-        false => cpu.get_register(rs_index),
-    };
+    let rm = cpu.get_register(rm_index);
+    let rs = cpu.get_register(rs_index);
 
     let u_bit = (opcode >> 22) & 1 == 1;
     
@@ -507,9 +489,6 @@ fn halfword_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) 
     // the processing part
     match l_bit {
         false => {
-            assert!(!s_bit, "s-bit must be false");
-            assert!(h_bit, "h-bit must be set");
-
             let rd = match rd_index {
                 15 => cpu.get_register(rd_index) + 4,
                 _ => cpu.get_register(rd_index),
