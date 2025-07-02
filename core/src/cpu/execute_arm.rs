@@ -297,8 +297,14 @@ fn multiply(opcode: u32, cpu: &mut Cpu) {
         15 => cpu.get_register(rn_index) + 4,
         _ => cpu.get_register(rn_index),
     };
-    let rs = cpu.get_register(rs_index);
-    let rm = cpu.get_register(rm_index);
+    let rs = match rs_index {
+        15 => cpu.get_register(rs_index) + 4,
+        _ => cpu.get_register(rs_index),
+    };
+    let rm = match rm_index {
+        15 => cpu.get_register(rm_index) + 4,
+        _ => cpu.get_register(rm_index),
+    };
 
     let mut result = rm.wrapping_mul(rs);
     let acc_bit = (opcode >> 21) & 1 == 1;
@@ -326,8 +332,14 @@ fn multiply_long(opcode: u32, cpu: &mut Cpu) {
     let rdl_index = (opcode >> 12) as u8 & 0xF;
     let rdh_index = (opcode >> 16) as u8 & 0xF;
 
-    let rm = cpu.get_register(rm_index);
-    let rs = cpu.get_register(rs_index);
+    let rm = match rm_index == 15 {
+        true => cpu.get_register(rm_index) + 4,
+        false => cpu.get_register(rm_index),
+    };
+    let rs = match rs_index == 15 {
+        true => cpu.get_register(rs_index) + 4,
+        false => cpu.get_register(rs_index),
+    };
 
     let u_bit = (opcode >> 22) & 1 == 1;
     
@@ -335,14 +347,14 @@ fn multiply_long(opcode: u32, cpu: &mut Cpu) {
         true => {
             let (op1, op2);
             match (rm >> 31) & 1 == 1 {
-                true => op1 = (0xFFFFFFFF00000000 as u64 | rm as u64) as i64,
-                false => op1 = rm as i64
+                true => op1 = 0xFFFFFFFF00000000 | rm as u64,
+                false => op1 = rm as u64,
             }
             match (rs >> 31) & 1 == 1 {
-                true => op2 = (0xFFFFFFFF00000000 as u64 | rs as u64) as i64,
-                false => op2 = rs as i64,
+                true => op2 = 0xFFFFFFFF00000000 | rs as u64,
+                false => op2 = rs as u64,
             }
-            op1.wrapping_mul(op2) as u64
+            op1.wrapping_mul(op2)
         },
         false => (rm as u64).wrapping_mul(rs as u64),
     };

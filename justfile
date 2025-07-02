@@ -1,11 +1,11 @@
 set shell := ["powershell.exe", "-c"]
 
 json-test:
-    cargo build --features json-test
+    cargo build -q --features json-test
     ./target/debug/gameboy-advanced
 
 bios-test:
-    cargo build --features from-bios
+    cargo build -q --features from-bios
     ./target/debug/gameboy-advanced "games/golden-sun.gba"
 
 test TEST:
@@ -13,5 +13,5 @@ test TEST:
     ./target/debug/gameboy-advanced {{TEST}}
 
 play GAME:
-    cargo build
+    cargo build -q
     ./target/debug/gameboy-advanced "games/{{GAME}}"

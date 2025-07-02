@@ -137,18 +137,18 @@ fn alu_ops(opcode: u16, cpu: &mut Cpu) {
     let op = (opcode >> 6) & 0xF;
     let mut undo = false;
     let (result, alu_carry) = match op {
-        0b0000 => (rd & rs, cpu.cpsr.c), // and
-        0b0001 => {
+        0x0 => (rd & rs, cpu.cpsr.c), // and
+        0x1 => {
             (rd ^ rs, cpu.cpsr.c)
         }, // eor
-        0b0010 => {
+        0x2 => {
             let sent_opcode = 
                 (rs_index as u32 & 0xF) << 8 |
                 (0b0001) << 4 |   
                 rd_index as u32 & 0xF;
             get_shifted_value(cpu, sent_opcode)
         } // lsl
-        0b0011 => {
+        0x3 => {
             let sent_opcode = 
                 (rs_index as u32 & 0xF) << 8 |
                 (0b0011) << 4 |   
@@ -157,7 +157,7 @@ fn alu_ops(opcode: u16, cpu: &mut Cpu) {
             let temp = get_shifted_value(cpu, sent_opcode);
             temp
         } // lsr
-        0b0100 => {
+        0x4 => {
             // convert the opcode
             let sent_opcode = 
                 (rs_index as u32 & 0xF) << 8 |
@@ -165,60 +165,62 @@ fn alu_ops(opcode: u16, cpu: &mut Cpu) {
                 rd_index as u32 & 0xF;
             get_shifted_value(cpu, sent_opcode)
         } // asr
-        0b0101 => {
+        0x5 => {
             let (result, _, _, c, v) = add_with_carry(rs, rd, cpu.cpsr.c);
             cpu.cpsr.v = v;
             (result, c)
         }, // adc
-        0b0110 => {
+        0x6 => {
             let (result, _, _, c, v) = add_with_carry(rd, !rs, cpu.cpsr.c);
             cpu.cpsr.v = v;
             (result, c)
         }, // sbc,
-        0b0111 => {
+        0x7 => {
             let sent_opcode = 
                 (rs_index as u32 & 0xF) << 8 |
                 (0b0111) << 4 |   
                 rd_index as u32 & 0xF;
             get_shifted_value(cpu, sent_opcode)
         }, // ror
-        0b1000 => {
+        0x8 => {
             undo = true; 
             (rd & rs, cpu.cpsr.c)
         }, // tst
-        0b1001 => {
+        0x9 => {
             let (result, _, _, c, v) = add_with_carry(0, !rs, true);
             cpu.cpsr.v = v;
             (result, c)
         }, // neg
-        0b1010 => {
+        0xA => {
             undo = true;
             let (result, _, _, c, v) = add_with_carry(rd, !rs, true);
             cpu.cpsr.v = v;
 
             (result, c)
         }, // cmp
-        0b1011 => {
+        0xB => {
             undo = true; 
             let (result, _, _, c, v) = add_with_carry(rd, rs, false);
             cpu.cpsr.v = v;
 
             (result, c)
         }, // cmn
-        0b1100 => {
+        0xC => {
             (rd | rs, cpu.cpsr.c)
         }, // orr
-        0b1101 => {
+        0xD => {
             let (result, carry) = rs.overflowing_mul(rd);
             (result, !carry)
         }, // mul
-        0b1110 => (rd & !rs, cpu.cpsr.c), // bic
-        0b1111 => (!rs, cpu.cpsr.c), // mvn
+        0xE => (rd & !rs, cpu.cpsr.c), // bic
+        0xF => (!rs, cpu.cpsr.c), // mvn
         _ => unreachable!()
     };
 
     // all of the instructions that could change `cpu.cpsr.v` already have
-    cpu.cpsr.c = alu_carry;
+    if op != 0xD {
+        cpu.cpsr.c = alu_carry;
+    }
     cpu.cpsr.z = result == 0;
     cpu.cpsr.n = (result >> 31) & 1 == 1;
     if undo {

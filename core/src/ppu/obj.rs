@@ -112,16 +112,22 @@ fn load_obj(
             let hor_flip = (obj1 >> 12) & 1 == 1;
             let ver_flip = (obj1 >> 13) & 1 == 1;
 
-            // not this lines responsibility to draw
-            // y_coord represents the top of the sprite's tile
-            if y_coord > vcount || y_coord + height <= vcount {
+            // the the object would have already finished drawing by this point
+            let final_line = (y_coord + height) % 255;
+            if final_line < vcount {
+                return Vec::new();
+            }
+            // the object won't need to be drawn yet
+            // also takes wrapping into account
+            let lowest_line = final_line as i16 - height as i16;
+            if vcount as i16 <= lowest_line {
                 return Vec::new();
             }
 
             // its being rendered (even if offscreen x-wise)
             let row_needed = match ver_flip {
-                true => height - (vcount - y_coord),
-                false => vcount - y_coord,
+                true => height - ((vcount - y_coord) % 255),
+                false => vcount - (y_coord % 255),
             };
 
             // the tile it needs to complete the row
@@ -164,13 +170,13 @@ fn load_obj(
                             let left = formatted_data & 0xF;
                             match left {
                                 0 => row_of_pixels.push(0),
-                                _ => row_of_pixels.push((palette_number * 0x20) + (left * 2))
+                                _ => row_of_pixels.push((palette_number * 0x10) + left)
                             }
         
                             let right = (formatted_data >> 4) & 0xF;
                             match right {
                                 0 => row_of_pixels.push(0),
-                                _ => row_of_pixels.push((palette_number * 0x20) + (right * 2))
+                                _ => row_of_pixels.push((palette_number * 0x10) + right)
                             }
                         }
                     }

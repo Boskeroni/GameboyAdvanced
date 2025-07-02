@@ -29,7 +29,7 @@ pub fn accumulate_and_palette(layers: &LineLayers, memory: &Box<Memory>) -> Vec<
     let mut combo = vec![0; LCD_WIDTH];
     for i in 0..LCD_WIDTH {
         let color = match is_obj[i] {
-            true => memory.read_u16(OBJ_PALL + (palette_entries[i] as u32)),
+            true => memory.read_u16(OBJ_PALL + (palette_entries[i] as u32 * 2)),
             false => {
                 match bg_mode {
                     0..=2 => memory.read_u16(PALETTE_BASE + (palette_entries[i] as u32 * 2)),
