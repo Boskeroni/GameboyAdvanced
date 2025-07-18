@@ -53,8 +53,8 @@ pub fn run_emulator(
                     let mut emulator = emulator_arc.write();
                     let button = convert_to_joypad(key);
                     match pressed {
-                        true => joypad_press(button, &mut emulator.mem),
-                        false => joypad_release(button, &mut emulator.mem),
+                        true => joypad_press(button, &mut emulator.bus.mem),
+                        false => joypad_release(button, &mut emulator.bus.mem),
                     }
                 }
                 EmulatorSend::StateUpdate(new_state) => state = new_state,

@@ -1,9 +1,10 @@
 use crate::cpu::*;
 use crate::cpu::decode::{decode_thumb, DecodedThumb};
+use crate::mem::bus::CpuInterface;
 
 use super::get_shifted_value;
 
-pub fn execute_thumb<M: Memoriable>(
+pub fn execute_thumb<M: CpuInterface>(
     opcode: u16,
     cpu: &mut Cpu,
     memory: &mut M,
@@ -287,7 +288,7 @@ fn hi_ops(opcode: u16, cpu: &mut Cpu) {
     }
 
 }
-fn pc_relative_load<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
+fn pc_relative_load<M: CpuInterface>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
     let rd_index = (opcode >> 8) as u8 & 0b111;
     let imm = (opcode & 0xFF) << 2;
 
@@ -298,7 +299,7 @@ fn pc_relative_load<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
     let rd = cpu.get_register_mut(rd_index);
     *rd = read;
 }
-fn mem_offset<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M, uses_imm: bool) {
+fn mem_offset<M: CpuInterface>(opcode: u16, cpu: &mut Cpu, memory: &mut M, uses_imm: bool) {
     let rb_index = (opcode >> 3) as u8 & 0b111;
     let rd_index = opcode as u8 & 0b111;
 
@@ -342,7 +343,7 @@ fn mem_offset<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M, uses_im
         }
     }
 }
-fn mem_sign_extended<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
+fn mem_sign_extended<M: CpuInterface>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
     let ro_index = (opcode >> 6) as u8 & 0b111;
     let rb_index = (opcode >> 3) as u8 & 0b111;
     let rd_index = opcode as u8 & 0b111;
@@ -395,7 +396,7 @@ fn mem_sign_extended<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) 
         _ => unreachable!()
     }
 }
-fn mem_halfword<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
+fn mem_halfword<M: CpuInterface>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
     let rd_index = opcode as u8 & 0b111;
     let rb_index = (opcode >> 3) as u8 & 0b111;
 
@@ -416,7 +417,7 @@ fn mem_halfword<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
         }
     }
 }
-fn mem_sp_relative<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
+fn mem_sp_relative<M: CpuInterface>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
     let rd_index = (opcode >> 8) as u8 & 0b111;
     let imm = opcode & 0xFF;
 
@@ -460,7 +461,7 @@ fn offset_sp(opcode: u16, cpu: &mut Cpu) {
         false => *sp = sp.wrapping_add(offset),
     }
 }
-fn push_pop<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
+fn push_pop<M: CpuInterface>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
     let mut rlist = opcode & 0xFF;
     let l_bit = (opcode >> 11) & 1 == 1;
     let r_bit = (opcode >> 8) & 1 == 1;
@@ -535,7 +536,7 @@ fn push_pop<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
         false => *sp - extra,
     };
 }
-fn mem_multiple<M: Memoriable>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
+fn mem_multiple<M: CpuInterface>(opcode: u16, cpu: &mut Cpu, memory: &mut M) {
     let mut rlist = opcode & 0xFF;
     let started_empty = rlist == 0;
 

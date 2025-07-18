@@ -1,5 +1,4 @@
-use crate::memory::Memory; 
-use crate::memory::Memoriable;
+use crate::mem::bus::PpuInterface;
 use crate::ppu::accumulate::LineLayers;
 use crate::ppu::convert_to_float;
 use crate::ppu::LCD_WIDTH;
@@ -7,7 +6,7 @@ use super::{PpuRegisters, VRAM_BASE};
 
 
 
-pub fn bg_mode_0(layers: &mut LineLayers, memory: &Box<Memory>, line: u32) {
+pub fn bg_mode_0<P: PpuInterface>(layers: &mut LineLayers, memory: &P, line: u32) {
     for bg in 0..=3 {
         let read_line = text_mode_scanline(line, bg as u32, memory);
         for i in 0..LCD_WIDTH {
@@ -16,7 +15,7 @@ pub fn bg_mode_0(layers: &mut LineLayers, memory: &Box<Memory>, line: u32) {
     }
 }
 
-pub fn bg_mode_1(layers: &mut LineLayers, memory: &Box<Memory>, line: u32) { 
+pub fn bg_mode_1<P: PpuInterface>(layers: &mut LineLayers, memory: &P, line: u32) { 
     for bg in 0..=2 {
         let read_line = match bg {
             0|1 => text_mode_scanline(line, bg, memory),
@@ -29,7 +28,7 @@ pub fn bg_mode_1(layers: &mut LineLayers, memory: &Box<Memory>, line: u32) {
     }
 }
 
-pub fn bg_mode_2(layers: &mut LineLayers, memory: &Box<Memory>, line: u32) { 
+pub fn bg_mode_2<P: PpuInterface>(layers: &mut LineLayers, memory: &P, line: u32) { 
     for bg in 2..=3 {
         let read_line = rotation_mode_scanline(line, bg, memory);
         for i in 0..LCD_WIDTH {
@@ -38,9 +37,9 @@ pub fn bg_mode_2(layers: &mut LineLayers, memory: &Box<Memory>, line: u32) {
     }
 }
 
-fn rotation_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
+fn rotation_mode_scanline<P: PpuInterface>(line: u32, bg: u32, memory: &P) -> Vec<u8> {
     let mut scanline = Vec::new();
-    let bg_cnt = memory.read_u16_io(PpuRegisters::BGCnt as u32 + bg * 2);
+    let bg_cnt = memory.read_vram_u16(PpuRegisters::BGCnt as u32 + bg * 2);
     let char_address = VRAM_BASE + ((bg_cnt >> 2) & 0x3) as u32 * 0x4000;
 
     let (width, height) = match (bg_cnt >> 14) & 0b11 {
@@ -53,8 +52,8 @@ fn rotation_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
 
     let base = PpuRegisters::BgRotationBase as u32 + (bg - 2) * 0x10;
     let x0 = {
-        let lower = memory.read_u16_io(base + 0x8) as i64;
-        let mut higher = memory.read_u16_io(base + 0xA) as i64 & 0x0FFF;
+        let lower = memory.read_vram_u16(base + 0x8) as i64;
+        let mut higher = memory.read_vram_u16(base + 0xA) as i64 & 0x0FFF;
         if (higher >> 11) & 1 == 1 {
             higher &= 0x800;
             higher = -higher;
@@ -63,8 +62,8 @@ fn rotation_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
         combine as f64 / 256.
     };
     let y0 = {
-        let lower = memory.read_u16_io(base + 0xC) as i64;
-        let mut higher = memory.read_u16_io(base + 0xE) as i64 & 0x0FFF;
+        let lower = memory.read_vram_u16(base + 0xC) as i64;
+        let mut higher = memory.read_vram_u16(base + 0xE) as i64 & 0x0FFF;
         if (higher >> 11) & 1 == 1 {
             higher &= 0x800;
             higher = -higher
@@ -73,10 +72,10 @@ fn rotation_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
         combine as f64 / 256.
     };
 
-    let pa = convert_to_float(memory.read_u16_io(base + 0x0)); // the scale factor for x
-    let pb = convert_to_float(memory.read_u16_io(base + 0x2)); // the scale factor for y
-    let pc = convert_to_float(memory.read_u16_io(base + 0x4)); // the shear for x
-    let pd = convert_to_float(memory.read_u16_io(base + 0x6)); // the shear for y
+    let pa = convert_to_float(memory.read_vram_u16(base + 0x0)); // the scale factor for x
+    let pb = convert_to_float(memory.read_vram_u16(base + 0x2)); // the scale factor for y
+    let pc = convert_to_float(memory.read_vram_u16(base + 0x4)); // the shear for x
+    let pd = convert_to_float(memory.read_vram_u16(base + 0x6)); // the shear for y
 
     let determinant = 1. / (pa * pd - pc * pb);
     for x2 in 0..LCD_WIDTH {
@@ -94,12 +93,12 @@ fn rotation_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
         let tile_col = x1 % 8;
         // assuming that it is 1-d mapping, not 2-d mapping
         let tile_address = VRAM_BASE + (col * 0x40) + (row * (width / 8) * 0x40);
-        let tile = memory.read_u8(tile_address);
+        let tile = memory.read_vram_u8(tile_address);
 
         let line_address = char_address +
             (tile as u32 * 0x40) +
             (tile_row as u32 * 0x8);
-        let pixel = memory.read_u8(line_address + tile_col);
+        let pixel = memory.read_vram_u8(line_address + tile_col);
         scanline.push(pixel);
     }
     return scanline;
@@ -113,8 +112,8 @@ const SCREEN_SIZE: [(u32, u32); 4] = [
 ];
 
 // when i remember what this does, i will put a comment here
-fn text_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
-    let bg_cnt = memory.read_u16_io(PpuRegisters::BGCnt as u32 + bg * 2);
+fn text_mode_scanline<P: PpuInterface>(line: u32, bg: u32, memory: &P) -> Vec<u8> {
+    let bg_cnt = memory.read_vram_u16(PpuRegisters::BGCnt as u32 + bg * 2);
 
     // all the variables stored within the bg_cnt register
     let char_block = (bg_cnt >> 2) & 0x3;
@@ -134,8 +133,8 @@ fn text_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
     // x_tile and y_tile are 0->32, offsets are 0->8
     let (mut x_tile, x_tile_offset, y_tile, y_tile_offset);
     {
-        let x_offset = memory.read_u16_io(PpuRegisters::BgHOffset as u32 + (bg * 4)) as u32 & 0x1FF % width;
-        let y_offset = memory.read_u16_io(PpuRegisters::BgVOffset as u32 + (bg * 4)) as u32 & 0x1FF % height;
+        let x_offset = memory.read_vram_u16(PpuRegisters::BgHOffset as u32 + (bg * 4)) as u32 & 0x1FF % width;
+        let y_offset = memory.read_vram_u16(PpuRegisters::BgVOffset as u32 + (bg * 4)) as u32 & 0x1FF % height;
 
         x_tile = x_offset / 8;
         x_tile_offset = x_offset % 8;
@@ -177,7 +176,7 @@ fn text_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
             ((x_tile % 32) * 2) +  // the x_row of the tile (doubled as u16 -> u32)
             ((y_tile % 32) * 0x40); // the row being used
 
-        let tile = memory.read_u16(tile_address);
+        let tile = memory.read_vram_u16(tile_address);
 
         // all the information stored in the tile
         let tile_number = tile as u32 & 0x3FF;
@@ -199,7 +198,7 @@ fn text_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
                     if hor_flip {
                         pixel = 7 - pixel;
                     }
-                    let palette_index = memory.read_u8(line_address + pixel);
+                    let palette_index = memory.read_vram_u8(line_address + pixel);
                     scanline.push(palette_index);
                 }
             }
@@ -216,7 +215,7 @@ fn text_mode_scanline(line: u32, bg: u32, memory: &Box<Memory>) -> Vec<u8> {
                     if hor_flip {
                         pixel = 3 - pixel;
                     }
-                    let formatted_data = memory.read_u8(line_address + pixel);
+                    let formatted_data = memory.read_vram_u8(line_address + pixel);
 
                     let left;
                     match hor_flip {

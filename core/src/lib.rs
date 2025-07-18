@@ -1,9 +1,8 @@
 pub mod cpu;
-pub mod memory;
 pub mod ppu;
 pub mod joypad;
 pub mod apu;
-mod bus; 
+pub mod mem;
 
 use cpu::{
     execute_arm::execute_arm, 
@@ -11,16 +10,17 @@ use cpu::{
     handle_interrupts, 
     Cpu, Fde,
 };
+
+use mem::bus::*;
 use joypad::init_joypad;
-use memory::*;
 use ppu::*;
 
-use crate::apu::tick_apu;
+use crate::{apu::tick_apu, mem::memory::{self, dma_tick, update_timer}};
 
 pub struct Emulator {
     pub cpu: Cpu,
     pub ppu: Ppu,
-    pub mem: Box<Memory>,
+    pub bus: Bus,
     pub fde: Fde,
     pub cycles: u32,
 }
@@ -33,14 +33,15 @@ impl Emulator {
         let ppu = Ppu::new();
         let mut memory = memory::create_memory(filename);
         init_joypad(&mut memory);
-        memory.write_io(0x4000088, 0b0000_0010_0000_0000);
+        memory.sys_write_u16(0x4000088, 0b0000_0010_0000_0000);
 
+        let bus = Bus::new(memory, from_bios);
         let fde = Fde::new();
 
         Self {
             cpu,
             ppu,
-            mem: memory,
+            bus,
             fde,
             cycles: 0,
         }
@@ -50,11 +51,11 @@ impl Emulator {
 pub fn run_single_step(emu: &mut Emulator) -> bool {
     // update the timer
     // add 1 for now, make it more accurate later
-    update_timer(&mut emu.mem, &mut emu.cycles, 20);
-    let active_dma = dma_tick(&mut emu.mem);
+    update_timer(&mut emu.bus.mem, &mut emu.cycles, 20);
+    let active_dma = dma_tick(&mut emu.bus.mem);
 
     tick_apu();
-    tick_ppu(&mut emu.ppu, &mut emu.mem);
+    tick_ppu(&mut emu.ppu, &mut emu.bus);
     if emu.ppu.new_screen {
         emu.ppu.new_screen = false;
         return true;
@@ -63,19 +64,19 @@ pub fn run_single_step(emu: &mut Emulator) -> bool {
         return false;
     }
 
-    handle_interrupts(&mut emu.mem, &mut emu.cpu);
+    handle_interrupts(&mut emu.bus, &mut emu.cpu);
     if emu.cpu.halted {
         return false;
     }
 
-    handle_cpu(&mut emu.cpu, &mut emu.mem);
-    if emu.mem.should_halt_cpu() {
+    handle_cpu(&mut emu.cpu, &mut emu.bus);
+    if emu.bus.should_halt_cpu() {
         emu.cpu.halted = true;
     }
     return false;
 }
 
-pub fn handle_cpu<M: Memoriable>(cpu: &mut Cpu, mem: &mut M) {
+pub fn handle_cpu<M: CpuInterface>(cpu: &mut Cpu, mem: &mut M) {
     // Execute
     if let Some(instruction) = cpu.fde.decoded_opcode {        
         match cpu.cpsr.t {

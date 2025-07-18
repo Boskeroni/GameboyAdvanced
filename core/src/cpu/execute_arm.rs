@@ -1,10 +1,11 @@
 use crate::cpu::decode::decode_arm;
+use crate::mem::bus::CpuInterface;
 
 use super::*;
 use super::decode::DecodedArm;
 use super::get_shifted_value;
 
-pub fn execute_arm<M: Memoriable>(
+pub fn execute_arm<M: CpuInterface>(
     opcode: u32, 
     cpu: &mut Cpu,
     memory: &mut M,
@@ -379,7 +380,7 @@ fn software_interrupt(cpu: &mut Cpu) {
     cpu.cpsr.i = true;
     cpu.clear_pipeline();
 }
-fn data_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
+fn data_transfer<M: CpuInterface>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
     let rd_index = (opcode >> 12) as u8 & 0xF;
     let rn_index = (opcode >> 16) as u8 & 0xF;
 
@@ -455,7 +456,7 @@ fn data_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
 }
 /// this function handles both the immediate and register offsets
 /// Both pretty much have identical implementation besides for data acquisition
-fn halfword_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
+fn halfword_transfer<M: CpuInterface>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
     let p_bit = (opcode >> 24) & 1 == 1;
     let u_bit = (opcode >> 23) & 1 == 1;
     let i_bit = (opcode >> 22) & 1 == 1;
@@ -559,7 +560,7 @@ fn halfword_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) 
         }
     }
 }
-fn block_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
+fn block_transfer<M: CpuInterface>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
     let mut rlist = opcode & 0xFFFF;
     let r15_in_list = (rlist >> 15) & 1 == 1;
     let started_empty = rlist == 0;
@@ -682,7 +683,7 @@ fn block_transfer<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
         }
     }
 }
-fn single_swap<M: Memoriable>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
+fn single_swap<M: CpuInterface>(opcode: u32, cpu: &mut Cpu, memory: &mut M) {
     // for now just have them happen at the same time
     let rn_index = (opcode >> 16) as u8 & 0xF;
     let rm_index = opcode as u8 & 0xF;

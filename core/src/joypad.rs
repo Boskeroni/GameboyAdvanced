@@ -1,5 +1,4 @@
-use crate::memory::Memory;
-use crate::memory::Memoriable;
+use crate::mem::memory::InternalMemory;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Button {
@@ -21,12 +20,12 @@ enum JPRegisters {
     KeyCnt = 0x4000132,
 }
 
-pub fn init_joypad(mem: &mut Memory) {
-    mem.write_io(JPRegisters::KeyInput as u32, 0xFFFF);
+pub fn init_joypad(mem: &mut InternalMemory) {
+    mem.sys_write_u16(JPRegisters::KeyInput as u32, 0xFFFF);
 }
 
-pub fn joypad_press(input: Button, mem: &mut Box<Memory>) {
-    let mut joypad = mem.read_u16(JPRegisters::KeyInput as u32);
+pub fn joypad_press(input: Button, mem: &mut Box<InternalMemory>) {
+    let mut joypad = mem.sys_read_u16(JPRegisters::KeyInput as u32);
 
     use Button::*;
     match input {
@@ -42,13 +41,13 @@ pub fn joypad_press(input: Button, mem: &mut Box<Memory>) {
         L => joypad &= !(1 << 9),
         Other => return,
     }
-    mem.write_io(JPRegisters::KeyInput as u32, joypad);
+    mem.sys_write_u16(JPRegisters::KeyInput as u32, joypad);
 
     joypad_interrupt(mem, joypad);
 }
 
-pub fn joypad_release(input: Button, mem: &mut Box<Memory>) {
-    let mut joypad = mem.read_u16(JPRegisters::KeyInput as u32);
+pub fn joypad_release(input: Button, mem: &mut Box<InternalMemory>) {
+    let mut joypad = mem.sys_read_u16(JPRegisters::KeyInput as u32);
 
     use Button::*;
     match input {
@@ -64,12 +63,12 @@ pub fn joypad_release(input: Button, mem: &mut Box<Memory>) {
         L => joypad |= 1 << 9,
         Other => return,
     }
-    mem.write_io(JPRegisters::KeyInput as u32, joypad);
+    mem.sys_write_u16(JPRegisters::KeyInput as u32, joypad);
     joypad_interrupt(mem, joypad);
 }
 
-fn joypad_interrupt(mem: &mut Box<Memory>, joypad: u16) {
-    let control = mem.read_u16(JPRegisters::KeyCnt as u32);
+fn joypad_interrupt(mem: &mut Box<InternalMemory>, joypad: u16) {
+    let control = mem.sys_read_u16(JPRegisters::KeyCnt as u32);
     if (control >> 14) & 1 == 0 {
         return;
     }
@@ -83,9 +82,9 @@ fn joypad_interrupt(mem: &mut Box<Memory>, joypad: u16) {
         false => keys != 0,
     };
 
-    let mut i_flag = mem.read_u16(0x4000202);
+    let mut i_flag = mem.sys_read_u16(0x4000202);
     i_flag &= !(1 << 12);
     i_flag |= (call_interrupt as u16) << 12;
 
-    mem.write_io(0x4000202, i_flag); 
+    mem.sys_write_u16(0x4000202, i_flag); 
 }

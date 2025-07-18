@@ -1,8 +1,8 @@
 #![cfg(feature = "debug")]
-use gba_core::memory::{self, Memoriable};
+use gba_core::mem;
 
 use egui::{Label, TextEdit};
-use gba_core::memory::{DMARegisters, Memory};
+use gba_core::mem::memory::{DMARegisters, InternalMemory};
 use std::cmp::min;
 use std::ops::Range;
 use egui::{scroll_area::ScrollBarVisibility, vec2, RichText, ViewportBuilder, ViewportClass, ViewportId, Widget};
@@ -31,7 +31,7 @@ impl MemoryWidget {
         }
     }
 
-    pub fn draw(&mut self, mem: &Box<Memory>, ctx: &egui::Context) {
+    pub fn draw(&mut self, mem: &Box<InternalMemory>, ctx: &egui::Context) {
         ctx.show_viewport_immediate(
             ViewportId::from_hash_of("memory panel"), 
             ViewportBuilder::default()
@@ -58,7 +58,7 @@ impl MemoryWidget {
 
                         ui.heading("DMA registers");
                         for dma in 0..4 {
-                            let dma_control = mem.read_u16(DMARegisters::Control as u32 + dma*0xC);
+                            let dma_control = mem.sys_read_u16(DMARegisters::Control as u32 + (dma*0xC));
                             let is_running = (dma_control >> 15) & 1 == 1;
                             let headline_run_text = match is_running {
                                 true => "running",
@@ -79,18 +79,18 @@ impl MemoryWidget {
                                 });
 
                                 ui.horizontal(|ui| {
-                                    let src = mem.read_u32_unrotated(DMARegisters::SAD as u32 + dma*0xC) & 0x0FFFFFFF;
+                                    let src = mem.sys_read_u32(DMARegisters::SAD as u32 + (dma*0xC)) & 0x0FFFFFFF;
                                     let mut src_text = format!("{:08X}", src);
                                     ui.label(format!("source:"));
                                     ui.add(TextEdit::singleline(&mut src_text));
                                 });
                                 ui.horizontal(|ui| {
-                                    let dst = mem.read_u32_unrotated(DMARegisters::DAD as u32 + dma*0xC) & 0x0FFFFFFF;
+                                    let dst = mem.sys_read_u32(DMARegisters::DAD as u32 + (dma*0xC)) & 0x0FFFFFFF;
                                     let mut dst_text = format!("{:08X}", dst);
                                     ui.label(format!("destination:"));
                                     ui.add(TextEdit::singleline(&mut dst_text));
                                 });ui.horizontal(|ui| {
-                                    let amount = mem.read_u32_unrotated(DMARegisters::Amount as u32 + dma*0xC) & 0x0FFFFFFF;
+                                    let amount = mem.sys_read_u32(DMARegisters::Amount as u32 + (dma*0xC)) & 0x0FFFFFFF;
                                     let mut amount_text = format!("{:08X}", amount);
                                     ui.label(format!("amount:"));
                                     ui.add(TextEdit::singleline(&mut amount_text));
@@ -103,7 +103,7 @@ impl MemoryWidget {
                     ui.separator();
                     ui.heading("timer registers");
                     for i in 0..4 {
-                        let is_running = (mem.read_u16(0x4000100 + (i*4) + 2)) >> 7 & 1 == 1;
+                        let is_running = (mem.sys_read_u16(0x4000100 + (i*4) + 2)) >> 7 & 1 == 1;
                         let mut run_text = format!("{is_running}");
                         let label_text = format!("Timer{i} running:");
                         
@@ -118,13 +118,13 @@ impl MemoryWidget {
     }
 }
 
-fn draw_grid(mem: &Box<Memory>, ranges_shown: &[bool; 9], ui: &mut egui::Ui) {
+fn draw_grid(memory: &Box<InternalMemory>, ranges_shown: &[bool; 9], ui: &mut egui::Ui) {
     if !ranges_shown.contains(&true) {
         return;
     }
 
     let col_per_row = 16;
-    let mem_ranges = memory::get_memory_ranges();
+    let mem_ranges = mem::get_memory_ranges();
     let total_rows = {
         let mut count = 0;
         for i in 0..ranges_shown.len() {
@@ -153,7 +153,7 @@ fn draw_grid(mem: &Box<Memory>, ranges_shown: &[bool; 9], ui: &mut egui::Ui) {
                 if address % col_per_row == 0 {
                     ui.label(format!("{:07X}", address & 0xFFFFFFF0));
                 }
-                let data = mem.read_u8(address);
+                let data = memory.sys_read_u8(address);
                 ui.label(RichText::new(format!("{data:02X}")).monospace());
 
                 if address % col_per_row == col_per_row - 1 {

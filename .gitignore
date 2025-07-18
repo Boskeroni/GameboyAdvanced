@@ -4,5 +4,5 @@
 *.lock
 
 src/bus.rs
-core/bios.bin
+bios.bin
 todo.txt

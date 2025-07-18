@@ -1,4 +1,5 @@
-use crate::{memory::{Memoriable, Memory}, ppu::{PpuRegisters, LCD_WIDTH, PALETTE_BASE}};
+use crate::mem::bus::PpuInterface;
+use crate::ppu::{PpuRegisters, LCD_WIDTH, PALETTE_BASE};
 
 const OBJ_PALL: u32 = 0x5000200;
 
@@ -22,17 +23,17 @@ impl LineLayers {
     }
 }
 
-pub fn accumulate_and_palette(layers: &LineLayers, memory: &Box<Memory>) -> Vec<u16> {
-    let bg_mode = memory.read_u16_io(PpuRegisters::DispCnt as u32) & 0x7;
+pub fn accumulate_and_palette<P: PpuInterface>(layers: &LineLayers, memory: &P) -> Vec<u16> {
+    let bg_mode = memory.read_vram_u16(PpuRegisters::DispCnt as u32) & 0x7;
     let (palette_entries, is_obj) = accumulate(layers, memory);
 
     let mut combo = vec![0; LCD_WIDTH];
     for i in 0..LCD_WIDTH {
         let color = match is_obj[i] {
-            true => memory.read_u16(OBJ_PALL + (palette_entries[i] as u32 * 2)),
+            true => memory.read_vram_u16(OBJ_PALL + (palette_entries[i] as u32 * 2)),
             false => {
                 match bg_mode {
-                    0..=2 => memory.read_u16(PALETTE_BASE + (palette_entries[i] as u32 * 2)),
+                    0..=2 => memory.read_vram_u16(PALETTE_BASE + (palette_entries[i] as u32 * 2)),
                     _ => palette_entries[i],
                 }
             }
@@ -44,10 +45,10 @@ pub fn accumulate_and_palette(layers: &LineLayers, memory: &Box<Memory>) -> Vec<
 }
 
 // just more convenient to mix them all together in one location
-fn accumulate(layers: &LineLayers, memory: &Box<Memory>) -> (Vec<u16>, Vec<bool>) {
+fn accumulate<P: PpuInterface>(layers: &LineLayers, memory: &P) -> (Vec<u16>, Vec<bool>) {
     let mut combo = vec![0; LCD_WIDTH];
     let mut prios = vec![4; LCD_WIDTH];
-    let dispcnt = memory.read_u16_io(PpuRegisters::DispCnt as u32);
+    let dispcnt = memory.read_vram_u16(PpuRegisters::DispCnt as u32);
 
     // for now just get it to be the same as before, just with all layers
     for bg in 0..=3 {
@@ -56,7 +57,7 @@ fn accumulate(layers: &LineLayers, memory: &Box<Memory>) -> (Vec<u16>, Vec<bool>
             continue;
         }
 
-        let priority = memory.read_u16_io(PpuRegisters::BGCnt as u32 + (0x2 * bg as u32)) & 0x3;
+        let priority = memory.read_vram_u16(PpuRegisters::BGCnt as u32 + (0x2 * bg as u32)) & 0x3;
         for i in 0..LCD_WIDTH {
             let new_pixel = layers.bgs[bg][i];
             if new_pixel == 0 { continue; }

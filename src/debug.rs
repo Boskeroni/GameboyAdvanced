@@ -86,6 +86,6 @@ impl Debugger {
         if self.cpu_widget.open { self.cpu_widget.draw(ctx, &emulator.cpu); }
         if self.ins_widget.open { self.ins_widget.draw(ctx)}
         if self.show_vram {eprintln!("not done yet"); self.show_vram = false;}
-        if self.mem_widget.open { self.mem_widget.draw(&emulator.mem, ctx) }
+        if self.mem_widget.open { self.mem_widget.draw(&emulator.bus.mem, ctx) }
     }
 }

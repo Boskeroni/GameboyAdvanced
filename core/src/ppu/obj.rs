@@ -1,4 +1,5 @@
-use crate::{memory::{Memoriable, Memory}, ppu::{accumulate::LineLayers, LCD_WIDTH}};
+use crate::mem::bus::PpuInterface;
+use crate::ppu::{accumulate::LineLayers, LCD_WIDTH};
 
 const OAM: u32 = 0x7000000;
 const TILE_CHAR_BLOCK: u32 = 0x6010000;
@@ -7,12 +8,12 @@ const TILE_CHAR_BLOCK: u32 = 0x6010000;
 /// on priorities) to the PPU's worked_on_line. Honestly, so much stuff is happening in this
 /// function that I have had to split it into so many subfunctions just to make it somewhat coherent
 /// (which it really isn't).
-pub fn oam_scan(layers: &mut LineLayers, mem: &Box<Memory>, vcount: u16, dispcnt: u16) {
+pub fn oam_scan<P: PpuInterface>(layers: &mut LineLayers, mem: &P, vcount: u16, dispcnt: u16) {
     for obj in 0..=127 {
         // all of the attributes held by the OAMs (the 4th one isn't used yet)
-        let obj_attr0 = mem.read_u16(OAM + (obj * 8) + 0);
-        let obj_attr1 = mem.read_u16(OAM + (obj * 8) + 2);
-        let obj_attr2 = mem.read_u16(OAM + (obj * 8) + 4);
+        let obj_attr0 = mem.read_vram_u16(OAM + (obj * 8) + 0);
+        let obj_attr1 = mem.read_vram_u16(OAM + (obj * 8) + 2);
+        let obj_attr2 = mem.read_vram_u16(OAM + (obj * 8) + 4);
 
         if obj_attr0 == 0 && obj_attr1 == 0 && obj_attr2 == 0 {
             continue;
@@ -61,8 +62,8 @@ const SIZE_GRIDS: [[(u16, u16); 3]; 4] = [
 /// returns the row of pixels that would be rendered onto the vcount from the currently
 /// looed at tile. This returns just an empty list if it doesn't output any pixels to the current line.
 /// Once again trying to make it readable but that is quite a struggle.
-fn load_obj(
-    mem: &Box<Memory>, 
+fn load_obj<P: PpuInterface>(
+    mem: &P, 
     obj0: u16, obj1: u16, obj2: u16, 
     vcount: u16,
     dispcnt: u16,
@@ -155,7 +156,7 @@ fn load_obj(
                             (row_needed as u32 * 0x8);
                         
                         for pixel in 0..8 {
-                            let palette_index = mem.read_u8(line_address + pixel);
+                            let palette_index = mem.read_vram_u8(line_address + pixel);
                             row_of_pixels.push(palette_index);
                         }
                     }
@@ -170,7 +171,7 @@ fn load_obj(
 
                         // since each pixel actually represents two pixels
                         for pixel in 0..4 {
-                            let formatted_data = mem.read_u8(line_address + pixel);
+                            let formatted_data = mem.read_vram_u8(line_address + pixel);
 
                             let left = formatted_data & 0xF;
                             match left {

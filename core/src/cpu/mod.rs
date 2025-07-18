@@ -3,13 +3,12 @@ pub mod execute_thumb;
 pub mod decode;
 pub mod assemblify;
 
-use crate::memory::*;
+use crate::{mem::bus::CpuInterface, Bus};
 /// several different instructions make use of this behaviour
 /// I'm not sure if they all function the same but I have no reason to believe otherwise
 /// both the shifted value and the carry flag are returned
 /// 
 /// opcode should be the 11 bits which represent the shift + register
-/// 
 pub fn get_shifted_value(cpu: &mut Cpu, opcode: u32) -> (u32, bool) {
     let (result, carry) = _get_shifted_value(cpu, opcode);
 
@@ -402,7 +401,7 @@ pub enum CpuMemoryRegisters {
 /// the ahead_by variable represents how many instructions the pc is
 /// it is multiplied by 4 for ARM, and 2 for Thumb.
 /// Just intended for callbacks
-pub fn handle_interrupts(memory: &mut Box<Memory>, cpu: &mut Cpu) {
+pub fn handle_interrupts(memory: &mut Bus, cpu: &mut Cpu) {
     if cpu.cpsr.i {
         return;
     }

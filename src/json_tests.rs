@@ -1,5 +1,5 @@
 use gba_core::cpu::{convert_u32_psr, execute_arm::execute_arm, execute_thumb::execute_thumb, Cpu, Fde};
-use gba_core::memory::Memoriable;
+use gba_core::mem::bus::CpuInterface;
 use serde_json::{self, Value};
 
 pub struct JsonEmulator {
@@ -58,7 +58,7 @@ impl JsonMemory {
         return address;
     }
 }
-impl Memoriable for JsonMemory {
+impl CpuInterface for JsonMemory {
     fn read_u16(&self, address: u32) -> u16 { self.read(2, address) as u16 }
     fn read_u32_rotated(&self, address: u32) -> u32 { self.read(4, address).rotate_right((address & 0b11) * 8) }
     fn read_u32_unrotated(&self, address: u32) -> u32 { self.read(4, address) }

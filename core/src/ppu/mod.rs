@@ -3,7 +3,8 @@ mod tiles;
 mod obj;
 mod accumulate;
 
-use crate::{memory::Memory, ppu::accumulate::{accumulate_and_palette, LineLayers}};
+use crate::ppu::accumulate::{accumulate_and_palette, LineLayers};
+use crate::mem::bus::PpuInterface;
 use bitmaps::*;
 use obj::oam_scan;
 use tiles::*;
@@ -17,23 +18,23 @@ fn convert_to_float(px: u16) -> f64 {
     return unsigned_float;
 }
 
-fn _get_rotation_scaling(bg: u32, memory: &Box<Memory>) -> (u32, u32, u16, u16, u16, u16) {
+fn _get_rotation_scaling<P: PpuInterface>(bg: u32, memory: &P) -> (u32, u32, u16, u16, u16, u16) {
     let base = PpuRegisters::BgRotationBase as u32 + (bg - 2) * 0x10;
     let x0 = {
-        let lower = memory.read_u16_io(base + 0x8) as u32;
-        let higher = memory.read_u16_io(base + 0xA) as u32 & 0x0FFF;
+        let lower = memory.read_vram_u16(base + 0x8) as u32;
+        let higher = memory.read_vram_u16(base + 0xA) as u32 & 0x0FFF;
         higher << 16 | lower
     };
     let y0 = {
-        let lower = memory.read_u16_io(base + 0xC) as u32;
-        let higher = memory.read_u16_io(base + 0xE) as u32 & 0x0FFF;
+        let lower = memory.read_vram_u16(base + 0xC) as u32;
+        let higher = memory.read_vram_u16(base + 0xE) as u32 & 0x0FFF;
         higher << 16 | lower
     };
 
-    let dx = memory.read_u16_io(base + 0x0);
-    let dmx = memory.read_u16_io(base + 0x2);
-    let dy = memory.read_u16_io(base + 0x4);
-    let dmy = memory.read_u16_io(base + 0x6);
+    let dx = memory.read_vram_u16(base + 0x0);
+    let dmx = memory.read_vram_u16(base + 0x2);
+    let dy = memory.read_vram_u16(base + 0x4);
+    let dmy = memory.read_vram_u16(base + 0x6);
 
     return (x0, y0, dx, dmx, dy, dmy);
 }
@@ -102,12 +103,12 @@ impl Ppu {
     }
 }
 
-pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Box<Memory>) {
-    let dispcnt = memory.read_u16_io(PpuRegisters::DispCnt as u32);
+pub fn tick_ppu<P: PpuInterface>(ppu: &mut Ppu, memory: &mut P) {
+    let dispcnt = memory.read_vram_u16(PpuRegisters::DispCnt as u32);
 
     // the line count we had last time, doesnt match the one this time
-    let dispstat = memory.read_u16_io(PpuRegisters::DispStat as u32);
-    let mut vcount = memory.read_u16_io(PpuRegisters::VCount as u32);
+    let dispstat = memory.read_vram_u16(PpuRegisters::DispStat as u32);
+    let mut vcount = memory.read_vram_u16(PpuRegisters::VCount as u32);
 
     let new_line = ppu.elapsed_time / (LCD_WIDTH + 68) != vcount as usize;
     if new_line {
@@ -127,7 +128,7 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Box<Memory>) {
             };
             oam_scan(&mut layers, memory, vcount, dispcnt);
 
-            let combo = accumulate_and_palette(&layers, &memory);
+            let combo = accumulate_and_palette(&layers, memory);
             ppu.stored_screen.extend(combo);
         }
         vcount += 1;
@@ -135,13 +136,13 @@ pub fn tick_ppu(ppu: &mut Ppu, memory: &mut Box<Memory>) {
             vcount = 0;
             ppu.new_screen = true;
         }
-        memory.write_io(PpuRegisters::VCount as u32, vcount as u16);
+        memory.write_vram_u16(PpuRegisters::VCount as u32, vcount as u16);
     }
 
     update_registers(ppu, memory, dispstat, vcount);
 }
 
-fn update_registers(ppu: &mut Ppu, memory: &mut Box<Memory>, mut dispstat: u16, vcount: u16) {
+fn update_registers<P: PpuInterface>(ppu: &mut Ppu, memory: &mut P, mut dispstat: u16, vcount: u16) {
     // work in progress
     ppu.elapsed_time += 1;
     
@@ -172,10 +173,10 @@ fn update_registers(ppu: &mut Ppu, memory: &mut Box<Memory>, mut dispstat: u16, 
         false => dispstat &= !(1<<2),
     }  
 
-    let mut ie = memory.read_u16_io(0x4000202);
+    let mut ie = memory.read_vram_u16(0x4000202);
     ie &= !0b111;
     ie |= dispstat & 0b111;
 
-    memory.write_io(0x4000202, ie);
-    memory.write_io(PpuRegisters::DispStat as u32, dispstat);
+    memory.write_vram_u16(0x4000202, ie);
+    memory.write_vram_u16(PpuRegisters::DispStat as u32, dispstat);
 }
