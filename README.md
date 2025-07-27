@@ -48,4 +48,4 @@ I feel like I have taken a big interest in Nintendo consoles and will try my luc
 
 ## Screenshots
 
-<video src="include/kirby.mp4" width="320" height="240" controls></video>
+[<video src="include/kirby.mp4" width="320" height="240" controls></video>]
