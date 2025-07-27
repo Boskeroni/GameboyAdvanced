@@ -11,7 +11,6 @@ pub fn bg_mode_3<P: PpuInterface>(layers: &mut LineLayers, memory: &P, line: u16
     }
 }
 
-// TODO: this isn't always displaying text for some reason, maybe not a mode_4 issue
 pub fn bg_mode_4<P: PpuInterface>(layers: &mut LineLayers, memory: &P, line: u16) {
     let dispcnt = memory.read_vram_u16(PpuRegisters::DispCnt as u32);
     let displayed_frame = (dispcnt >> 4) & 1 == 1;

@@ -26,7 +26,8 @@ pub trait PpuInterface {
 
 // the area that it writes/reads from can affect
 // what to do with the data so this is a nice abstraction
-enum MemoryRegion {
+#[derive(PartialEq)]
+pub enum MemoryRegion {
     Bios,
     WramBoard,
     WramChip,

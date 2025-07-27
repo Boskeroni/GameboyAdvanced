@@ -283,6 +283,10 @@ pub fn dma_tick(mem: &mut Box<InternalMemory>) -> bool {
         _ => unreachable!(),
     }
 
+    if i == 3 && split_memory_address(base_src_address).0 == 0xD {
+        println!("{amount}");
+    }
+
     let done_already = mem.dma_completions[i as usize];
     let src_address = match src_ctrl {
         0 => base_src_address + done_already,
