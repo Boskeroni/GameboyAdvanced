@@ -51,4 +51,4 @@ I feel like I have taken a big interest in Nintendo consoles and will try my luc
 [<video src="include/kirby.mp4" width="320" height="240" controls></video>]
 
 pokemon red:
-![pokemon red](https://github.com/Boskeroni/GameboyAdvanced/tree/master/include/pokemon-red.png)
+![Pokémon running in the emulator](include/pokemon-red.png)
